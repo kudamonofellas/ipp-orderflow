@@ -1,0 +1,213 @@
+/**
+ * Global element styles — IPP-OrderFlow
+ *
+ * Base styling for HTML elements using the design tokens from tokens.css.
+ * This file does NOT style components — components use CSS Modules.
+ * This file sets the body, headings, links, form defaults, and scrollbar.
+ *
+ * Load order: tokens.css → reset.css → global.css
+ */
+
+/* ===== Body ===== */
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font: var(--text-body);
+  font-family: var(--font-sans);
+  letter-spacing: var(--tracking-normal);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  line-height: 1.6;
+  transition:
+    background-color var(--duration-fast) var(--ease-default),
+    color var(--duration-fast) var(--ease-default);
+}
+
+/* ===== Headings ===== */
+h1 {
+  font: var(--text-page-title);
+  letter-spacing: var(--tracking-tight);
+  color: var(--text-primary);
+}
+
+h2 {
+  font: var(--text-h2);
+  letter-spacing: var(--tracking-tight-sm);
+  color: var(--text-primary);
+}
+
+h3 {
+  font: var(--text-h3);
+  color: var(--text-primary);
+}
+
+h4,
+h5,
+h6 {
+  font: var(--text-h3);
+  color: var(--text-primary);
+}
+
+/* ===== Paragraphs ===== */
+p {
+  font: var(--text-body);
+  color: var(--text-primary);
+  line-height: 1.6;
+}
+
+/* ===== Links ===== */
+a {
+  color: var(--accent-primary);
+  text-decoration: none;
+  transition: color var(--duration-fast) var(--ease-default);
+}
+
+a:hover {
+  color: var(--accent-primary-dark);
+}
+
+/* ===== Code ===== */
+code,
+kbd,
+samp {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  background: var(--bg-surface-hover);
+  padding: 2px var(--space-xs);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+}
+
+pre {
+  font-family: var(--font-mono);
+  background: var(--bg-surface);
+  padding: var(--space-md);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-default);
+  overflow-x: auto;
+}
+
+pre code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+}
+
+/* ===== Form defaults ===== */
+input,
+select,
+textarea {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: var(--space-sm) var(--space-md);
+  font: var(--text-body);
+  color: var(--text-primary);
+  width: 100%;
+  transition:
+    border-color var(--duration-fast) var(--ease-default),
+    box-shadow var(--duration-fast) var(--ease-default);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-muted);
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px rgba(30, 77, 92, 0.15);
+}
+
+/* Checkbox + radio keep native appearance */
+input[type="checkbox"],
+input[type="radio"] {
+  width: auto;
+  accent-color: var(--accent-primary);
+}
+
+/* ===== Buttons (base — components override with specific classes) ===== */
+button {
+  font: var(--text-button);
+  color: var(--text-primary);
+  transition:
+    background-color var(--duration-fast) var(--ease-default),
+    color var(--duration-fast) var(--ease-default);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* ===== Tables (base — components add specific styling) ===== */
+th,
+td {
+  text-align: left;
+  padding: var(--space-md) var(--space-lg);
+  vertical-align: middle;
+}
+
+th {
+  font: var(--text-label);
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+td {
+  font: var(--text-body);
+  color: var(--text-primary);
+}
+
+/* ===== Scrollbar (webkit) ===== */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-base);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-default);
+  border-radius: var(--radius-sm);
+  border: 2px solid var(--bg-base);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* Firefox scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-default) var(--bg-base);
+}
+
+/* ===== Utility: visually hidden (for screen readers) ===== */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ===== Utility: truncate text with ellipsis ===== */
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

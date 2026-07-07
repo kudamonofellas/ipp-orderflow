@@ -1,0 +1,10 @@
+.shell {
+  min-height: 100vh;
+  background: var(--bg-base);
+}
+
+.content {
+  max-width: var(--content-max-width);
+  margin: 0 auto;
+  padding: var(--space-xl) var(--nav-padding-x) var(--space-3xl);
+}

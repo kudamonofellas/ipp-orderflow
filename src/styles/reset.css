@@ -1,0 +1,115 @@
+/**
+ * CSS Reset — IPP-OrderFlow
+ *
+ * Minimal modern reset. Removes inconsistent browser defaults
+ * so element styling is intentional, not inherited.
+ * No design tokens here — this is pure structural reset.
+ * Tokens live in tokens.css; element styling lives in global.css.
+ */
+
+/* Box sizing — border-box everywhere */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+/* Remove default margin/padding on structural elements */
+html,
+body,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p,
+figure,
+blockquote,
+dl,
+dd,
+ol,
+ul {
+  margin: 0;
+  padding: 0;
+}
+
+/* Remove list styles (we add them back intentionally in components) */
+ol,
+ul {
+  list-style: none;
+}
+
+/* Anchor reset — color and underline are set in global.css */
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* Form elements inherit font so they match surrounding text */
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+/* Remove default button styling — buttons are styled in components */
+button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+/* Images and media never overflow their container */
+img,
+picture,
+video,
+canvas,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+/* Tables collapse borders — styling is added in components */
+table {
+  border-collapse: collapse;
+  border-spacing: 0;
+}
+
+/* Prevent text size adjustment on orientation change */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* Smooth scrolling for anchor links (respects reduced motion) */
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+/* Focus visible — base reset; components add the accent ring */
+:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
+}
+
+/* Remove focus outline for mouse users (focus-visible handles keyboard) */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Hide scrollbar on body — app handles its own scroll containers */
+body {
+  overflow-x: hidden;
+}
+
+/* Selection color uses the accent */
+::selection {
+  background: var(--accent-primary);
+  color: var(--text-on-accent);
+}

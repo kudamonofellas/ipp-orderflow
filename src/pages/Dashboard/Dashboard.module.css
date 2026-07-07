@@ -1,0 +1,95 @@
+.grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+  min-width: 0;
+}
+
+/* ===== Welcome + metrics ===== */
+.topRow {
+  display: grid;
+  grid-template-columns: 200px repeat(3, minmax(0, 1fr));
+  gap: var(--space-lg);
+}
+
+.welcome {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding-top: var(--space-sm);
+}
+
+.welcomeLabel {
+  font: var(--text-body);
+  color: var(--text-secondary);
+}
+
+.welcomeName {
+  font: var(--text-h2);
+  color: var(--text-primary);
+}
+
+.newOrder {
+  margin-top: var(--space-sm);
+  align-self: flex-start;
+  padding: var(--space-md) var(--space-lg);
+  border-radius: var(--radius-lg);
+}
+
+/* ===== Stage pills ===== */
+.stages {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-md);
+}
+
+/* ===== Panels ===== */
+.panels {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  gap: var(--space-lg);
+  align-items: start;
+}
+
+.panelStack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+/* ===== Responsive ===== */
+@media (max-width: 1280px) {
+  .panels {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 1024px) {
+  .topRow {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .welcome {
+    grid-column: 1 / -1;
+  }
+  .stages {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .panels {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .topRow {
+    grid-template-columns: 1fr;
+  }
+  .stages {
+    grid-template-columns: 1fr;
+  }
+}

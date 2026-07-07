@@ -1,0 +1,9 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.note {
+  color: var(--text-secondary);
+}

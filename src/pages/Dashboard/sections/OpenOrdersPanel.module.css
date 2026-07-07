@@ -1,0 +1,57 @@
+.heading {
+  font: var(--text-h3);
+  margin-bottom: var(--space-lg);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th {
+  font: var(--text-label);
+  color: var(--text-primary);
+  font-weight: 600;
+  padding: var(--space-sm) var(--space-md);
+}
+
+.orderRow td {
+  font: var(--text-body);
+  color: var(--text-primary);
+  padding: var(--space-md);
+}
+
+.orderId {
+  font-weight: 500;
+}
+
+.linesCell {
+  padding: 0 var(--space-md) var(--space-md);
+}
+
+.lines {
+  background: var(--bg-surface-hover);
+  border-radius: var(--radius-md);
+  padding: var(--space-md) var(--space-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.lineRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.lineName {
+  font: var(--text-body);
+  color: var(--text-secondary);
+}
+
+.lineAmount {
+  font: var(--text-body);
+  font-weight: 500;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}

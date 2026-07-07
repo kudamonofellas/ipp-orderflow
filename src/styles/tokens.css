@@ -1,0 +1,140 @@
+/**
+ * IPP-OrderFlow Design Tokens
+ *
+ * Source of truth: context/ui-context.md
+ * Do not edit individual values here without updating ui-context.md first.
+ * No component may use hardcoded hex values — every color, radius, spacing,
+ * and shadow must reference a token from this file.
+ */
+
+:root {
+  /* ===== Typography ===== */
+  --font-sans: 'Outfit', system-ui, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'Source Code Pro', ui-monospace, Consolas, monospace;
+
+  /* Type scale */
+  --text-page-title: 600 28px/1.3 var(--font-sans);
+  --text-h2: 600 20px/1.4 var(--font-sans);
+  --text-h3: 600 16px/1.5 var(--font-sans);
+  --text-body: 400 14px/1.6 var(--font-sans);
+  --text-label: 500 13px/1.5 var(--font-sans);
+  --text-caption: 400 12px/1.4 var(--font-sans);
+  --text-button: 500 14px/1 var(--font-sans);
+  --text-nav: 500 14px/1 var(--font-sans);
+
+  /* Letter spacing */
+  --tracking-tight: -0.02em;
+  --tracking-tight-sm: -0.01em;
+  --tracking-normal: 0;
+  --tracking-wide: 0.01em;
+
+  /* ===== Spacing ===== */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 24px;
+  --space-2xl: 32px;
+  --space-3xl: 48px;
+
+  /* ===== Border Radius ===== */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 50%;
+
+  /* ===== Light Theme (default) ===== */
+  --bg-base: #f5f6fa;
+  --bg-surface: #ffffff;
+  --bg-surface-hover: #f9fafb;
+
+  --text-primary: #1a1d1f;
+  --text-secondary: #6c757d;
+  --text-muted: #9ca3af;
+
+  --accent-primary: #1e4d5c;
+  --accent-primary-dark: #163a47;
+  --text-on-accent: #ffffff;
+
+  --border-default: #e5e7eb;
+  --border-subtle: #f3f4f6;
+
+  --state-error: #dc2626;
+  --state-success: #10b981;
+  --state-warning: #f59e0b;
+  --state-info: #3b82f6;
+
+  --bg-badge: #eef2ff;
+  --text-badge: #4f46e5;
+
+  --notification-accent: #ef4444;
+
+  /* ===== Shadows ===== */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+
+  /* ===== Layout ===== */
+  --nav-height: 72px;
+  --nav-padding-x: 24px;
+  --content-max-width: 1536px;
+
+  /* ===== Breakpoints (for reference — use in media queries) ===== */
+  --bp-sm: 640px;
+  --bp-md: 768px;
+  --bp-lg: 1024px;
+  --bp-xl: 1280px;
+  --bp-2xl: 1536px;
+
+  /* ===== Transitions ===== */
+  --duration-fast: 150ms;
+  --duration-normal: 200ms;
+  --ease-default: ease-in-out;
+  --ease-enter: ease-out;
+  --ease-exit: ease-in;
+
+  /* ===== Focus ring ===== */
+  --focus-ring: 2px solid var(--accent-primary);
+  --focus-offset: 4px;
+
+  color-scheme: light;
+}
+
+/* ===== Dark Theme ===== */
+[data-theme='dark'] {
+  --bg-base: #0f1419;
+  --bg-surface: #1a1d1f;
+  --bg-surface-hover: #24272a;
+
+  --text-primary: #f5f6fa;
+  --text-secondary: #9ca3af;
+  --text-muted: #6c757d;
+
+  --accent-primary: #2b7a8f;
+  --accent-primary-dark: #1e4d5c;
+  --text-on-accent: #ffffff;
+
+  --border-default: #2c3035;
+  --border-subtle: #24272a;
+
+  --bg-badge: #1e1b4b;
+  --text-badge: #a5b4fc;
+
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.4);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.5);
+
+  color-scheme: dark;
+}
+
+/* ===== Reduced motion ===== */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
