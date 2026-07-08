@@ -177,6 +177,15 @@ New patterns introduced this session (append if reused):
 - **Notification date group header**: `--text-label`, `--text-secondary`, above a divider-separated entry list.
 - **Popover/dropdown**: anchored to its trigger, `--shadow-lg`, `--radius-lg`, max 70vh scroll, outside-click + Escape to close, 200ms enter animation (opacity + translateY), disabled under reduced-motion.
 
+## Built components (2026-07-08)
+
+- **`OpenOrdersPanel` updated** — now wired to Directus (`useOpenOrders` hook). New "Items" column with expand/collapse toggle.
+
+New patterns introduced this session (append if reused):
+
+- **Expand/collapse toggle (table row)**: inline-flex button in a table cell, `--text-body`/`--text-primary`, `--radius-sm`, `--space-xs`/`--space-sm` padding. Shows count ("N items"/"N item") + `ChevronDown` 16px (`--text-secondary`). Hover → `--bg-surface-hover`. Disabled state (0 items): `--text-secondary`, no cursor, no arrow. Expanded state: chevron rotates 180° via `transform: rotate(180deg)` with `transition: transform 0.2s ease`. Expanded sub-row: `colSpan` full width, `--bg-surface-hover` inner panel with `--radius-md`, `--space-md`/`--space-lg` padding, flex column gap `--space-sm`.
+- **Loading / error / empty states (panel)**: `--text-body`, `--space-md` padding. Error uses `--status-danger` color (fallback `#c0392b`). Muted/empty uses `--text-secondary`.
+
 ---
 
 ## How this registry is used

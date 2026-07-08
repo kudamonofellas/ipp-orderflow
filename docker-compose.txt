@@ -1,0 +1,331 @@
+services:
+
+  # =========================
+  # TRAEFIK
+  # =========================
+  traefik:
+    image: traefik:latest
+    container_name: traefik
+    command:
+      - "--api.insecure=false"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.network=kudafellas_net"
+      - "--entryPoints.web.address=:80"
+      - "--entryPoints.web.http.redirections.entryPoint.to=websecure"
+      - "--entryPoints.web.http.redirections.entryPoint.scheme=https"
+      - "--entryPoints.websecure.address=:443"
+      - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
+      - "--certificatesresolvers.myresolver.acme.email=kudamonofellas@gmail.com"
+      - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "./letsencrypt:/letsencrypt"
+    networks:
+      - kudafellas_net
+
+  # =========================
+  # N8N DATABASE
+  # =========================
+  n8n-postgres:
+    image: postgres:16-alpine
+    container_name: n8n_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: n8n
+      POSTGRES_USER: n8n
+      POSTGRES_PASSWORD: ${N8N_POSTGRES_PASSWORD}
+    volumes:
+      - n8n_postgres_data:/var/lib/postgresql/data
+    networks:
+      - kudafellas_backend
+
+  # =========================
+  # N8N
+  # =========================
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: n8n
+    restart: unless-stopped
+    depends_on:
+      - n8n-postgres
+    environment:
+      - TZ=${TZ}
+      - GENERIC_TIMEZONE=${GENERIC_TIMEZONE}
+      - NODE_ENV=production
+
+      - N8N_HOST=n8n.kudafellas.cloud
+      - N8N_PROTOCOL=https
+      - N8N_PORT=5678
+      - N8N_EDITOR_BASE_URL=https://n8n.kudafellas.cloud/
+      - WEBHOOK_URL=https://n8n.kudafellas.cloud/
+
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
+
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=n8n-postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=n8n
+      - DB_POSTGRESDB_USER=n8n
+      - DB_POSTGRESDB_PASSWORD=${N8N_POSTGRES_PASSWORD}
+
+
+      - N8N_SECURE_COOKIE=true
+      - N8N_DIAGNOSTICS_ENABLED=false
+      - N8N_PERSONALIZATION_ENABLED=false
+      - N8N_VERSION_NOTIFICATIONS_ENABLED=false
+      - N8N_RESTRICT_FILE_ACCESS_TO=/opt/horeca_media
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - directus_uploads:/opt/horeca_media
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.n8n.rule=Host(`n8n.kudafellas.cloud`)"
+      - "traefik.http.routers.n8n.entrypoints=websecure"
+      - "traefik.http.routers.n8n.tls.certresolver=myresolver"
+      - "traefik.http.services.n8n.loadbalancer.server.port=5678"
+      - "traefik.docker.network=kudafellas_net"
+    networks:
+      - kudafellas_net
+      - kudafellas_backend
+
+  # =========================
+  # EVOLUTION DATABASE
+  # =========================
+  evolution-postgres:
+    image: postgres:15
+    container_name: evolution_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: evolution_api
+      POSTGRES_USER: evolution
+      POSTGRES_PASSWORD: ${EVOLUTION_POSTGRES_PASSWORD}
+    command:
+      - postgres
+      - -c
+      - max_connections=100
+      - -c
+      - listen_addresses=*
+    volumes:
+      - evolution_postgres_data:/var/lib/postgresql/data
+    networks:
+      - kudafellas_backend
+
+  # =========================
+  # REDIS FOR EVOLUTION
+  # =========================
+  evolution-redis:
+    image: redis:7-alpine
+    container_name: evolution_redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - evolution_redis_data:/data
+    networks:
+      - kudafellas_backend
+
+  # =========================
+  # EVOLUTION API
+  # =========================
+  evolution-api:
+    image: evoapicloud/evolution-api:latest
+    container_name: evolution_api
+    restart: unless-stopped
+    depends_on:
+      - evolution-postgres
+      - evolution-redis
+    env_file:
+      - .env
+    environment:
+      - SERVER_NAME=evolution
+      - SERVER_TYPE=http
+      - SERVER_PORT=8080
+      - SERVER_URL=https://evo.kudafellas.cloud
+      - SERVER_DISABLE_DOCS=false
+      - SERVER_DISABLE_MANAGER=false
+
+      - CORS_ORIGIN=*
+      - CORS_METHODS=POST,GET,PUT,DELETE
+
+      - DATABASE_PROVIDER=postgresql
+      - DATABASE_CONNECTION_URI=postgresql://evolution:${EVOLUTION_POSTGRES_PASSWORD}@evolution-postgres:5432/evolution_api
+      - DATABASE_CONNECTION_CLIENT_NAME=evolution
+
+      - CACHE_REDIS_ENABLED=true
+      - CACHE_REDIS_URI=redis://evolution-redis:6379
+      - CACHE_REDIS_PREFIX_KEY=evolution-cache
+      - CACHE_REDIS_TTL=604800
+      - CACHE_REDIS_SAVE_INSTANCES=true
+
+      - CACHE_LOCAL_ENABLED=true
+      - CACHE_LOCAL_TTL=86400
+
+      - AUTHENTICATION_API_KEY=${EVOLUTION_API_KEY}
+
+      - LANGUAGE=pt-BR
+
+      - WEBHOOK_GLOBAL_URL=https://n8n.kudafellas.cloud/webhook/evolution
+      - WEBHOOK_GLOBAL_ENABLED=true
+      - WEBHOOK_GLOBAL_WEBHOOK_BY_EVENTS=true
+
+      - WEBHOOK_EVENTS_APPLICATION_STARTUP=true
+      - WEBHOOK_EVENTS_INSTANCE_CREATE=true
+      - WEBHOOK_EVENTS_INSTANCE_DELETE=true
+      - WEBHOOK_EVENTS_QRCODE_UPDATED=true
+      - WEBHOOK_EVENTS_MESSAGES_SET=true
+      - WEBHOOK_EVENTS_MESSAGES_UPSERT=true
+      - WEBHOOK_EVENTS_MESSAGES_EDITED=true
+      - WEBHOOK_EVENTS_MESSAGES_UPDATE=true
+      - WEBHOOK_EVENTS_MESSAGES_DELETE=true
+      - WEBHOOK_EVENTS_SEND_MESSAGE=true
+      - WEBHOOK_EVENTS_SEND_MESSAGE_UPDATE=true
+      - WEBHOOK_EVENTS_CONTACTS_SET=true
+      - WEBHOOK_EVENTS_CONTACTS_UPDATE=true
+      - WEBHOOK_EVENTS_CONTACTS_UPSERT=true
+      - WEBHOOK_EVENTS_PRESENCE_UPDATE=true
+      - WEBHOOK_EVENTS_CHATS_SET=true
+      - WEBHOOK_EVENTS_CHATS_UPDATE=true
+      - WEBHOOK_EVENTS_CHATS_UPSERT=true
+      - WEBHOOK_EVENTS_CHATS_DELETE=true
+      - WEBHOOK_EVENTS_CONNECTION_UPDATE=true
+      - WEBHOOK_EVENTS_GROUPS_UPSERT=true
+      - WEBHOOK_EVENTS_GROUPS_UPDATE=true
+      - WEBHOOK_EVENTS_GROUP_PARTICIPANTS_UPDATE=true
+      - WEBHOOK_EVENTS_ERRORS=true
+    volumes:
+      - evolution_instances:/evolution/instances
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.evolution.rule=Host(`evo.kudafellas.cloud`)"
+      - "traefik.http.routers.evolution.entrypoints=websecure"
+      - "traefik.http.routers.evolution.tls.certresolver=myresolver"
+      - "traefik.http.services.evolution.loadbalancer.server.port=8080"
+      - "traefik.docker.network=kudafellas_net"
+    networks:
+      - kudafellas_net
+      - kudafellas_backend
+
+  # =========================
+  # BUSINESS DATABASE (HORECA)
+  # =========================
+  business-postgres:
+    image: postgres:16-alpine
+    container_name: business_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: horeca_orders
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: ${BUSINESS_POSTGRES_PASSWORD}
+      TZ: ${TZ}
+    volumes:
+      - business_postgres_data:/var/lib/postgresql/data
+    networks:
+      - kudafellas_backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d horeca_orders"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # =========================
+  # DIRECTUS (ADMIN CMS UI)
+  # =========================
+  directus:
+    image: directus/directus:latest
+    container_name: directus
+    restart: unless-stopped
+    depends_on:
+      business-postgres:
+        condition: service_healthy
+    environment:
+      - DB_CLIENT=pg
+      - DB_HOST=business-postgres
+      - DB_PORT=5432
+      - DB_DATABASE=horeca_orders
+      - DB_USER=admin
+      - DB_PASSWORD=${BUSINESS_POSTGRES_PASSWORD}
+      - TZ=${TZ}
+      - KEY=${DIRECTUS_KEY}
+      - SECRET=${DIRECTUS_SECRET}
+      
+      - ADMIN_EMAIL=kudamonofellas@gmail.com
+      - ADMIN_PASSWORD=${DIRECTUS_ADMIN_PASSWORD}
+
+      - CORS_ENABLED=true
+      - CORS_ORIGIN=http://localhost:3000,http://localhost:3001,https://app.kudafellas.cloud
+      
+      - PUBLIC_URL=https://admin.kudafellas.cloud
+    volumes:
+      - directus_uploads:/directus/uploads
+      - directus_extensions:/directus/extensions
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.directus.rule=Host(`admin.kudafellas.cloud`)"
+      - "traefik.http.routers.directus.entrypoints=websecure"
+      - "traefik.http.routers.directus.tls.certresolver=myresolver"
+      - "traefik.http.services.directus.loadbalancer.server.port=8055"
+      - "traefik.docker.network=kudafellas_net"
+    networks:
+      - kudafellas_net
+      - kudafellas_backend
+
+  # =========================
+  # DIRECTUS DEV (ADMIN CMS UI)
+  # =========================
+  directus-dev:
+    image: directus/directus:latest
+    container_name: directus_dev
+    restart: unless-stopped
+    depends_on:
+      business-postgres:
+        condition: service_healthy
+    environment:
+      - DB_CLIENT=pg
+      - DB_HOST=business-postgres
+      - DB_PORT=5432
+      - DB_DATABASE=horeca_orders_dev
+      - DB_USER=admin
+      - DB_PASSWORD=${BUSINESS_POSTGRES_PASSWORD}
+      - TZ=${TZ}
+      - KEY=${DIRECTUS_DEV_KEY}
+      - SECRET=${DIRECTUS_DEV_SECRET}
+      - ADMIN_EMAIL=kudamonofellas@gmail.com
+      - ADMIN_PASSWORD=${DIRECTUS_ADMIN_PASSWORD}
+      - CORS_ENABLED=true
+      - CORS_ORIGIN=http://localhost:3000,http://localhost:3001,https://app.kudafellas.cloud
+      - PUBLIC_URL=https://dev-admin.kudafellas.cloud
+    volumes:
+      - directus_dev_uploads:/directus/uploads
+      - directus_dev_extensions:/directus/extensions
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.directusdev.rule=Host(`dev-admin.kudafellas.cloud`)"
+      - "traefik.http.routers.directusdev.entrypoints=websecure"
+      - "traefik.http.routers.directusdev.tls.certresolver=myresolver"
+      - "traefik.http.services.directusdev.loadbalancer.server.port=8055"
+      - "traefik.docker.network=kudafellas_net"
+    networks:
+      - kudafellas_net
+      - kudafellas_backend
+
+volumes:
+  n8n_data:
+  n8n_postgres_data:
+  evolution_instances:
+  evolution_redis_data:
+  evolution_postgres_data:
+  business_postgres_data:
+  directus_uploads:
+  directus_extensions:
+  directus_dev_uploads:
+  directus_dev_extensions:
+
+networks:
+  kudafellas_net:
+    external: true
+  kudafellas_backend:
+    driver: bridge

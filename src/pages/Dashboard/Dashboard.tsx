@@ -6,10 +6,9 @@ import {
   approvals,
   currentUser,
   intakeMessages,
-  metrics,
-  openOrders,
-  stageCounts,
 } from '../../data/mockDashboard';
+import { useDashboardCounts } from '../../hooks/useDashboardCounts';
+import { useOpenOrders } from '../../hooks/useOpenOrders';
 import { ApprovalPanel } from './sections/ApprovalPanel';
 import { IntakePanel } from './sections/IntakePanel';
 import { OpenOrdersPanel } from './sections/OpenOrdersPanel';
@@ -23,6 +22,9 @@ const METRIC_ICONS = {
 
 /** Admin dashboard — mirrors context/designs/Dashboard.png. */
 export function Dashboard() {
+  const { orders: openOrders, loading, error, total, page, pageSize, setPage } = useOpenOrders();
+  const { metrics, stageCounts } = useDashboardCounts();
+
   return (
     <div className={styles.grid}>
       <div className={styles.main}>
@@ -60,7 +62,15 @@ export function Dashboard() {
           <IntakePanel messages={intakeMessages} />
           <div className={styles.panelStack}>
             <ApprovalPanel items={approvals} />
-            <OpenOrdersPanel orders={openOrders} />
+            <OpenOrdersPanel
+              orders={openOrders}
+              loading={loading}
+              error={error}
+              total={total}
+              page={page}
+              pageSize={pageSize}
+              onPageChange={setPage}
+            />
           </div>
         </div>
       </div>

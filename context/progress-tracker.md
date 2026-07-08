@@ -30,7 +30,24 @@ change.
 - Mock view-model data in `src/data/mockDashboard.ts` + types in `src/types/dashboard.ts` (UI-only, to be replaced by Directus reads)
 - Brand logo copied to `src/assets/logo.svg` (from `public/IPP Icon.svg`)
 - `index.html` title → `IPP-OrderFlow`
-- `npm run build` ✓, `npm run lint` ✓, `tsc` clean
+- **Directus wiring (first proof-of-wiring, 2026-07-08):**
+  - Installed `@directus/sdk` + `zod` (both in the approved stack)
+  - `src/lib/directus.ts` — single Directus client wrapper. Static token auth (`VITE_DIRECTUS_TOKEN`) for the first read-only wiring; will be replaced by email/password login flow later. Exposes typed `readOrders()` / `readMessages()` methods returning `{ data, error }` tuples per code-standards.md.
+  - `src/lib/schemas.ts` — zod schemas for Directus collection responses (`OrdersCollectionSchema`, `MessagesCollectionSchema`). Boundary validation per code-standards.md.
+  - `src/types/directus.ts` — collection types derived from the zod schemas (single source of truth).
+  - `src/vite-env.d.ts` — TypeScript types for `VITE_DIRECTUS_URL` + `VITE_DIRECTUS_TOKEN`.
+  - `.env` / `.env.example` — Directus URL + static token (gitignored).
+  - `src/hooks/useOpenOrders.ts` — first real data hook. Replaces the `openOrders` mock. Fetches `orders` filtered to `status: 'Open'`, sorted by `-order_id`, validated through zod, mapped to the `OpenOrder` view-model.
+  - **OpenOrdersPanel** updated: new "Items" column showing item count (`N items`/`N item`) with a chevron arrow toggle to expand/collapse the line-detail sub-row. Orders with 0 items show a disabled "No items" button. Arrow rotates 180° when expanded.
+  - VPS Directus CORS configured: `CORS_ENABLED=true`, `CORS_ORIGIN` includes `http://localhost:3001`, `CORS_METHODS=GET,POST,PATCH,DELETE,OPTIONS` (OPTIONS was missing — required for browser preflight).
+  - `npm run build` ✓, `npm run lint` ✓, `tsc` clean
+- **Dashboard metrics + stage counts wired to real Directus data (2026-07-08):**
+  - `aggregateOrders()` added to `src/lib/directus.ts` — uses `@directus/sdk` `aggregate()` for counts (per code-standards.md: never `readItems()` + `.length`).
+  - `src/hooks/useDashboardCounts.ts` — single aggregate call grouped by `status`, maps raw DB statuses to the 8 pipeline stages + the 3 metric buckets (Total / Delivered / Returned). Replaces the mock `metrics` + `stageCounts` exports.
+  - Dashboard now reads real counts for metric cards + stage pills; only `intakeMessages`, `approvals`, and `notificationGroups` remain mock (they depend on collections not yet in the schema).
+- **Open Orders pagination (2026-07-08):** `useOpenOrders` now accepts `page` + returns `total` / `page` / `pageSize` / `setPage`. Page size = 20. Fetches the current page (`limit` + `offset`) and the total count (`aggregate`) in parallel. `OpenOrdersPanel` renders a pagination footer (`1–20 of N`, prev/next buttons, `page / totalPages` indicator).
+- **Scrollbar layout-shift fix (2026-07-08):** `scrollbar-gutter: stable` on `html` in `global.css` — reserves space for the scrollbar gutter whether or not it's visible, so the viewport width no longer changes when a scrollbar appears/disappears.
+- **Security: `.env.example` sanitized** — the real Directus static token was replaced with a placeholder. `.env` remains gitignored. `docker-compose.txt` uses `${...}` env var placeholders for all secrets (no hardcoded passwords).
 
 ## In Progress
 
@@ -38,10 +55,9 @@ change.
 
 ## Next Up
 
-- Wire the Dashboard to Directus: create the pipeline collections (schema-first per workflow rules), then replace `mockDashboard.ts` with `@directus/sdk` reads (`aggregate()` for metrics/stage counts, `readItems()` for lists)
+- Wire remaining Dashboard panels to Directus: `intakeMessages` → `readMessages('messages')`, `approvals` + `notificationGroups` (depend on `order_history` collection which doesn't exist yet — schema-first per workflow rules)
 - Build the domain layer (`src/lib/domain.ts`) with the pipeline enum + `can()` capability matrix before any order mutation UI
-- Add the Directus client wrapper (`src/lib/directus.ts`) + zod validation at the boundary
-- Login page + Directus auth (route stub not yet added)
+- Login page + Directus auth (replace the static token with email/password login flow → JWT)
 - i18n layer (`src/i18n/`) — Dashboard strings are currently literals and must move to EN/Bahasa keys
 
 ## Open Questions

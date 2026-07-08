@@ -3,6 +3,18 @@
   margin-bottom: var(--space-lg);
 }
 
+.muted {
+  font: var(--text-body);
+  color: var(--text-secondary);
+  padding: var(--space-md);
+}
+
+.error {
+  font: var(--text-body);
+  color: var(--status-danger, #c0392b);
+  padding: var(--space-md);
+}
+
 .table {
   width: 100%;
   border-collapse: collapse;
@@ -23,6 +35,47 @@
 
 .orderId {
   font-weight: 500;
+}
+
+.itemsCell {
+  padding: var(--space-sm) var(--space-md);
+}
+
+.itemsToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  background: none;
+  border: none;
+  padding: var(--space-xs) var(--space-sm);
+  cursor: pointer;
+  font: var(--text-body);
+  color: var(--text-primary);
+  border-radius: var(--radius-sm);
+  transition: background 0.15s ease;
+}
+
+.itemsToggle:hover:not(:disabled) {
+  background: var(--bg-surface-hover);
+}
+
+.itemsToggle:disabled {
+  cursor: default;
+  color: var(--text-secondary);
+}
+
+.itemsCount {
+  font-variant-numeric: tabular-nums;
+}
+
+.chevron {
+  transition: transform 0.2s ease;
+  color: var(--text-secondary);
+}
+
+.chevronOpen {
+  composes: chevron;
+  transform: rotate(180deg);
 }
 
 .linesCell {
@@ -54,4 +107,61 @@
   font-weight: 500;
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
+}
+
+/* ===== Pagination ===== */
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--border-subtle);
+  margin-top: var(--space-md);
+}
+
+.pageInfo {
+  font: var(--text-caption);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.pageControls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.pageButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) var(--ease-default),
+    color var(--duration-fast) var(--ease-default);
+}
+
+.pageButton:hover:not(:disabled) {
+  background: var(--bg-surface-hover);
+  color: var(--text-primary);
+}
+
+.pageButton:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.pageIndicator {
+  font: var(--text-label);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  min-width: 3ch;
+  text-align: center;
 }

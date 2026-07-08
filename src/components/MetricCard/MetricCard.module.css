@@ -59,10 +59,14 @@
   line-height: 1;
   letter-spacing: var(--tracking-tight);
   color: var(--text-primary);
+  flex-shrink: 0;
 }
 
 .label {
   font: var(--text-h3);
   color: var(--text-primary);
-  max-width: 6ch;
+  /* Take the remaining width next to the number; wrap onto a new line only
+     when the label text doesn't fit (e.g. "Total Orders" → "Total" / "Orders"). */
+  min-width: 0;
+  overflow-wrap: break-word;
 }
