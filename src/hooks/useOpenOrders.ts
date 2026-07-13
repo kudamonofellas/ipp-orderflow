@@ -59,6 +59,8 @@ function toOpenOrder(row: {
   status?: string | null;
   order_date?: string | null;
   delivery_date?: string | null;
+  sales_rep?: string | null;
+  customer_name?: string | null;
   order_items?: string | null;
   created_at?: string | null;
 }): OpenOrder {
@@ -68,6 +70,8 @@ function toOpenOrder(row: {
     status: row.status ?? 'Draft',
     orderDate: formatDate(row.order_date ?? row.created_at),
     deliveryDate: formatDate(row.delivery_date),
+    salesRep: row.sales_rep ?? '—',
+    customerName: row.customer_name ?? '—',
     lines: parseOrderItems(row.order_items),
   };
 }

@@ -1,29 +1,19 @@
 .card {
   background: var(--bg-surface);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-lg);
-  padding: var(--space-lg);
   display: flex;
   flex-direction: column;
-  gap: var(--space-lg);
+  gap: var(--space-sm);
 }
 
 .header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-md);
+  gap: var(--space-sm);
 }
 
 .iconWrap {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 44px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-default);
-  color: var(--text-primary);
+  color: var(--accent-primary);
 }
 
 .rangeToggle {
@@ -33,7 +23,7 @@
   background: var(--bg-surface);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
-  padding: var(--space-sm) var(--space-md);
+  padding: 6px var(--space-sm);
   font: var(--text-label);
   color: var(--text-secondary);
   cursor: pointer;
@@ -50,23 +40,21 @@
 .body {
   display: flex;
   align-items: baseline;
-  gap: var(--space-md);
+  gap: var(--space-sm);
 }
 
+/* Label + number are both 16px / medium per ui-implementation.md.
+   The number carries the main blue accent to match the icon + labels. */
 .value {
-  font: var(--text-page-title);
-  font-size: 40px;
-  line-height: 1;
-  letter-spacing: var(--tracking-tight);
-  color: var(--text-primary);
+  font: 500 16px/1.4 var(--font-sans);
+  color: var(--accent-primary);
   flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
 }
 
 .label {
-  font: var(--text-h3);
-  color: var(--text-primary);
-  /* Take the remaining width next to the number; wrap onto a new line only
-     when the label text doesn't fit (e.g. "Total Orders" → "Total" / "Orders"). */
+  font: 500 16px/1.4 var(--font-sans);
+  color: var(--accent-primary);
   min-width: 0;
   overflow-wrap: break-word;
 }

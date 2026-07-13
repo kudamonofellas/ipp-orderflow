@@ -12,7 +12,7 @@
 .row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   width: 100%;
   background: var(--bg-surface);
   border: 1px solid var(--border-default);
@@ -30,7 +30,23 @@
   border-color: var(--accent-primary);
 }
 
+.content {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-md);
+  min-width: 0;
+}
+
+.alertIcon {
+  color: var(--state-warning);
+  flex-shrink: 0;
+}
+
 .label {
-  font: var(--text-h3);
+  font: var(--text-body);
   color: var(--text-primary);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

@@ -27,55 +27,51 @@
   padding: var(--space-sm) var(--space-md);
 }
 
+.arrowHead {
+  width: 40px;
+}
+
 .orderRow td {
   font: var(--text-body);
   color: var(--text-primary);
   padding: var(--space-md);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.clickable {
+  cursor: pointer;
+  transition: background-color var(--duration-fast) var(--ease-default);
+}
+
+.clickable:hover {
+  background: var(--bg-surface-hover);
 }
 
 .orderId {
   font-weight: 500;
 }
 
-.itemsCell {
-  padding: var(--space-sm) var(--space-md);
-}
-
-.itemsToggle {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-xs);
-  background: none;
-  border: none;
-  padding: var(--space-xs) var(--space-sm);
-  cursor: pointer;
-  font: var(--text-body);
-  color: var(--text-primary);
-  border-radius: var(--radius-sm);
-  transition: background 0.15s ease;
-}
-
-.itemsToggle:hover:not(:disabled) {
-  background: var(--bg-surface-hover);
-}
-
-.itemsToggle:disabled {
-  cursor: default;
+.arrowCell {
+  width: 40px;
+  text-align: center;
   color: var(--text-secondary);
 }
 
 .itemsCount {
   font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
 }
 
+/* Arrow starts pointing right (collapsed), rotates to point down (expanded). */
 .chevron {
   transition: transform 0.2s ease;
   color: var(--text-secondary);
+  vertical-align: middle;
 }
 
 .chevronOpen {
   composes: chevron;
-  transform: rotate(180deg);
+  transform: rotate(90deg);
 }
 
 .linesCell {

@@ -1,25 +1,25 @@
-import type { LucideIcon } from 'lucide-react';
-import { ChevronDown } from 'lucide-react';
+import { Icon } from '../Icon/Icon';
+import type { IconName } from '../Icon/icons';
 import styles from './MetricCard.module.css';
 
 interface MetricCardProps {
-  icon: LucideIcon;
+  icon: IconName;
   value: number;
   label: string;
   range: string;
 }
 
 /** Top-row metric card: icon + range dropdown, big number, label. */
-export function MetricCard({ icon: Icon, value, label, range }: MetricCardProps) {
+export function MetricCard({ icon, value, label, range }: MetricCardProps) {
   return (
     <article className={styles.card}>
       <div className={styles.header}>
-        <span className={styles.iconWrap} aria-hidden="true">
-          <Icon size={24} strokeWidth={1.75} />
+        <span className={styles.iconWrap}>
+          <Icon name={icon} size={24} />
         </span>
         <button type="button" className={styles.rangeToggle}>
           {range}
-          <ChevronDown size={16} strokeWidth={2} aria-hidden="true" />
+          <Icon name="chevronDown" size={16} />
         </button>
       </div>
       <div className={styles.body}>

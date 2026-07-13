@@ -2,7 +2,7 @@
 
 ## Theme
 
-Light-first design with a clean, modern workspace aesthetic. The interface uses soft gray backgrounds (`#F5F6FA`) with white elevated surfaces for cards and panels. Primary interactive elements use a distinctive dark teal accent (`#1E4D5C`) that carries the brand identity. The design supports both light and dark themes, with light as the default. Typography is clean and spacious using Google's Outfit font family. The overall feel is professional, approachable, and optimized for long-session use in a B2B/Horeca order-management context.
+Light-first design with a clean, modern workspace aesthetic. The interface uses a white page base with soft gray (`#F0F5F5`) for muted surfaces (for example the navbar and secondary card backgrounds). Primary interactive elements use a dark teal-blue accent (`#0C4458`) that carries the brand identity. The design supports both light and dark themes, with light as the default. Typography is clean and spacious using Google's Outfit font family. The overall feel is professional, approachable, and optimized for long-session use in a B2B/Horeca order-management context.
 
 ## Colors
 
@@ -12,17 +12,17 @@ All components must use these CSS custom property tokens — no hardcoded hex va
 
 | Role                 | CSS Variable            | Value                               | Usage                                       |
 | -------------------- | ----------------------- | ----------------------------------- | ------------------------------------------- |
-| Page background      | `--bg-base`             | `#F5F6FA`                           | Main app background                         |
+| Page background      | `--bg-base`             | `#FFFFFF`                           | Main app background                         |
 | Surface              | `--bg-surface`          | `#FFFFFF`                           | Cards, panels, elevated surfaces            |
-| Surface hover        | `--bg-surface-hover`    | `#F9FAFB`                           | Hover state for interactive surfaces        |
+| Surface hover        | `--bg-surface-hover`    | `#F0F5F5`                           | Hover state for interactive surfaces        |
 | Primary text         | `--text-primary`        | `#1A1D1F`                           | Headings, body text, high emphasis          |
-| Secondary text       | `--text-secondary`      | `#6C757D`                           | Labels, metadata, medium emphasis           |
+| Secondary text       | `--text-secondary`      | `#7C7C7C`                           | Labels, metadata, medium emphasis           |
 | Muted text           | `--text-muted`          | `#9CA3AF`                           | Timestamps, placeholders, low emphasis      |
-| Primary accent       | `--accent-primary`      | `#1E4D5C`                           | Primary buttons, active nav, brand color    |
-| Primary accent hover | `--accent-primary-dark` | `#163A47`                           | Hover state for primary actions             |
+| Primary accent       | `--accent-primary`      | `#0C4458`                           | Primary buttons, active nav, brand color    |
+| Primary accent hover | `--accent-primary-dark` | `#082F3D`                           | Hover state for primary actions             |
 | Accent on primary    | `--text-on-accent`      | `#FFFFFF`                           | Text on primary accent backgrounds          |
-| Border default       | `--border-default`      | `#E5E7EB`                           | Default borders for cards, inputs, dividers |
-| Border subtle        | `--border-subtle`       | `#F3F4F6`                           | Very subtle dividers                        |
+| Border default       | `--border-default`      | `#D6D6D6`                           | Default borders for cards, inputs, dividers |
+| Border subtle        | `--border-subtle`       | `#F0F5F5`                           | Very subtle dividers                        |
 | State error          | `--state-error`         | `#DC2626`                           | Error messages, destructive actions         |
 | State success        | `--state-success`       | `#10B981`                           | Success states, confirmations               |
 | State warning        | `--state-warning`       | `#F59E0B`                           | Warnings, caution states                    |
@@ -95,7 +95,7 @@ All components must use these CSS custom property tokens — no hardcoded hex va
 
 ## Component Library
 
-**Plain CSS** — no component library. The prototype uses plain CSS (no Tailwind, no shadcn/ui). Components are hand-built React components with CSS Modules or global CSS classes. Icons are from **lucide-react** (stroke-based, consistent with the dashboard design).
+**Plain CSS** — no component library. The prototype uses plain CSS (no Tailwind, no shadcn/ui). Components are hand-built React components with CSS Modules or global CSS classes. Icons are from **HugeIcons via Iconify** (`@iconify/react` + `@iconify-json/hugeicons`).
 
 ### Component Patterns (to be built)
 
@@ -122,7 +122,7 @@ All components must use these CSS custom property tokens — no hardcoded hex va
 
 ## Icons
 
-**lucide-react** — stroke-based, 24px stroke width. Default size: `20px` (`h-5 w-5`) for buttons and nav items, `16px` (`h-4 w-4`) for inline indicators, `24px` (`h-6 w-6`) for card icons/headers. Color inherits from parent text color or uses `--text-secondary` for muted icons.
+**HugeIcons via Iconify** (`@iconify/react` + `@iconify-json/hugeicons`) — outlined icon style. Default size: `20px` for buttons and nav items, `16px` for inline indicators, `24px` for metric cards and CTA cards. Color inherits from parent text color or uses `--text-secondary` for muted icons.
 
 ### Key Icons Used
 

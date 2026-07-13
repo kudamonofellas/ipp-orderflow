@@ -45,20 +45,23 @@
   --radius-full: 50%;
 
   /* ===== Light Theme (default) ===== */
-  --bg-base: #f5f6fa;
+  /* Body is white; the soft grey (#f0f5f5) is used for muted surfaces such
+     as the navbar, intake message cards, and expanded row backgrounds. */
+  --bg-base: #ffffff;
   --bg-surface: #ffffff;
-  --bg-surface-hover: #f9fafb;
+  --bg-surface-hover: #f0f5f5;
+  --bg-muted: #f0f5f5;
 
   --text-primary: #1a1d1f;
-  --text-secondary: #6c757d;
+  --text-secondary: #7c7c7c;
   --text-muted: #9ca3af;
 
-  --accent-primary: #1e4d5c;
-  --accent-primary-dark: #163a47;
+  --accent-primary: #0c4458;
+  --accent-primary-dark: #082f3d;
   --text-on-accent: #ffffff;
 
-  --border-default: #e5e7eb;
-  --border-subtle: #f3f4f6;
+  --border-default: #d6d6d6;
+  --border-subtle: #f0f5f5;
 
   --state-error: #dc2626;
   --state-success: #10b981;

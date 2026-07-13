@@ -9,16 +9,7 @@
  * Pipeline stages follow architecture.md Invariant #4.
  */
 
-/** The 8 in-pipeline stages plus off-pipeline states. */
-export type PipelineStage =
-  | 'intake'
-  | 'cold'
-  | 'finance'
-  | 'production'
-  | 'packing'
-  | 'finalise'
-  | 'dispatch'
-  | 'delivered';
+import type { Stage } from '../lib/pipeline';
 
 /** A dashboard metric card (Total / Delivered / Returned). */
 export interface DashboardMetric {
@@ -32,7 +23,7 @@ export interface DashboardMetric {
 
 /** A clickable stage pill on the dashboard grid. */
 export interface StageCount {
-  stage: PipelineStage;
+  stage: Stage;
   label: string;
   count: number;
 }
@@ -46,8 +37,12 @@ export interface IntakeMessage {
   body?: string;
 }
 
-/** An approval / review action item bucket. */
-export interface ApprovalItem {
+/**
+ * A "Need attention" action-item bucket — items the current role must
+ * process (e.g. orders to print DO/SI for, drafts to review). Replaces the
+ * old approval-only shape.
+ */
+export interface AttentionItem {
   id: string;
   label: string;
   count: number;
@@ -67,6 +62,8 @@ export interface OpenOrder {
   status: string;
   orderDate: string;
   deliveryDate: string;
+  salesRep: string;
+  customerName: string;
   lines: OpenOrderLine[];
 }
 

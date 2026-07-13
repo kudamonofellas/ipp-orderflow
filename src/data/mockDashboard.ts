@@ -8,13 +8,14 @@
  */
 
 import type {
-  ApprovalItem,
+  AttentionItem,
   DashboardMetric,
   IntakeMessage,
   NotificationGroup,
   OpenOrder,
   StageCount,
 } from '../types/dashboard';
+import { PIPELINE_STAGES, RETURN_STAGES } from '../lib/pipeline';
 
 export const metrics: DashboardMetric[] = [
   { id: 'total', label: 'Total Orders', value: 1, range: 'Today' },
@@ -22,16 +23,25 @@ export const metrics: DashboardMetric[] = [
   { id: 'returned', label: 'Returned Orders', value: 1, range: 'Today' },
 ];
 
-export const stageCounts: StageCount[] = [
-  { stage: 'intake', label: 'Intake', count: 1 },
-  { stage: 'cold', label: 'Cold Storage', count: 1 },
-  { stage: 'finance', label: 'Finance Gate', count: 1 },
-  { stage: 'production', label: 'Production', count: 1 },
-  { stage: 'packing', label: 'Packing', count: 0 },
-  { stage: 'finalise', label: 'Finalize', count: 0 },
-  { stage: 'dispatch', label: 'Dispatch', count: 1 },
-  { stage: 'delivered', label: 'Delivered', count: 3 },
-];
+/** Mock counts keyed by the new stage enum (main pipeline + return workflow). */
+const MOCK_STAGE_COUNTS: Record<string, number> = {
+  intake: 1,
+  cold: 1,
+  finance: 1,
+  production: 1,
+  packing: 0,
+  finalise: 0,
+  dispatch: 1,
+  delivered: 3,
+  awaiting_return: 1,
+  admin_action: 2,
+  awaiting_signed_doc: 0,
+  replacement_transit: 1,
+};
+
+export const stageCounts: StageCount[] = [...PIPELINE_STAGES, ...RETURN_STAGES].map(
+  ({ key, label }) => ({ stage: key, label, count: MOCK_STAGE_COUNTS[key] ?? 0 }),
+);
 
 export const intakeMessages: IntakeMessage[] = [
   { id: 'm1', preview: 'Teza june...', customer: 'Tezalonica' },
@@ -44,9 +54,27 @@ export const intakeMessages: IntakeMessage[] = [
   },
 ];
 
-export const approvals: ApprovalItem[] = [
-  { id: 'print-do', label: 'Print DO', count: 2 },
-  { id: 'need-review', label: 'Need to Review', count: 1 },
+export const attentionItems: AttentionItem[] = [
+  {
+    id: 'att-01',
+    label: '#260707-09 Munro Resto - return coming back - warehouse to receive & verify',
+    count: 1,
+  },
+  {
+    id: 'att-02',
+    label: '#260707-09 Munro Resto - return - admin to update Accurate & decide (can run before goods arrive)',
+    count: 1,
+  },
+  {
+    id: 'att-03',
+    label: '#260629-01 Saffron Kitchen - past its delivery date',
+    count: 1,
+  },
+  {
+    id: 'att-04',
+    label: '#260708-02 Ducking Setiabudi - past its delivery date',
+    count: 1,
+  },
 ];
 
 export const openOrders: OpenOrder[] = [
@@ -56,6 +84,8 @@ export const openOrders: OpenOrder[] = [
     status: 'Open',
     orderDate: 'July 1st, 2026',
     deliveryDate: 'July 1st, 2026',
+    salesRep: 'Teza',
+    customerName: 'Tezalonica',
     lines: [
       { id: 'l1', name: 'Item name', amount: 2_100_000 },
       { id: 'l2', name: 'Item name', amount: 2_100_000 },
@@ -68,6 +98,8 @@ export const openOrders: OpenOrder[] = [
     status: 'Open',
     orderDate: 'July 1st, 2026',
     deliveryDate: 'July 1st, 2026',
+    salesRep: 'Teza',
+    customerName: 'Agora Dining',
     lines: [],
   },
 ];

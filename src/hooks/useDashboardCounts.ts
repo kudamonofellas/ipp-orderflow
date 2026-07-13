@@ -20,46 +20,37 @@
 import { useEffect, useState } from 'react';
 import { aggregateOrders } from '../lib/directus';
 import type { DashboardMetric, StageCount } from '../types/dashboard';
+import { PIPELINE_STAGES, RETURN_STAGES, STAGE_LABELS, type Stage } from '../lib/pipeline';
 
-/** Stage pill labels (order matches the dashboard grid). */
-const STAGE_LABELS: Record<string, string> = {
-  intake: 'Intake',
-  cold: 'Cold Storage',
-  finance: 'Finance Gate',
-  production: 'Production',
-  packing: 'Packing',
-  finalise: 'Finalize',
-  dispatch: 'Dispatch',
-  delivered: 'Delivered',
-};
-
-/** Ordered stage keys for the 2×4 grid. */
-const STAGE_ORDER: string[] = [
-  'intake',
-  'cold',
-  'finance',
-  'production',
-  'packing',
-  'finalise',
-  'dispatch',
-  'delivered',
+/** Ordered stage keys for the grid: main pipeline then return workflow. */
+const STAGE_ORDER: Stage[] = [
+  ...PIPELINE_STAGES.map((s) => s.key),
+  ...RETURN_STAGES.map((s) => s.key),
 ];
 
 /**
  * Map a raw DB status string to a dashboard stage key.
  * Returns null if the status doesn't map to any stage pill.
  */
-function statusToStage(status: string | null | undefined): string | null {
+function statusToStage(status: string | null | undefined): Stage | null {
   if (!status) return null;
   const s = status.toLowerCase();
-  // Direct mappings for the values currently in the DB.
-  if (s === 'open' || s === 'draft' || s === 'intake') return 'intake';
-  if (s === 'cold' || s === 'cold storage') return 'cold';
-  if (s === 'finance' || s === 'finance gate') return 'finance';
-  if (s === 'production' || s === 'cutting' || s === 'packing') return 'production';
-  if (s === 'finalise' || s === 'finalize') return 'finalise';
+  // Direct mappings for the values currently in the DB + the new stage names.
+  if (s === 'open' || s === 'draft' || s === 'intake' || s === 'new orders') return 'intake';
+  if (s === 'cold' || s === 'cold storage' || s === 'cold storage picking') return 'cold';
+  if (s === 'finance' || s === 'finance gate' || s === 'finance review') return 'finance';
+  if (s === 'production' || s === 'cutting' || s === 'processing')
+    return 'production';
+  if (s === 'packing') return 'packing';
+  if (s === 'finalise' || s === 'finalize' || s === 'print do/si' || s === 'print do')
+    return 'finalise';
   if (s === 'dispatch') return 'dispatch';
   if (s === 'delivered') return 'delivered';
+  // Return workflow.
+  if (s === 'awaiting return') return 'awaiting_return';
+  if (s === 'admin action required' || s === 'admin action') return 'admin_action';
+  if (s === 'awaiting signed do/si' || s === 'awaiting signed doc') return 'awaiting_signed_doc';
+  if (s === 'replacement in transit' || s === 'replacement transit') return 'replacement_transit';
   return null;
 }
 
@@ -75,10 +66,11 @@ const EMPTY_METRICS: DashboardMetric[] = [
   { id: 'total', label: 'Total Orders', value: 0, range: 'Today' },
   { id: 'delivered', label: 'Delivered Orders', value: 0, range: 'Today' },
   { id: 'returned', label: 'Returned Orders', value: 0, range: 'Today' },
+  { id: 'cancelled', label: 'Canceled Orders', value: 0, range: 'Today' },
 ];
 
 const EMPTY_STAGES: StageCount[] = STAGE_ORDER.map((stage) => ({
-  stage: stage as StageCount['stage'],
+  stage,
   label: STAGE_LABELS[stage],
   count: 0,
 }));
@@ -120,17 +112,19 @@ export function useDashboardCounts(): UseDashboardCountsResult {
         total += count;
       }
 
-      // Metrics: total / delivered / returned.
+      // Metrics: total / delivered / returned / canceled.
       const delivered = byStatus.get('Delivered') ?? 0;
       const returned = byStatus.get('Returned') ?? 0;
+      const cancelledCount = (byStatus.get('Cancelled') ?? 0) + (byStatus.get('Canceled') ?? 0);
       setMetrics([
         { id: 'total', label: 'Total Orders', value: total, range: 'Today' },
         { id: 'delivered', label: 'Delivered Orders', value: delivered, range: 'Today' },
         { id: 'returned', label: 'Returned Orders', value: returned, range: 'Today' },
+        { id: 'cancelled', label: 'Canceled Orders', value: cancelledCount, range: 'Today' },
       ]);
 
       // Stage pills: map each status to a stage and sum.
-      const stageMap = new Map<string, number>();
+      const stageMap = new Map<Stage, number>();
       for (const [status, count] of byStatus) {
         const stage = statusToStage(status);
         if (stage) {
@@ -139,7 +133,7 @@ export function useDashboardCounts(): UseDashboardCountsResult {
       }
       setStageCounts(
         STAGE_ORDER.map((stage) => ({
-          stage: stage as StageCount['stage'],
+          stage,
           label: STAGE_LABELS[stage],
           count: stageMap.get(stage) ?? 0,
         })),

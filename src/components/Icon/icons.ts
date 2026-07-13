@@ -1,0 +1,29 @@
+/**
+ * Icon registry: semantic name → HugeIcons identifier.
+ *
+ * Kept separate from Icon.tsx so the component file only exports a component
+ * (satisfies the react-refresh/only-export-components lint rule). Add new
+ * icons here so the rest of the app never hardcodes a raw icon string.
+ *
+ * Icon set: @iconify-json/hugeicons.
+ */
+export const ICONS = {
+  dashboard: 'hugeicons:dashboard-square-01',
+  orders: 'hugeicons:package',
+  customers: 'hugeicons:user-multiple',
+  reports: 'hugeicons:analytics-01',
+  search: 'hugeicons:search-01',
+  notification: 'hugeicons:notification-02',
+  settings: 'hugeicons:settings-02',
+  add: 'hugeicons:add-01',
+  total: 'hugeicons:clipboard',
+  delivered: 'hugeicons:delivery-truck-01',
+  returned: 'hugeicons:delivery-return-01',
+  cancelled: 'hugeicons:cancel-circle',
+  alert: 'hugeicons:alert-01',
+  chevronDown: 'hugeicons:arrow-down-01',
+  chevronRight: 'hugeicons:arrow-right-01',
+  chevronLeft: 'hugeicons:arrow-left-01',
+} as const;
+
+export type IconName = keyof typeof ICONS;

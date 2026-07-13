@@ -5,6 +5,17 @@
 > Token source of truth: `context/ui-context.md` + `context/ui-tokens.md`.
 > CSS implementation: `src/styles/tokens.css`.
 
+## Update — 2026-07-13 Dashboard Refresh
+
+- Icons migrated to HugeIcons via Iconify (`@iconify/react` + `@iconify-json/hugeicons`) through `src/components/Icon/`.
+- Main accent updated to `--accent-primary: #0c4458`.
+- Neutral gray system updated: `--bg-muted / --bg-surface-hover: #f0f5f5`, `--border-default: #d6d6d6`, `--text-secondary: #7c7c7c`.
+- Navbar pattern updated: muted gray background, 16px icon + 16px text tabs, tabs horizontally centered in the available space between brand and actions, links stretch to full nav height so the active tab underline sits flush on the navbar bottom border.
+- Metric row pattern updated: welcome block is its own 160px grid track, separated from the metric cards by a `--space-xl` (24px) gap; metric cards + end-aligned accent CTA card (`Add New Order`) live in a `.metricsRow` sub-grid with a tight `--space-lg` (16px) gap. Metric card icon is 24px; value and label both 16px/500 and use accent color.
+- Stage pill pattern updated: vertical stack (count above label), count `20px/700`, label `14px/500`, role-owned stages highlighted in accent blue.
+- Dashboard content layout pattern updated: `Need attention` and `WhatsApp Intake` side-by-side; `Open Orders` panel full width below.
+- Open Orders interaction pattern updated: expand arrow at row start, entire row click toggles expansion.
+
 ## Baseline — Established 2026-07-07
 
 No UI components exist yet. This baseline defines the patterns every **first** component must follow. It is derived from `context/ui-context.md` (the dashboard design spec) — not from existing code (the current `src/` is the default Vite scaffold and will be replaced).

@@ -1,0 +1,216 @@
+## The 6 roles and what they do
+
+| Role | Pipeline responsibility | Directus role name |
+|---|---|---|
+| **Owner** | God mode — sees everything, can toggle other roles' capabilities | `Administrator` (Directus built-in) |
+| **Admin** | Sales/admin — creates orders, manages customers & products, finalises, handles returns | Custom role `Admin` |
+| **Warehouse** | Cold storage weighing, packing | Custom role `Warehouse` |
+| **Production** | Cutting instructions | Custom role `Production` |
+| **Finance** | Payment approval gate | Custom role `Finance` |
+| **Courier** | Dispatch & delivery, proof photos, GPS | Custom role `Courier` |
+
+> **Important:** The **Owner** maps to Directus's built-in **`Administrator`** role — that one already has full access to everything, you don't configure it. You only need to create + configure the **other 5 custom roles**.
+
+---
+
+## Role 1 — Owner (Directus `Administrator`)
+
+**Nothing to do.** Directus's built-in Administrator role has full CRUD on every collection and every field. Just assign the owner user to this role.
+
+---
+
+## Role 2 — Admin (sales/admin)
+
+The order creator and manager. Broad access to order + customer + product data.
+
+| Collection | Create | Read | Update | Delete | Notes |
+|---|:---:|:---:|:---:|:---:|---|
+| `orders` | ✅ | ✅ | ✅ | ✅ | Full control — creates and finalises orders |
+| `order_lines` | ✅ | ✅ | ✅ | ✅ | Edits line items on orders they manage |
+| `customers` | ✅ | ✅ | ✅ | ✅ | Full CRUD — manages the customer book |
+| `products` | ✅ | ✅ | ✅ | ✅ | Full CRUD — manages the Accurate catalog |
+| `order_history` | ✅ | ✅ | ❌ | ❌ | Append-only — can create entries, never edit/delete |
+| `purchase_orders` | ✅ | ✅ | ✅ | ✅ | Attaches PO photos to orders |
+| `return_documents` | ✅ | ✅ | ✅ | ✅ | Uploads signed return docs |
+| `role_permissions` | ❌ | ✅ | ✅ | ❌ | Read + update only (can toggle capabilities, can't grant new ones or delete) |
+| `settings` | ❌ | ✅ | ✅ | ❌ | Read + update the singleton |
+| `messages` | ❌ | ✅ | ✅ | ❌ | Reads WhatsApp intake; can edit (mark resolved) |
+| `attachments` | ❌ | ✅ | ❌ | ❌ | Read-only — sees intake attachments |
+| `line_cuts` | ❌ | ✅ | ❌ | ❌ | Read-only — sees production's cuts |
+| `line_weighings` | ❌ | ✅ | ❌ | ❌ | Read-only — sees warehouse weighings |
+| `line_photos` | ❌ | ✅ | ❌ | ❌ | Read-only |
+| `line_return_photos` | ❌ | ✅ | ❌ | ❌ | Read-only |
+| `delivery_proofs` | ❌ | ✅ | ❌ | ❌ | Read-only — sees if delivery happened |
+| `draft_weighings` | ❌ | ✅ | ❌ | ❌ | Read-only |
+| `courier_locations` | ❌ | ✅ | ❌ | ❌ | Read-only — sees courier GPS |
+
+**Field-level:** Can see `order_lines.price` ✅
+
+---
+
+## Role 3 — Warehouse (cold storage + packing)
+
+Weighs orders, attaches photos, manages packing. Does **not** create orders or touch customer/product data.
+
+| Collection | Create | Read | Update | Delete | Notes |
+|---|:---:|:---:|:---:|:---:|---|
+| `orders` | ❌ | ✅ | ✅ (fields only) | ❌ | Reads all; can update only: `stage`, `cutting_started`, `pickup` |
+| `order_lines` | ✅ | ✅ | ✅ | ✅ | Full CRUD — adds/edits weighings, marks delivered/returned |
+| `line_weighings` | ✅ | ✅ | ✅ | ✅ | Full CRUD — their core job |
+| `line_photos` | ✅ | ✅ | ✅ | ✅ | Full CRUD — weigh photo proofs |
+| `line_return_photos` | ✅ | ✅ | ✅ | ✅ | Full CRUD — return evidence photos |
+| `draft_weighings` | ✅ | ✅ | ✅ | ✅ | Full CRUD — in-progress weighings |
+| `delivery_proofs` | ✅ | ✅ | ✅ | ❌ | Creates + updates their half (cond/recv photos) |
+| `order_history` | ✅ | ✅ | ❌ | ❌ | Append-only — logs their actions |
+| `customers` | ❌ | ✅ | ❌ | ❌ | Read-only — needs to see delivery addresses |
+| `products` | ❌ | ✅ | ❌ | ❌ | Read-only — needs to match lines to products |
+| `messages` | ❌ | ✅ | ❌ | ❌ | Read-only |
+| `attachments` | ❌ | ✅ | ❌ | ❌ | Read-only |
+| `line_cuts` | ❌ | ✅ | ✅ (field only) | ❌ | Read; can update `done` only |
+| `purchase_orders` | ❌ | ✅ | ❌ | ❌ | Read-only — sees the PO |
+| `return_documents` | ❌ | ✅ | ❌ | ❌ | Read-only |
+| `role_permissions` | ❌ | ❌ | ❌ | ❌ | No access |
+| `settings` | ❌ | ✅ | ❌ | ❌ | Read-only — needs tolerance %s |
+| `courier_locations` | ❌ | ❌ | ❌ | ❌ | No access |
+
+**Field-level:** ❌ **Cannot see `order_lines.price`** — hide this field
+
+---
+
+## Role 4 — Production (cutting)
+
+Creates cut instructions, marks cutting progress.
+
+| Collection | Create | Read | Update | Delete | Notes |
+|---|:---:|:---:|:---:|:---:|---|
+| `orders` | ❌ | ✅ | ✅ (field only) | ❌ | Reads all; can update only: `cutting_started` |
+| `order_lines` | ❌ | ✅ | ❌ | ❌ | Read-only — sees what to cut |
+| `line_cuts` | ✅ | ✅ | ✅ | ✅ | Full CRUD — their core job |
+| `order_history` | ✅ | ✅ | ❌ | ❌ | Append-only — logs cutting actions |
+| `customers` | ❌ | ✅ | ❌ | ❌ | Read-only |
+| `products` | ❌ | ✅ | ❌ | ❌ | Read-only |
+| `messages` | ❌ | ✅ | ❌ | ❌ | Read-only |
+| `attachments` | ❌ | ✅ | ❌ | ❌ | Read-only |
+| `line_weighings` | ❌ | ✅ | ❌ | ❌ | Read-only |
+| `line_photos` | ❌ | ✅ | ❌ | ❌ | Read-only |
+| `line_return_photos` | ❌ | ✅ | ❌ | ❌ | Read-only |
+| `delivery_proofs` | ❌ | ✅ | ❌ | ❌ | Read-only |
+| `draft_weighings` | ❌ | ✅ | ❌ | ❌ | Read-only |
+| `purchase_orders` | ❌ | ✅ | ❌ | ❌ | Read-only |
+| `return_documents` | ❌ | ✅ | ❌ | ❌ | Read-only |
+| `role_permissions` | ❌ | ❌ | ❌ | ❌ | No access |
+| `settings` | ❌ | ✅ | ❌ | ❌ | Read-only |
+| `courier_locations` | ❌ | ❌ | ❌ | ❌ | No access |
+
+**Field-level:** ❌ **Cannot see `order_lines.price`**
+
+---
+
+## Role 5 — Finance (payment gate)
+
+Approves/rejects payment. Minimal write access — just the payment flag.
+
+| Collection | Create | Read | Update | Delete | Notes |
+|---|:---:|:---:|:---:|:---:|---|
+| `orders` | ❌ | ✅ | ✅ (field only) | ❌ | Reads all; can update only: `payment_confirmed` |
+| `order_history` | ✅ | ✅ | ❌ | ❌ | Append-only — logs approve/reject |
+| `customers` | ❌ | ✅ | ❌ | ❌ | Read-only — needs credit_limit + term_days |
+| `order_lines` | ❌ | ✅ | ❌ | ❌ | Read-only |
+| `products` | ❌ | ✅ | ❌ | ❌ | Read-only |
+| `messages` | ❌ | ✅ | ❌ | ❌ | Read-only |
+| `attachments` | ❌ | ✅ | ❌ | ❌ | Read-only |
+| `purchase_orders` | ❌ | ✅ | ❌ | ❌ | Read-only — sees the PO to verify |
+| `return_documents` | ❌ | ✅ | ❌ | ❌ | Read-only |
+| `role_permissions` | ❌ | ❌ | ❌ | ❌ | No access |
+| `settings` | ❌ | ✅ | ❌ | ❌ | Read-only |
+| `courier_locations` | ❌ | ❌ | ❌ | ❌ | No access |
+| `line_cuts` | ❌ | ❌ | ❌ | ❌ | No access |
+| `line_weighings` | ❌ | ❌ | ❌ | ❌ | No access |
+| `line_photos` | ❌ | ❌ | ❌ | ❌ | No access |
+| `line_return_photos` | ❌ | ❌ | ❌ | ❌ | No access |
+| `delivery_proofs` | ❌ | ❌ | ❌ | ❌ | No access |
+| `draft_weighings` | ❌ | ❌ | ❌ | ❌ | No access |
+
+**Field-level:** ✅ **Can see `order_lines.price`** — Finance needs this to verify payment amounts
+
+---
+
+## Role 6 — Courier (dispatch & delivery)
+
+Picks up, delivers, uploads 3 proof photos, broadcasts GPS.
+
+| Collection | Create | Read | Update | Delete | Notes |
+|---|:---:|:---:|:---:|:---:|---|
+| `orders` | ❌ | ✅ | ✅ (fields only) | ❌ | Reads dispatch-stage orders; can update only: `taken_by`, `delivered_at`, `stage` (→ `delivered`) |
+| `delivery_proofs` | ✅ | ✅ | ✅ | ❌ | Full create + update — their core job (3 photos + COD flag) |
+| `courier_locations` | ✅ | ✅ | ✅ | ✅ | Full CRUD — upserts their GPS ping |
+| `order_history` | ✅ | ✅ | ❌ | ❌ | Append-only — logs pickup/delivery |
+| `customers` | ❌ | ✅ | ❌ | ❌ | Read-only — needs delivery address |
+| `order_lines` | ❌ | ✅ | ❌ | ❌ | Read-only — sees what's in the order |
+| `messages` | ❌ | ✅ | ❌ | ❌ | Read-only |
+| `attachments` | ❌ | ✅ | ❌ | ❌ | Read-only |
+| `purchase_orders` | ❌ | ✅ | ❌ | ❌ | Read-only — may need to show PO at pickup |
+| `return_documents` | ❌ | ✅ | ❌ | ❌ | Read-only |
+| `role_permissions` | ❌ | ❌ | ❌ | ❌ | No access |
+| `settings` | ❌ | ✅ | ❌ | ❌ | Read-only — needs dispatch_proof_required |
+| `products` | ❌ | ❌ | ❌ | ❌ | No access |
+| `line_cuts` | ❌ | ❌ | ❌ | ❌ | No access |
+| `line_weighings` | ❌ | ❌ | ❌ | ❌ | No access |
+| `line_photos` | ❌ | ❌ | ❌ | ❌ | No access |
+| `line_return_photos` | ❌ | ❌ | ❌ | ❌ | No access |
+| `draft_weighings` | ❌ | ❌ | ❌ | ❌ | No access |
+
+**Field-level:** ❌ **Cannot see `order_lines.price`**
+
+---
+
+## Summary matrix (CRUD shorthand)
+
+| Collection | Owner | Admin | Warehouse | Production | Finance | Courier |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|
+| `orders` | CRUD | CRUD | R + partial U | R + partial U | R + partial U | R + partial U |
+| `order_lines` | CRUD | CRUD | CRUD | R | R | R |
+| `customers` | CRUD | CRUD | R | R | R | R |
+| `products` | CRUD | CRUD | R | R | R | — |
+| `line_cuts` | CRUD | R | R + partial U | CRUD | — | — |
+| `line_weighings` | CRUD | R | CRUD | R | — | — |
+| `line_photos` | CRUD | R | CRUD | R | — | — |
+| `line_return_photos` | CRUD | R | CRUD | R | — | — |
+| `order_history` | CRUD | CR | CR | CR | CR | CR |
+| `delivery_proofs` | CRUD | R | CRU | R | — | CRU |
+| `draft_weighings` | CRUD | R | CRUD | R | — | — |
+| `purchase_orders` | CRUD | CRUD | R | R | R | R |
+| `return_documents` | CRUD | CRUD | R | R | R | R |
+| `courier_locations` | CRUD | R | — | — | — | CRUD |
+| `role_permissions` | CRUD | RU | — | — | — | — |
+| `settings` | CRUD | RU | R | R | R | R |
+| `messages` | CRUD | RU | R | R | R | R |
+| `attachments` | CRUD | R | R | R | R | R |
+
+**`partial U`** means the role can only update specific fields (see the role detail above for which fields).
+
+---
+
+## Field-level restriction (the one rule to remember)
+
+| Field | Owner | Admin | Warehouse | Production | Finance | Courier |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|
+| `order_lines.price` | ✅ | ✅ | ❌ | ❌ | ✅ | ❌ |
+
+In Directus admin: **Settings → Roles & Permissions → [role] → `order_lines` → Custom → Field Permissions** → uncheck `price` for Warehouse, Production, Courier.
+
+---
+
+## How to set this up in Directus admin UI
+
+1. **Settings → Roles & Permissions → "Create Role"** — create 5 roles: `Admin`, `Warehouse`, `Production`, `Finance`, `Courier`. (Owner = Directus's built-in `Administrator`, already exists.)
+2. For each role, click into it → you'll see a list of all collections.
+3. For each collection, click the icon in the role's row to cycle: **No access → Use icon → Custom**.
+   - **No access** (slash icon) = blocked entirely.
+   - **All** (checkmark) = full CRUD on all fields.
+   - **Custom** (gear icon) = opens the permission drawer where you tick Create/Read/Update/Delete and select which fields are visible/editable.
+4. Use the matrix above: set **All** for full-CRUD cells, **Custom** for partial cells (tick only the allowed actions + fields), **No access** for cells marked `—`.
+
+> **Tip:** Start with the **Admin** role (broadest), then clone it for each narrower role and remove permissions. Directus doesn't have a "clone role" button, but you can work top-down: Admin → Warehouse → Production → Finance → Courier, each time removing more access.
+
+Want me to save this as a companion doc next to the checklist (e.g. `context/schema/role-permissions.md`) so you can reference it while clicking through the admin UI?

@@ -7,8 +7,8 @@
   gap: var(--space-xl);
   min-height: var(--nav-height);
   padding: 0 var(--nav-padding-x);
-  background: var(--bg-surface);
-  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-muted);
+  border-bottom: 1px solid var(--border-default);
 }
 
 /* ===== Brand ===== */
@@ -17,6 +17,7 @@
   align-items: center;
   gap: var(--space-sm);
   flex-shrink: 0;
+  padding-right: var(--space-3xl);
 }
 
 .logo {
@@ -34,32 +35,43 @@
 /* ===== Nav links ===== */
 .links {
   display: flex;
-  align-items: center;
-  gap: var(--space-xs);
+  align-items: stretch;
+  align-self: stretch;
+  gap: var(--space-xl);
+  flex: 1 1 auto;
+  justify-content: flex-start;
 }
 
 .link {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: var(--space-sm);
-  font: var(--text-nav);
+  /* Navbar tabs use 16px text per context/designs/ui-implementation.md. */
+  font: 500 16px/1 var(--font-sans);
   color: var(--text-secondary);
-  padding: var(--space-sm) var(--space-md);
-  border-radius: var(--radius-md);
+  padding: 0;
   transition:
-    background-color var(--duration-fast) var(--ease-default),
     color var(--duration-fast) var(--ease-default);
 }
 
 .link:hover {
-  background: var(--bg-surface-hover);
   color: var(--text-primary);
 }
 
 .linkActive,
 .linkActive:hover {
+  color: var(--accent-primary);
+}
+
+.linkActive::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 3px;
   background: var(--accent-primary);
-  color: var(--text-on-accent);
 }
 
 /* ===== Right actions ===== */
@@ -87,7 +99,7 @@
   width: 260px;
   padding-left: calc(var(--space-md) + 18px + var(--space-sm));
   border-radius: var(--radius-md);
-  background: var(--bg-base);
+  background: var(--bg-surface);
 }
 
 .iconButton {

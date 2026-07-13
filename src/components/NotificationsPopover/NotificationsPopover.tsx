@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Bell } from 'lucide-react';
+import { Icon } from '../Icon/Icon';
 import { notificationGroups } from '../../data/mockDashboard';
 import styles from './NotificationsPopover.module.css';
 
@@ -48,7 +48,7 @@ export function NotificationsPopover() {
         aria-expanded={open}
         onClick={() => setOpen((prev) => !prev)}
       >
-        <Bell size={20} strokeWidth={2} aria-hidden="true" />
+        <Icon name="notification" size={20} />
         {unreadCount > 0 && <span className={styles.notifDot} aria-hidden="true" />}
       </button>
 

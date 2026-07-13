@@ -48,6 +48,19 @@ change.
 - **Open Orders pagination (2026-07-08):** `useOpenOrders` now accepts `page` + returns `total` / `page` / `pageSize` / `setPage`. Page size = 20. Fetches the current page (`limit` + `offset`) and the total count (`aggregate`) in parallel. `OpenOrdersPanel` renders a pagination footer (`1–20 of N`, prev/next buttons, `page / totalPages` indicator).
 - **Scrollbar layout-shift fix (2026-07-08):** `scrollbar-gutter: stable` on `html` in `global.css` — reserves space for the scrollbar gutter whether or not it's visible, so the viewport width no longer changes when a scrollbar appears/disappears.
 - **Security: `.env.example` sanitized** — the real Directus static token was replaced with a placeholder. `.env` remains gitignored. `docker-compose.txt` uses `${...}` env var placeholders for all secrets (no hardcoded passwords).
+- **Dashboard UI refresh from `context/designs/ui-implementation.md` (2026-07-13):**
+  - Switched icon system from `lucide-react` to HugeIcons via Iconify (`@iconify/react` + `@iconify-json/hugeicons`) through a centralized `src/components/Icon/` wrapper.
+  - Updated light-theme tokens in `src/styles/tokens.css`: page base white, muted gray surfaces (`#f0f5f5`), border gray (`#d6d6d6`), secondary text (`#7c7c7c`), new primary blue (`#0c4458`).
+  - TopNav updated: gray navbar background, HugeIcons tabs/search/settings, tab icon size 16px + text size 16px.
+  - Metrics row updated: "Add New Order" moved to the row end as a dedicated accent CTA card; metric icon/label/value styles updated to spec (blue accents, 24px icon, 16px medium text for value+label).
+  - StagePill redesigned to stacked layout (20px bold count over 14px medium label) with role-stage highlighting in main blue.
+  - New stage model added in `src/lib/pipeline.ts`: main pipeline labels (`New Orders` → `Delivered`) + return workflow stages (`Awaiting Return`, `Admin Action Required`, `Awaiting Signed DO/SI`, `Replacement in Transit`), with Admin-highlight stage mapping.
+  - "Need approval" replaced by "Need attention" (`AttentionPanel`) and reordered dashboard layout to: attention + WhatsApp intake side-by-side, Open Orders full width below.
+  - Open Orders table updated for the new column set (order id, status, order date, delivery date, sales rep, customer, item). Expansion affordance moved to row-start arrow; full row is now clickable to expand.
+  - `useDashboardCounts` updated to emit the new stage labels/workflow and map current DB statuses to the updated stage keys.
+- **TopNav + Dashboard top-row layout tweak (2026-07-13):**
+  - TopNav tabs moved to the horizontal center of the navbar (`.links` now `flex: 1 1 auto` + `justify-content: center`); nav links stretch to the full nav height (`align-items: stretch` + `align-self: stretch`) so the active tab's bottom underline sits flush on the navbar bottom border (`bottom: -1px`).
+  - Dashboard top row split into two grid tracks: welcome (160px) | `.metricsRow` (fills remaining). The inter-track gap is `--space-xl` (24px) so the metric cards are no longer flush against the welcome block; the metric cards + "Add New Order" CTA keep a tight `--space-lg` (16px) gap inside `.metricsRow`. Responsive breakpoints (1024px / 640px) updated to match the new structure.
 
 ## In Progress
 
@@ -55,6 +68,7 @@ change.
 
 ## Next Up
 
+- **Schema rebuild on dev (2026-07-10):** Directus downgraded to 10.13.x on `directus-dev` (no user limit — 12.x enforces a 3-user cap even self-hosted). `horeca_orders_dev` wiped. New from-scratch setup guide at `context/schema/fresh-schema-setup.md` supersedes `directus-schema-checklist.md` (which assumed collections already existed) and the incremental `2026-07-09-complete-schema.sql` migration. Follow it to create all 18 collections + 31 relations + 6 roles + ACLs on dev first, then repeat on prod.
 - Wire remaining Dashboard panels to Directus: `intakeMessages` → `readMessages('messages')`, `approvals` + `notificationGroups` (depend on `order_history` collection which doesn't exist yet — schema-first per workflow rules)
 - Build the domain layer (`src/lib/domain.ts`) with the pipeline enum + `can()` capability matrix before any order mutation UI
 - Login page + Directus auth (replace the static token with email/password login flow → JWT)

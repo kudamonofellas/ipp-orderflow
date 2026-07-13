@@ -1,5 +1,5 @@
-import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useState } from 'react';
+import { Icon } from '../../../components/Icon/Icon';
 import { Card } from '../../../components/Card/Card';
 import type { OpenOrder } from '../../../types/dashboard';
 import styles from './OpenOrdersPanel.module.css';
@@ -47,11 +47,14 @@ export function OpenOrdersPanel({
           <table className={styles.table}>
             <thead>
               <tr>
+                <th className={styles.arrowHead} aria-label="Expand" />
                 <th>Order ID</th>
                 <th>Status</th>
                 <th>Order Date</th>
                 <th>Delivery Date</th>
-                <th>Items</th>
+                <th>Sales Rep</th>
+                <th>Customer</th>
+                <th>Item</th>
               </tr>
             </thead>
             <tbody>
@@ -72,7 +75,7 @@ export function OpenOrdersPanel({
                 disabled={currentPage <= 1}
                 aria-label="Previous page"
               >
-                <ChevronLeft size={16} strokeWidth={2} aria-hidden="true" />
+                <Icon name="chevronLeft" size={16} />
               </button>
               <span className={styles.pageIndicator}>
                 {currentPage} / {totalPages}
@@ -84,7 +87,7 @@ export function OpenOrdersPanel({
                 disabled={currentPage >= totalPages}
                 aria-label="Next page"
               >
-                <ChevronRight size={16} strokeWidth={2} aria-hidden="true" />
+                <Icon name="chevronRight" size={16} />
               </button>
             </div>
           </footer>
@@ -99,39 +102,42 @@ function OrderRows({ order }: { order: OpenOrder }) {
   const count = order.lines.length;
   const hasItems = count > 0;
 
+  function toggle() {
+    if (hasItems) setExpanded((v) => !v);
+  }
+
   return (
     <>
-      <tr className={styles.orderRow}>
+      {/* Whole row is clickable to expand (not just the arrow). */}
+      <tr
+        className={[styles.orderRow, hasItems ? styles.clickable : '']
+          .filter(Boolean)
+          .join(' ')}
+        onClick={toggle}
+        aria-expanded={hasItems ? expanded : undefined}
+      >
+        <td className={styles.arrowCell}>
+          {hasItems && (
+            <Icon
+              name="chevronRight"
+              size={16}
+              className={expanded ? styles.chevronOpen : styles.chevron}
+            />
+          )}
+        </td>
         <td className={styles.orderId}>{order.orderId}</td>
         <td>{order.status}</td>
         <td>{order.orderDate}</td>
         <td>{order.deliveryDate}</td>
-        <td className={styles.itemsCell}>
-          <button
-            type="button"
-            className={styles.itemsToggle}
-            onClick={() => hasItems && setExpanded((v) => !v)}
-            disabled={!hasItems}
-            aria-expanded={hasItems && expanded}
-            aria-label={hasItems ? `Toggle ${count} item${count === 1 ? '' : 's'}` : 'No items'}
-          >
-            <span className={styles.itemsCount}>
-              {count} {count === 1 ? 'item' : 'items'}
-            </span>
-            {hasItems && (
-              <ChevronDown
-                size={16}
-                strokeWidth={2}
-                aria-hidden="true"
-                className={expanded ? styles.chevronOpen : styles.chevron}
-              />
-            )}
-          </button>
+        <td>{order.salesRep}</td>
+        <td>{order.customerName}</td>
+        <td className={styles.itemsCount}>
+          {count} {count === 1 ? 'item' : 'items'}
         </td>
       </tr>
       {expanded && hasItems && (
         <tr>
-          <td colSpan={5} className={styles.linesCell}>
+          <td colSpan={8} className={styles.linesCell}>
             <div className={styles.lines}>
               {order.lines.map((line) => (
                 <div key={line.id} className={styles.lineRow}>

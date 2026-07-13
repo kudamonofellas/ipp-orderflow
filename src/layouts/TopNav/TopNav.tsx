@@ -1,13 +1,6 @@
 import { NavLink } from 'react-router-dom';
-import {
-  BarChart3,
-  ClipboardList,
-  LayoutDashboard,
-  Search,
-  Settings,
-  Users,
-  type LucideIcon,
-} from 'lucide-react';
+import { Icon } from '../../components/Icon/Icon';
+import type { IconName } from '../../components/Icon/icons';
 import { Avatar } from '../../components/Avatar/Avatar';
 import { NotificationsPopover } from '../../components/NotificationsPopover/NotificationsPopover';
 import { currentUser } from '../../data/mockDashboard';
@@ -17,14 +10,14 @@ import styles from './TopNav.module.css';
 interface NavItem {
   to: string;
   label: string;
-  icon: LucideIcon;
+  icon: IconName;
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { to: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { to: '/orders', label: 'Orders', icon: ClipboardList },
-  { to: '/customers', label: 'Customers', icon: Users },
-  { to: '/reports', label: 'Reports', icon: BarChart3 },
+  { to: '/', label: 'Dashboard', icon: 'dashboard' },
+  { to: '/orders', label: 'Orders', icon: 'orders' },
+  { to: '/customers', label: 'Customers', icon: 'customers' },
+  { to: '/reports', label: 'Reports', icon: 'reports' },
 ];
 
 /** Fixed top navigation bar. Matches the Navigation baseline in ui-registry.md. */
@@ -41,7 +34,7 @@ export function TopNav() {
       </div>
 
       <nav className={styles.links} aria-label="Primary">
-        {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
+        {NAV_ITEMS.map(({ to, label, icon }) => (
           <NavLink
             key={to}
             to={to}
@@ -50,7 +43,7 @@ export function TopNav() {
               [styles.link, isActive ? styles.linkActive : ''].filter(Boolean).join(' ')
             }
           >
-            <Icon size={18} strokeWidth={2} aria-hidden="true" />
+            <Icon name={icon} size={16} />
             <span>{label}</span>
           </NavLink>
         ))}
@@ -58,7 +51,7 @@ export function TopNav() {
 
       <div className={styles.actions}>
         <div className={styles.search}>
-          <Search size={18} strokeWidth={2} aria-hidden="true" className={styles.searchIcon} />
+          <Icon name="search" size={18} className={styles.searchIcon} />
           <input
             type="search"
             placeholder="Search"
@@ -70,7 +63,7 @@ export function TopNav() {
         <NotificationsPopover />
 
         <button type="button" className={styles.iconButton} aria-label="Settings">
-          <Settings size={20} strokeWidth={2} aria-hidden="true" />
+          <Icon name="settings" size={20} />
         </button>
 
         <div className={styles.user}>

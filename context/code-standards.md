@@ -51,7 +51,7 @@
 - Follow the type scale. No inline `style={{ fontSize: ... }}`.
 - Light theme is the default. Dark theme overrides use `[data-theme="dark"]` selector on `:root`.
 - Responsive: use the breakpoints in `ui-context.md`. Mobile-first — base styles target `sm`, `min-width` queries scale up.
-- Icons from `lucide-react` only. No emoji as UI icons.
+- Icons from HugeIcons via Iconify (`@iconify/react` + `@iconify-json/hugeicons`) only. No emoji as UI icons.
 
 ## API / Data Access
 
