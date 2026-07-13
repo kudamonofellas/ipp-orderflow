@@ -55,12 +55,10 @@ export function Dashboard() {
             ))}
           </div>
 
-          <div>
-            <button type="button" className={styles.newOrderCard}>
-              <Icon name="add" size={24} />
-              <span>New Order</span>
-            </button>
-          </div>
+          <button type="button" className={styles.newOrderCard}>
+            <Icon name="add" size={24} />
+            <span>New Order</span>
+          </button>
 
         </div>
 
