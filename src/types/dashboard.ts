@@ -53,6 +53,9 @@ export interface OpenOrderLine {
   id: string;
   name: string;
   amount: number;
+  qty?: number | null;
+  unit?: string | null;
+  price?: number | null;
 }
 
 /** An open order row in the Open Orders table. */

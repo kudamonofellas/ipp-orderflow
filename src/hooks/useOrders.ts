@@ -1,10 +1,8 @@
 /**
- * Fetch open orders from Directus and map them to the OpenOrder view-model.
+ * Fetch orders from Directus with optional stage + search filters.
  *
- * Reads the `orders` collection + fetches `order_lines` for each page of
- * orders in a single batch query (filter by order_id _in [ids]). The lines
- * are grouped by order_id and attached to each order's `lines` array so the
- * OpenOrdersPanel can render expandable per-item rows.
+ * Used by the Orders page (full order list with filtering). The dashboard's
+ * "Open Orders" panel uses `useOpenOrders` instead (filtered to status='Open').
  *
  * Per code-standards.md: hooks live in src/hooks/. Directus reads go through
  * the client wrapper (src/lib/directus.ts) which returns { data, error }
@@ -15,14 +13,10 @@ import { useCallback, useEffect, useState } from 'react';
 import { aggregateOrders, readOrderLines, readOrders } from '../lib/directus';
 import type { OpenOrder, OpenOrderLine } from '../types/dashboard';
 
-/** Orders considered "open" — only the explicit 'Open' status (legacy field).
- *  TODO: migrate to `stage` enum in a separate unit per ai-workflow-rules.md. */
-const OPEN_STATUSES = ['Open'];
+/** Max orders per page in the Orders list. */
+export const ORDERS_PAGE_SIZE = 20;
 
-/** Max orders per page in the Open Orders panel. */
-export const OPEN_ORDERS_PAGE_SIZE = 20;
-
-interface UseOpenOrdersResult {
+interface UseOrdersResult {
   orders: OpenOrder[];
   loading: boolean;
   error: string | null;
@@ -33,7 +27,7 @@ interface UseOpenOrdersResult {
   refetch: () => void;
 }
 
-/** Format an ISO date string as "July 1st, 2026" (matches the mock format). */
+/** Format an ISO date string as "July 1st, 2026". */
 function formatDate(iso: string | null | undefined): string {
   if (!iso) return '—';
   const d = new Date(iso);
@@ -47,7 +41,6 @@ function formatDate(iso: string | null | undefined): string {
   ) + `, ${d.getFullYear()}`;
 }
 
-/** Map a raw order_lines row → OpenOrderLine view-model. */
 function toOpenOrderLine(row: {
   id: string;
   name: string;
@@ -68,7 +61,6 @@ function toOpenOrderLine(row: {
   };
 }
 
-/** Group order_lines by their order_id so we can attach them to each order. */
 function groupLinesByOrderId(
   lines: { id: string; order_id?: string | null; name: string; qty?: number | string | null; unit?: string | null; price?: number | string | null; sort_order?: number | string | null }[],
 ): Map<string, OpenOrderLine[]> {
@@ -79,14 +71,9 @@ function groupLinesByOrderId(
     existing.push(toOpenOrderLine(line));
     map.set(line.order_id, existing);
   }
-  // Sort lines within each order by sort_order
-  for (const [, list] of map) {
-    list.sort((a, b) => (a.qty ?? 0) - (b.qty ?? 0));
-  }
   return map;
 }
 
-/** Map a Directus orders row → OpenOrder view-model, with attached lines. */
 function toOpenOrder(
   row: {
     id: string;
@@ -104,7 +91,7 @@ function toOpenOrder(
 ): OpenOrder {
   return {
     id: row.id,
-    orderId: row.order_id ?? '—',
+    orderId: row.no ?? row.order_id ?? '—',
     status: row.stage ?? row.status ?? 'Draft',
     orderDate: formatDate(row.order_date ?? row.created_at),
     deliveryDate: formatDate(row.delivery_date),
@@ -114,7 +101,11 @@ function toOpenOrder(
   };
 }
 
-export function useOpenOrders(): UseOpenOrdersResult {
+/**
+ * @param stageFilter  'all' = all orders, or a specific stage key from the pipeline enum.
+ * @param search       Free-text search on order number or customer name.
+ */
+export function useOrders(stageFilter: string = 'all', search: string = ''): UseOrdersResult {
   const [orders, setOrders] = useState<OpenOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -131,9 +122,29 @@ export function useOpenOrders(): UseOpenOrdersResult {
       setLoading(true);
       setError(null);
 
-      const filter = { status: { _in: OPEN_STATUSES } };
+      const filter: Record<string, unknown> = {};
 
-      // Fetch the current page of orders + the total count in parallel.
+      if (stageFilter !== 'all') {
+        // Try the new `stage` field first; fall back to legacy `status` for old rows.
+        filter._or = [
+          { stage: { _eq: stageFilter } },
+          { status: { _eq: stageFilter } },
+        ];
+      }
+
+      if (search.trim()) {
+        const q = search.trim();
+        filter._and = [
+          {
+            _or: [
+              { no: { _icontains: q } },
+              { order_id: { _icontains: q } },
+              { customer_name: { _icontains: q } },
+            ],
+          },
+        ];
+      }
+
       const [pageResult, countResult] = await Promise.all([
         readOrders({
           filter,
@@ -150,8 +161,8 @@ export function useOpenOrders(): UseOpenOrdersResult {
             'created_at',
           ],
           sort: ['-order_id'],
-          limit: OPEN_ORDERS_PAGE_SIZE,
-          offset: (page - 1) * OPEN_ORDERS_PAGE_SIZE,
+          limit: ORDERS_PAGE_SIZE,
+          offset: (page - 1) * ORDERS_PAGE_SIZE,
         }),
         aggregateOrders({
           filter,
@@ -170,7 +181,6 @@ export function useOpenOrders(): UseOpenOrdersResult {
       const pageOrders = pageResult.data;
       const orderIds = pageOrders.map((o) => o.id);
 
-      // Fetch order_lines for all orders on this page in a single batch query.
       let linesByOrderId = new Map<string, OpenOrderLine[]>();
       if (orderIds.length > 0) {
         const linesResult = await readOrderLines({
@@ -199,7 +209,7 @@ export function useOpenOrders(): UseOpenOrdersResult {
     return () => {
       cancelled = true;
     };
-  }, [page, nonce]);
+  }, [page, nonce, stageFilter, search]);
 
-  return { orders, loading, error, total, page, pageSize: OPEN_ORDERS_PAGE_SIZE, setPage, refetch };
+  return { orders, loading, error, total, page, pageSize: ORDERS_PAGE_SIZE, setPage, refetch };
 }

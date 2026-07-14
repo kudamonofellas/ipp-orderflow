@@ -17,7 +17,7 @@
  * mapping will move into the domain layer (src/lib/domain.ts).
  */
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { aggregateOrders } from '../lib/directus';
 import type { DashboardMetric, StageCount } from '../types/dashboard';
 import { PIPELINE_STAGES, RETURN_STAGES, STAGE_LABELS, type Stage } from '../lib/pipeline';
@@ -59,6 +59,7 @@ interface UseDashboardCountsResult {
   stageCounts: StageCount[];
   loading: boolean;
   error: string | null;
+  refetch: () => void;
 }
 
 /** Empty state used while loading. */
@@ -80,6 +81,9 @@ export function useDashboardCounts(): UseDashboardCountsResult {
   const [stageCounts, setStageCounts] = useState<StageCount[]>(EMPTY_STAGES);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [nonce, setNonce] = useState(0);
+
+  const refetch = useCallback(() => setNonce((n) => n + 1), []);
 
   useEffect(() => {
     let cancelled = false;
@@ -146,7 +150,7 @@ export function useDashboardCounts(): UseDashboardCountsResult {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [nonce]);
 
-  return { metrics, stageCounts, loading, error };
+  return { metrics, stageCounts, loading, error, refetch };
 }

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Icon } from '../../../components/Icon/Icon';
 import { Card } from '../../../components/Card/Card';
+import { useCan } from '../../../hooks/useAuth';
 import type { OpenOrder } from '../../../types/dashboard';
 import styles from './OpenOrdersPanel.module.css';
 
@@ -99,6 +100,7 @@ export function OpenOrdersPanel({
 
 function OrderRows({ order }: { order: OpenOrder }) {
   const [expanded, setExpanded] = useState(false);
+  const canSeePrices = useCan()('seePrices');
   const count = order.lines.length;
   const hasItems = count > 0;
 
@@ -141,8 +143,19 @@ function OrderRows({ order }: { order: OpenOrder }) {
             <div className={styles.lines}>
               {order.lines.map((line) => (
                 <div key={line.id} className={styles.lineRow}>
-                  <span className={styles.lineName}>{line.name}</span>
-                  <span className={styles.lineAmount}>{currency.format(line.amount)}</span>
+                  <span className={styles.lineName}>
+                    {line.name}
+                    {line.qty != null && line.qty > 0 && (
+                      <span className={styles.lineQty}>
+                        {' — '}
+                        {line.qty}
+                        {line.unit ? ` ${line.unit}` : ''}
+                      </span>
+                    )}
+                  </span>
+                  {canSeePrices && line.price != null && line.price > 0 && (
+                    <span className={styles.lineAmount}>{currency.format(line.price)}</span>
+                  )}
                 </div>
               ))}
             </div>

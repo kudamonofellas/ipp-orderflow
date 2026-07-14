@@ -11,6 +11,13 @@
   min-width: 0;
 }
 
+.loading {
+  font: var(--text-body);
+  color: var(--text-secondary);
+  padding: var(--space-3xl) var(--space-lg);
+  text-align: center;
+}
+
 /* ===== Welcome + metrics =====
    Welcome | 3 metric cards | Add New Order (at the very end). */
 .topRow {
@@ -22,8 +29,8 @@
 
 .metricsRow {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 240px));
-  gap: var(--space-xl);
+  grid-template-columns: repeat(4, minmax(0, 200px));
+  gap: var(--space-4xl);
   align-items: center;
   justify-content: center;
 }

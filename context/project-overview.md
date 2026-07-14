@@ -125,7 +125,6 @@ IPP-OrderFlow is a B2B / Horeca order-management application for **PT Inti Panga
 - Prototype's `recognize.js` smart-fake parser (replaced by n8n)
 - Prototype's `live.js` BroadcastChannel same-browser tracking (replaced by Directus realtime)
 - Manual demo login (replaced by Directus auth)
-- Hermes LLM gateway (explicitly on hold per user)
 - Full inventory management for Warehouse (only cold storage queue in v1)
 - Actual DO/SI document upload (manual Accurate checklist only in v1)
 - Job Costing (Retail) for Production (not in prototype; deferred)

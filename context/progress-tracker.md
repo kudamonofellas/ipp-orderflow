@@ -61,6 +61,25 @@ change.
 - **TopNav + Dashboard top-row layout tweak (2026-07-13):**
   - TopNav tabs moved to the horizontal center of the navbar (`.links` now `flex: 1 1 auto` + `justify-content: center`); nav links stretch to the full nav height (`align-items: stretch` + `align-self: stretch`) so the active tab's bottom underline sits flush on the navbar bottom border (`bottom: -1px`).
   - Dashboard top row split into two grid tracks: welcome (160px) | `.metricsRow` (fills remaining). The inter-track gap is `--space-xl` (24px) so the metric cards are no longer flush against the welcome block; the metric cards + "Add New Order" CTA keep a tight `--space-lg` (16px) gap inside `.metricsRow`. Responsive breakpoints (1024px / 640px) updated to match the new structure.
+- **Directus auth + Create New Order flow (2026-07-13):**
+  - `src/lib/directus.ts` rebuilt on `authentication('json')` + `rest()` (in-memory JWT). New methods: `login()`, `logout()`, `refresh()`, `readMe()`, `hasToken()`, `readCustomers()`, `readProducts()`, `readOrderLines()`, `getNextOrderNo()`, `createOrder()`, `createOrderLines()`, `appendOrderHistory()`, `updateOrder()`. Static-token fallback kept for the migration transition. All return `{ data, error }` tuples + zod validation at the boundary.
+  - `src/lib/schemas.ts` + `src/types/directus.ts` extended with zod schemas + types for `CustomersCollection`, `ProductsCollection`, `OrderLinesCollection`, `OrderHistoryCollection`; `OrdersCollectionSchema` extended with the target-schema fields (`no`, `customer_id`, `stage`, `channel`, `sales`, `deliver_at`, `taken_by`, return/payment flags). Legacy fields stay optional so existing reads don't break.
+  - `src/lib/domain.ts` — the domain layer. Exports the 6-role `Role` enum, the 14-key `Capability` enum, coded `ALLOW` defaults (Owner always allowed + short-circuited), synchronous `can(role, capability, overrides?)`, `normalizeRole()` that maps Directus role names to the 6-role enum, and async `loadRolePermissions()` that reads `role_permissions` overrides (with coded fallback on error). Every order mutation passes through `can()` before the SDK call (per ai-workflow-rules.md).
+  - `src/hooks/auth-context.ts` + `RoleContext.tsx` + `useAuth.ts` — split across three files to satisfy react-refresh/only-export-components. `AuthProvider` holds the signed-in user, normalized role, capability overrides, and a `can()` bound to them. `useAuth()` / `useCan()` / `useRole()` / `useCurrentUserName()` are the consumer hooks. Tokens are persisted in `sessionStorage` (via the SDK's custom storage option) so reloads within the same tab keep the user signed in; closing the tab logs out.
+  - `src/pages/Login/` — Directus email/password login page per Card + Input + Button baselines. Routes: `/login`. On success → redirect to `/` (or the page the user came from). Blocks all other routes when unauthenticated via `<ProtectedRoute>` in `App.tsx`.
+  - `src/components/NewOrderModal/` — modal form per Modal baseline. Customer picker (loaded via `readCustomers`) + delivery date + sales rep (auto-filled from the signed-in user's name) + notes + dynamic order lines list (each line = product picker OR free-text name + qty + unit). Submit: `can('createOrders')` gate → `getNextOrderNo()` → `createOrder()` → `createOrderLines()` → `appendOrderHistory()`. On success, `useOpenOrders.refetch()` refreshes the Open Orders table so the new row appears. Disabled when the role can't create orders.
+  - `useOpenOrders` gained a `refetch()` method (nonce-based) so the dashboard can refresh after a create.
+  - `App.tsx` — `AuthProvider` wraps the router; `/login` route + `<ProtectedRoute>` wraps `<AppLayout>`; already-signed-in users hitting `/login` are redirected to `/`.
+  - `TopNav` updated to show the real signed-in user (avatar initials + name + role from `useAuth`) instead of the mock `currentUser`; added a sign-out button that calls `logout()` + navigates to `/login`.
+  - Seeded 3 test customers + 5 test products on dev Directus so the New Order form has pickable options.
+  - `npm run lint` ✓, `tsc -b` clean, `npm run build` ✓. End-to-end verified via API: order + 2 lines (1 with product_id, 1 free-text) + history all created successfully; CASCADE delete confirmed.
+- **Auth persistence + Orders page + order_lines expansion (2026-07-14):**
+  - **Reload→login fixed**: SDK's `authentication('json')` now uses a `sessionStorage`-backed custom storage (`sessionAuthStorage` in `directus.ts`) instead of the default in-memory storage. Reloads within the same browser tab keep the user signed in; closing the tab clears sessionStorage and logs out. Auth state only — no business data in sessionStorage (architecture.md invariant #2 not violated). `hasToken()` now checks both the SDK's in-memory token + sessionStorage fallback. `logout()` clears sessionStorage explicitly.
+  - `RoleContext.tsx` mount effect now calls `rehydrate()` (which calls `readMe()`) when `hasToken()` is true on mount — so a reload rehydrates the user from the SDK's sessionStorage token without requiring a fresh login.
+  - **Username sync fixed**: Dashboard welcome section now uses `useCurrentUserName()` (from `useAuth`) instead of the mock `currentUser.name`. TopNav already used it; Dashboard was missed.
+  - **order_lines in Open Orders**: `useOpenOrders` now fetches `order_lines` for each page of orders in a single batch query (`filter[order_id][_in]=id1,id2,…`), groups them by `order_id`, and attaches them to each order's `lines` array. The expandable rows in `OpenOrdersPanel` now show each line's name + qty + unit (e.g. "Beef Tenderloin — 2.5 kg"). `OpenOrderLine` type extended with optional `qty` + `unit` fields. The legacy `order_items` text blob parsing is dropped.
+  - **Orders page built** (`src/pages/Orders/`): full order management page with working stage filter dropdown (All stages + 8 pipeline stages + 4 return stages) + search input (searches by order number, legacy order_id, or customer_name). Uses new `useOrders` hook (`src/hooks/useOrders.ts`) — accepts `stageFilter` + `search` params, builds Directus filter with `_or` for stage/status fallback + `_and` for search, fetches orders + order_lines in batch, same expandable-row pattern as the dashboard's OpenOrdersPanel. All props wired to OpenOrdersPanel (loading, error, total, page, pageSize, onPageChange). Clean CSS modules (no inline styles, no raw class names). Page resets to 1 on filter/search change (via event handlers, not effects).
+  - `npm run lint` ✓, `tsc -b` clean, `npm run build` ✓.
 
 ## In Progress
 
@@ -68,16 +87,19 @@ change.
 
 ## Next Up
 
-- **Schema rebuild on dev (2026-07-10):** Directus downgraded to 10.13.x on `directus-dev` (no user limit — 12.x enforces a 3-user cap even self-hosted). `horeca_orders_dev` wiped. New from-scratch setup guide at `context/schema/fresh-schema-setup.md` supersedes `directus-schema-checklist.md` (which assumed collections already existed) and the incremental `2026-07-09-complete-schema.sql` migration. Follow it to create all 18 collections + 31 relations + 6 roles + ACLs on dev first, then repeat on prod.
-- Wire remaining Dashboard panels to Directus: `intakeMessages` → `readMessages('messages')`, `approvals` + `notificationGroups` (depend on `order_history` collection which doesn't exist yet — schema-first per workflow rules)
-- Build the domain layer (`src/lib/domain.ts`) with the pipeline enum + `can()` capability matrix before any order mutation UI
-- Login page + Directus auth (replace the static token with email/password login flow → JWT)
-- i18n layer (`src/i18n/`) — Dashboard strings are currently literals and must move to EN/Bahasa keys
+- Migrate dashboard reads (`useOpenOrders`, `useDashboardCounts`) from legacy `status` field to the canonical `stage` enum (separate unit per ai-workflow-rules.md — schema-migration + UI migration, not combined with the create-order feature).
+- Wire remaining Dashboard panels to Directus: `intakeMessages` → `readMessages('messages')`, `attentionItems` + `notificationGroups` (depend on `order_history` collection — now exists on dev).
+- Pipeline stage-transition UI: advance an order through the 8 stages (each stage gated by `can()` for the role that owns it).
+- Returns sub-flow UI.
+- Owner Settings page: toggle `role_permissions` per role (the `loadRolePermissions()` + `can()` machinery is in place; the UI is the next unit).
+- i18n layer (`src/i18n/`) — Dashboard + Login + NewOrderModal strings are currently literals and must move to EN/Bahasa keys.
 
 ## Open Questions
 
-- Dashboard role scope: Admin-only default view vs per-role default view (from `project-overview.md`)
-- Whether to add Zustand for cross-component state or rely on React Context (from `code-standards.md`)
+- Dashboard role scope: Admin-only default view vs per-role default view (from `project-overview.md`) — the auth + role context now makes per-role scoping possible; decision still open.
+- Whether to add Zustand for cross-component state or rely on React Context (from `code-standards.md`) — currently using React Context for auth/role; no need for Zustand yet.
+- Order number generation: client-side sequential (`getNextOrderNo`) works but has a race window on concurrent creates. A Directus flow / server-side sequence is a later hardening.
+- Static-token fallback in `directus.ts`: remove once all read paths migrate to the authenticated client.
 
 ## Architecture Decisions
 

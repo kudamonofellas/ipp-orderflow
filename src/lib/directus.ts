@@ -4,24 +4,53 @@
  * Invariant (architecture.md #1): the frontend talks ONLY to Directus.
  * Never to Postgres, n8n, or Evolution API. All reads/writes go through here.
  *
- * Auth: for now a static token (VITE_DIRECTUS_TOKEN) is used for the first
- * read-only wiring. This will be replaced by a real email/password login
- * flow (Directus /auth/login → JWT) once the role-based UI lands.
+ * Auth: email/password login via the `authentication('json')` composable.
+ * Tokens (access + refresh) are persisted in `sessionStorage` so a page
+ * reload within the same browser tab keeps the user signed in — the SDK
+ * reads from this storage on mount and auto-refreshes when the access token
+ * expires. This does NOT violate architecture.md invariant #2 (which is
+ * about business data, not auth state). Closing the tab clears sessionStorage
+ * and logs the user out. A static-token fallback is kept so early read-only
+ * wiring (VITE_DIRECTUS_TOKEN) keeps working during the migration.
  *
  * Per code-standards.md: all Directus calls go through this wrapper — never
- * call createDirectus() ad-hoc in a component. Read methods return
+ * call createDirectus() ad-hoc in a component. All methods return
  * `{ data, error }` tuples and validate responses with zod at the boundary.
  */
 
-import { aggregate, createDirectus, readItems, rest, staticToken } from '@directus/sdk';
 import {
-  OrdersCollectionArraySchema,
+  aggregate,
+  authentication,
+  createDirectus,
+  createItem,
+  createItems,
+  readItem,
+  readItems,
+  readUser,
+  rest,
+  staticToken,
+  updateItem,
+} from '@directus/sdk';
+import {
+  CustomersCollectionArraySchema,
   MessagesCollectionArraySchema,
+  OrderHistoryCollectionSchema,
+  OrderLinesCollectionArraySchema,
+  OrdersCollectionArraySchema,
+  OrdersCollectionSchema,
+  ProductsCollectionArraySchema,
 } from './schemas';
-import type { OrdersCollection, MessagesCollection } from '../types/directus';
+import type {
+  CustomersCollection,
+  MessagesCollection,
+  OrderHistoryCollection,
+  OrderLinesCollection,
+  OrdersCollection,
+  ProductsCollection,
+} from '../types/directus';
 
 const url = import.meta.env.VITE_DIRECTUS_URL;
-const token = import.meta.env.VITE_DIRECTUS_TOKEN;
+const staticTokenValue = import.meta.env.VITE_DIRECTUS_TOKEN;
 
 if (!url) {
   throw new Error(
@@ -29,18 +58,69 @@ if (!url) {
   );
 }
 
-// Token is optional during early wiring (some Directus collections may be public),
-// but most reads will 403 without it. Warn loudly so it's obvious.
-if (!token) {
-  console.warn(
-    '[directus] VITE_DIRECTUS_TOKEN is empty — reads against non-public collections will fail. ' +
-      'Create a static token in Directus admin and add it to .env',
-  );
+/**
+ * sessionStorage-backed token storage for the SDK's `authentication()` composable.
+ *
+ * The SDK defaults to in-memory storage, which is lost on reload. By providing
+ * a sessionStorage-backed storage, the SDK can rehydrate the access + refresh
+ * tokens after a page reload within the same tab, and auto-refresh when the
+ * access token expires. Closing the tab clears sessionStorage (logs out).
+ *
+ * This is auth state only — no business data (orders, customers, etc.) is
+ * stored here, so architecture.md invariant #2 is not violated.
+ */
+const SESSION_KEY = 'ipp_auth_tokens';
+
+interface AuthTokens {
+  access_token: string | null;
+  refresh_token: string | null;
+  expires: number | null;
+  expires_at: number | null;
 }
 
-const client = token
-  ? createDirectus(url).with(staticToken(token)).with(rest())
-  : createDirectus(url).with(rest());
+const sessionAuthStorage = {
+  async get(): Promise<AuthTokens | null> {
+    try {
+      const raw = sessionStorage.getItem(SESSION_KEY);
+      if (!raw) return null;
+      return JSON.parse(raw) as AuthTokens;
+    } catch {
+      return null;
+    }
+  },
+  async set(values: AuthTokens | null): Promise<void> {
+    try {
+      if (values === null || values.access_token === null) {
+        sessionStorage.removeItem(SESSION_KEY);
+      } else {
+        sessionStorage.setItem(SESSION_KEY, JSON.stringify(values));
+      }
+    } catch {
+      // sessionStorage might be unavailable (private mode) — silently ignore
+    }
+  },
+};
+
+/**
+ * Two client shapes:
+ * - `authClient` — has `authentication('json')` + `rest()`. Used for login,
+ *   logout, refresh, and all authenticated reads/writes. Tokens are persisted
+ *   in sessionStorage so reloads within the same tab keep the user signed in.
+ * - `tokenClient` — `staticToken()` + `rest()`. Used only when the app is
+ *   configured with a long-lived static token (early read-only wiring).
+ */
+const authClient = createDirectus(url)
+  .with(authentication('json', { storage: sessionAuthStorage }))
+  .with(rest());
+
+const tokenClient = staticTokenValue
+  ? createDirectus(url).with(staticToken(staticTokenValue)).with(rest())
+  : null;
+
+/** The active client: prefer the authenticated client (login sets its token). */
+export function getClient() {
+  return authClient;
+}
 
 /** Result tuple — components never receive a thrown SDK error. */
 export type DirectusResult<T> =
@@ -51,20 +131,143 @@ export type DirectusResult<T> =
  *  don't have registered yet. zod validates the response at the boundary. */
 type DirectusQuery = Record<string, unknown>;
 
+function errMsg(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+/* ============================================================ Auth ===== */
+
+export interface LoginResult {
+  access_token: string;
+  refresh_token: string;
+  expires: number;
+}
+
+export async function login(
+  email: string,
+  password: string,
+): Promise<DirectusResult<LoginResult>> {
+  try {
+    const result = await authClient.login({ email, password });
+    // Explicitly set the token on the client so subsequent rest() requests
+    // (readMe, readOrders, etc.) include the Authorization header. The SDK's
+    // authentication() composable should do this automatically, but in some
+    // browser environments the token isn't attached to the very next request
+    // without an explicit setToken() call.
+    if (result.access_token) {
+      authClient.setToken(result.access_token);
+    }
+    return {
+      data: {
+        access_token: result.access_token ?? '',
+        refresh_token: result.refresh_token ?? '',
+        expires: result.expires ?? 0,
+      },
+      error: null,
+    };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+export async function logout(): Promise<DirectusResult<true>> {
+  try {
+    await authClient.logout();
+  } catch {
+    // Even if the server logout fails, clear local state
+  }
+  clearAuthStorage();
+  return { data: true, error: null };
+}
+
+export async function refresh(): Promise<DirectusResult<true>> {
+  try {
+    await authClient.refresh();
+    return { data: true, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+/** The currently signed-in Directus user, with their role expanded. */
+export interface DirectusUser {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  email: string;
+  role: { id: string; name: string } | null;
+}
+
+export async function readMe(): Promise<DirectusResult<DirectusUser>> {
+  try {
+    const raw = await authClient.request(
+      readUser('me', {
+        fields: ['id', 'first_name', 'last_name', 'email', 'role.id', 'role.name'],
+      }),
+    );
+    const user = raw as unknown as DirectusUser;
+    return { data: user, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+/** True if the auth client currently holds a non-empty access token. */
+export function hasToken(): boolean {
+  const t = authClient.getToken() as unknown;
+  if (typeof t === 'string' && (t as string).length > 0) return true;
+  // Fall back to sessionStorage (the SDK may not have rehydrated into memory yet)
+  try {
+    const raw = sessionStorage.getItem(SESSION_KEY);
+    if (!raw) return false;
+    const parsed = JSON.parse(raw) as AuthTokens;
+    return !!parsed.access_token;
+  } catch {
+    return false;
+  }
+}
+
+/** Clear all auth state from sessionStorage (used by logout). */
+export function clearAuthStorage(): void {
+  try {
+    sessionStorage.removeItem(SESSION_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+/* ============================================================ Reads === */
+
 /** Read orders with a filter, validated through zod at the boundary. */
 export async function readOrders(
   query: DirectusQuery,
 ): Promise<DirectusResult<OrdersCollection[]>> {
   try {
-    const raw = await client.request(readItems('orders', query));
+    const raw = await getClient().request(readItems('orders', query));
     const parsed = OrdersCollectionArraySchema.safeParse(raw);
     if (!parsed.success) {
       return { data: null, error: `Invalid orders response: ${parsed.error.message}` };
     }
     return { data: parsed.data, error: null };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return { data: null, error: msg };
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+/** Read a single order by id, validated through zod at the boundary. */
+export async function readOrder(
+  id: string,
+  query: DirectusQuery = {},
+): Promise<DirectusResult<OrdersCollection>> {
+  try {
+    const raw = await getClient().request(readItem('orders', id, query));
+    const parsed = OrdersCollectionSchema.safeParse(raw);
+    if (!parsed.success) {
+      return { data: null, error: `Invalid order response: ${parsed.error.message}` };
+    }
+    return { data: parsed.data, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
   }
 }
 
@@ -73,24 +276,67 @@ export async function readMessages(
   query: DirectusQuery,
 ): Promise<DirectusResult<MessagesCollection[]>> {
   try {
-    const raw = await client.request(readItems('messages', query));
+    const raw = await getClient().request(readItems('messages', query));
     const parsed = MessagesCollectionArraySchema.safeParse(raw);
     if (!parsed.success) {
       return { data: null, error: `Invalid messages response: ${parsed.error.message}` };
     }
     return { data: parsed.data, error: null };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return { data: null, error: msg };
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+/** Read customers with a filter, validated through zod at the boundary. */
+export async function readCustomers(
+  query: DirectusQuery = {},
+): Promise<DirectusResult<CustomersCollection[]>> {
+  try {
+    const raw = await getClient().request(readItems('customers', query));
+    const parsed = CustomersCollectionArraySchema.safeParse(raw);
+    if (!parsed.success) {
+      return { data: null, error: `Invalid customers response: ${parsed.error.message}` };
+    }
+    return { data: parsed.data, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+/** Read products with a filter, validated through zod at the boundary. */
+export async function readProducts(
+  query: DirectusQuery = {},
+): Promise<DirectusResult<ProductsCollection[]>> {
+  try {
+    const raw = await getClient().request(readItems('products', query));
+    const parsed = ProductsCollectionArraySchema.safeParse(raw);
+    if (!parsed.success) {
+      return { data: null, error: `Invalid products response: ${parsed.error.message}` };
+    }
+    return { data: parsed.data, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+/** Read order lines with a filter, validated through zod at the boundary. */
+export async function readOrderLines(
+  query: DirectusQuery,
+): Promise<DirectusResult<OrderLinesCollection[]>> {
+  try {
+    const raw = await getClient().request(readItems('order_lines', query));
+    const parsed = OrderLinesCollectionArraySchema.safeParse(raw);
+    if (!parsed.success) {
+      return { data: null, error: `Invalid order_lines response: ${parsed.error.message}` };
+    }
+    return { data: parsed.data, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
   }
 }
 
 /**
- * Aggregate order counts, optionally grouped by a field (e.g. `status`).
- *
- * Returns the raw aggregate rows. When grouping by `status`, each row looks
- * like `{ status: 'Open', count: 3 }`. When no groupBy, returns
- * `[{ count: 42 }]`.
+ * Aggregate order counts, optionally grouped by a field (e.g. `stage`).
  *
  * Per code-standards.md: use aggregate() for counts, never readItems() + .length.
  */
@@ -102,14 +348,155 @@ export async function aggregateOrders(
   query: DirectusQuery,
 ): Promise<DirectusResult<AggregateCountRow[]>> {
   try {
-    // Cast: the SDK's aggregate() expects a strongly-typed AggregationOptions
-    // tied to a registered schema. We use a loose query + zod-style validation
-    // at the boundary instead. Safe because Directus returns JSON we normalize.
-    const raw = await client.request(aggregate('orders', query as never));
+    const raw = await getClient().request(aggregate('orders', query as never));
     const rows = Array.isArray(raw) ? (raw as AggregateCountRow[]) : [];
     return { data: rows, error: null };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return { data: null, error: msg };
+    return { data: null, error: errMsg(err) };
   }
+}
+
+/**
+ * Compute the next sequential order number for the current year.
+ *
+ * Reads the max existing `no` for `IPP-<year>-NNNN` rows and returns the next.
+ * If no rows exist yet this year, returns `IPP-<year>-0001`. The caller must
+ * still rely on the DB UNIQUE constraint to catch a race; on conflict we
+ * surface the error to the form.
+ */
+export async function getNextOrderNo(): Promise<DirectusResult<string>> {
+  const year = new Date().getFullYear();
+  const prefix = `IPP-${year}-`;
+  try {
+    const raw = await getClient().request(
+      readItems('orders', {
+        fields: ['no'],
+        filter: { no: { _starts_with: prefix } },
+        sort: ['-no'],
+        limit: 1,
+      }),
+    );
+    const rows = (raw as { no: string | null }[]) ?? [];
+    const max = rows.length > 0 ? rows[0]?.no : null;
+    if (!max) {
+      return { data: `${prefix}0001`, error: null };
+    }
+    const seqStr = max.replace(prefix, '');
+    const seq = parseInt(seqStr, 10);
+    if (Number.isNaN(seq)) {
+      return { data: `${prefix}0001`, error: null };
+    }
+    const next = seq + 1;
+    return { data: `${prefix}${String(next).padStart(4, '0')}`, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+/* ========================================================== Writes ===== */
+
+/** Shape for creating a new order row (mirrors the target schema). */
+export interface CreateOrderInput {
+  no: string;
+  customer_id: string;
+  channel: string;
+  stage: string;
+  status?: string;
+  sales: string | null;
+  deliver_at: string | null;
+  order_date: string;
+  notes?: string | null;
+}
+
+export async function createOrder(
+  input: CreateOrderInput,
+): Promise<DirectusResult<OrdersCollection>> {
+  try {
+    const raw = await getClient().request(createItem('orders', input as never));
+    const parsed = OrdersCollectionSchema.safeParse(raw);
+    if (!parsed.success) {
+      return { data: null, error: `Invalid order response: ${parsed.error.message}` };
+    }
+    return { data: parsed.data, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+/** Shape for one order line (mirrors the target schema). */
+export interface CreateOrderLineInput {
+  order_id: string;
+  product_id: string | null;
+  name: string;
+  qty: number;
+  unit: string;
+  status: string;
+  sort_order: number;
+}
+
+/** Create multiple order lines in one call. */
+export async function createOrderLines(
+  lines: CreateOrderLineInput[],
+): Promise<DirectusResult<OrderLinesCollection[]>> {
+  try {
+    const raw = await getClient().request(createItems('order_lines', lines as never));
+    const parsed = OrderLinesCollectionArraySchema.safeParse(raw);
+    if (!parsed.success) {
+      return { data: null, error: `Invalid order_lines response: ${parsed.error.message}` };
+    }
+    return { data: parsed.data, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+/** Shape for an order_history row (append-only). */
+export interface CreateOrderHistoryInput {
+  order_id: string;
+  what: string;
+  who: string | null;
+  stage: string | null;
+}
+
+/** Append one row to order_history. Never UPDATE or DELETE (architecture.md). */
+export async function appendOrderHistory(
+  input: CreateOrderHistoryInput,
+): Promise<DirectusResult<OrderHistoryCollection>> {
+  try {
+    const raw = await getClient().request(createItem('order_history', input as never));
+    const parsed = OrderHistoryCollectionSchema.safeParse(raw);
+    if (!parsed.success) {
+      return { data: null, error: `Invalid order_history response: ${parsed.error.message}` };
+    }
+    return { data: parsed.data, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+/** Patch an order (e.g. stage transition). Used by later pipeline units. */
+export async function updateOrder(
+  id: string,
+  patch: Record<string, unknown>,
+): Promise<DirectusResult<OrdersCollection>> {
+  try {
+    const raw = await getClient().request(updateItem('orders', id, patch as never));
+    const parsed = OrdersCollectionSchema.safeParse(raw);
+    if (!parsed.success) {
+      return { data: null, error: `Invalid order response: ${parsed.error.message}` };
+    }
+    return { data: parsed.data, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+/* ===== Static-token fallback (kept for early read-only wiring) ======== */
+
+/**
+ * If a static token is configured, expose a read-only `tokenClient` for paths
+ * that have not migrated to login yet. Returns null when no token is set.
+ */
+export function getTokenClient() {
+  return tokenClient;
 }

@@ -1,9 +1,9 @@
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import { Icon } from '../../components/Icon/Icon';
 import type { IconName } from '../../components/Icon/icons';
 import { Avatar } from '../../components/Avatar/Avatar';
 import { NotificationsPopover } from '../../components/NotificationsPopover/NotificationsPopover';
-import { currentUser } from '../../data/mockDashboard';
+import { useAuth, useCurrentUserName } from '../../hooks/useAuth';
 import logo from '../../assets/logo.svg';
 import styles from './TopNav.module.css';
 
@@ -22,6 +22,22 @@ const NAV_ITEMS: NavItem[] = [
 
 /** Fixed top navigation bar. Matches the Navigation baseline in ui-registry.md. */
 export function TopNav() {
+  const { user, role, logout } = useAuth();
+  const navigate = useNavigate();
+  const name = useCurrentUserName();
+  const initials = name
+    .split(' ')
+    .map((p) => p[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+
+  async function handleLogout() {
+    await logout();
+    navigate('/login', { replace: true });
+  }
+
   return (
     <header className={styles.nav}>
       <div className={styles.brand}>
@@ -67,12 +83,22 @@ export function TopNav() {
         </button>
 
         <div className={styles.user}>
-          <Avatar initials={currentUser.initials} label={currentUser.name} />
+          <Avatar initials={initials || '??'} label={name || (user?.email ?? '')} />
           <span className={styles.userMeta}>
-            <span className={styles.userName}>{currentUser.name}</span>
-            <span className={styles.userRole}>{currentUser.role}</span>
+            <span className={styles.userName}>{name || user?.email}</span>
+            <span className={styles.userRole}>{role ?? ''}</span>
           </span>
         </div>
+
+        <button
+          type="button"
+          className={styles.iconButton}
+          aria-label="Sign out"
+          title="Sign out"
+          onClick={handleLogout}
+        >
+          <Icon name="logout" size={20} />
+        </button>
       </div>
     </header>
   );

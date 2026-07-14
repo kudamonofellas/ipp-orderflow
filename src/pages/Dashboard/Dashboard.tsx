@@ -1,12 +1,14 @@
+import { useState } from 'react';
 import { Icon } from '../../components/Icon/Icon';
 import type { IconName } from '../../components/Icon/icons';
 import { MetricCard } from '../../components/MetricCard/MetricCard';
+import { NewOrderModal } from '../../components/NewOrderModal/NewOrderModal';
 import { StagePill } from '../../components/StagePill/StagePill';
 import {
   attentionItems,
-  currentUser,
   intakeMessages,
 } from '../../data/mockDashboard';
+import { useCan, useCurrentUserName } from '../../hooks/useAuth';
 import { ADMIN_HIGHLIGHT_STAGES, PIPELINE_STAGES, RETURN_STAGES } from '../../lib/pipeline';
 import { useDashboardCounts } from '../../hooks/useDashboardCounts';
 import { useOpenOrders } from '../../hooks/useOpenOrders';
@@ -24,8 +26,19 @@ const METRIC_ICONS: Record<string, IconName> = {
 
 /** Admin dashboard — mirrors context/designs/Dashboard.png. */
 export function Dashboard() {
-  const { orders: openOrders, loading, error, total, page, pageSize, setPage } = useOpenOrders();
-  const { metrics, stageCounts } = useDashboardCounts();
+  const { orders: openOrders, loading: ordersLoading, error, total, page, pageSize, setPage, refetch: refetchOrders } = useOpenOrders();
+  const { metrics, stageCounts, loading: countsLoading, refetch: refetchCounts } = useDashboardCounts();
+  const canCreateOrders = useCan()('createOrders');
+  const currentUserName = useCurrentUserName();
+  const [newOrderOpen, setNewOrderOpen] = useState(false);
+
+  const isLoading = ordersLoading || countsLoading;
+
+  function handleOrderCreated() {
+    refetchOrders();
+    refetchCounts();
+  }
+
   const currentPipeline = stageCounts.filter((stage) =>
     PIPELINE_STAGES.some((pipeline) => pipeline.key === stage.stage),
   );
@@ -36,11 +49,15 @@ export function Dashboard() {
   return (
     <div className={styles.grid}>
       <div className={styles.main}>
+        {isLoading ? (
+          <div className={styles.loading}>Loading dashboard…</div>
+        ) : (
+        <>
         {/* Welcome + metrics row. "Add New Order" sits at the very end. */}
         <div className={styles.topRow}>
           <div className={styles.welcome}>
             <p className={styles.label}>Welcome</p>
-            <h1 className={styles.welcomeName}>{currentUser.name}</h1>
+            <h1 className={styles.welcomeName}>{currentUserName || '—'}</h1>
           </div>
 
           <div className={styles.metricsRow}>
@@ -55,7 +72,13 @@ export function Dashboard() {
             ))}
           </div>
 
-          <button type="button" className={styles.newOrderCard}>
+          <button
+            type="button"
+            className={styles.newOrderCard}
+            onClick={() => setNewOrderOpen(true)}
+            disabled={!canCreateOrders}
+            title={canCreateOrders ? 'Create a new order' : "Your role can't create orders"}
+          >
             <Icon name="add" size={24} />
             <span>New Order</span>
           </button>
@@ -99,14 +122,22 @@ export function Dashboard() {
 
         <OpenOrdersPanel
           orders={openOrders}
-          loading={loading}
+          loading={ordersLoading}
           error={error}
           total={total}
           page={page}
           pageSize={pageSize}
           onPageChange={setPage}
         />
+        </>
+        )}
       </div>
+
+      <NewOrderModal
+        open={newOrderOpen}
+        onClose={() => setNewOrderOpen(false)}
+        onCreated={handleOrderCreated}
+      />
     </div>
   );
 }

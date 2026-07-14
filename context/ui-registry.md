@@ -5,6 +5,23 @@
 > Token source of truth: `context/ui-context.md` + `context/ui-tokens.md`.
 > CSS implementation: `src/styles/tokens.css`.
 
+## Update — 2026-07-13 Auth + Create New Order
+
+- **Login page** (`src/pages/Login/`) — centered card on `--bg-muted`, `--radius-xl`, `--shadow-lg`, `--space-3xl` padding, max-width 420px. Brand logo + name at top, h2 title, subtitle, email + password fields per Input baseline, inline error alert (`--state-error` on `--bg-surface-hover`), primary submit button. Per ui-registry Modal baseline sizing conventions.
+- **NewOrderModal** (`src/components/NewOrderModal/`) — centered modal overlay (`rgba(0,0,0,0.4)`) per Modal baseline, `--radius-xl`, `--shadow-lg`, max-width 760px, `--space-xl` padding, max 90vh scroll. Header (title + close `×` button), 2-column form rows (customer `<select>` + delivery date + sales rep + notes), dynamic order-lines section (each row: index + product `<select>` + free-text name input + qty number input + unit `<select>` + trash button). Footer: cancel (ghost) + create (primary). Disabled state when `can('createOrders')` is false. Closes on overlay click or Escape (per Modal baseline).
+- **Auth context pattern** — split across `auth-context.ts` (context + types, no JSX) + `RoleContext.tsx` (provider component only) + `useAuth.ts` (hooks only). Required to satisfy react-refresh/only-export-components. Tokens in-memory only (SDK `authentication('json')`), no localStorage.
+- **ProtectedRoute pattern** — wrapper in `App.tsx` that checks `useAuth().user` + redirects to `/login` when unauthenticated; loading state returns a bare `--bg-muted` full-viewport div; `/login` itself redirects to `/` when already signed in.
+- **Capability-gated button pattern** — Dashboard "New Order" button calls `useCan()('createOrders')` and sets `disabled` + `title` when false; the modal also re-checks on submit and shows an inline error if the role lacks the capability.
+
+New patterns introduced this session (append if reused):
+
+- **Modal overlay close**: `onClick={close}` on overlay + `onClick={(e) => e.stopPropagation()}` on the modal body + Escape key listener (disabled while submitting).
+- **Dynamic line list in modal**: state array of `{ id, productId, freeText, qty, unit }` drafts; add/remove rows; product `<select>` + free-text name input are mutually exclusive (selecting a product disables the name field with the product name shown).
+- **Sequential order number generation**: `getNextOrderNo()` reads the max `no` for `IPP-<year>-` rows, +1, zero-pads to 4 digits. Relies on the DB UNIQUE constraint to catch races.
+- **Auth rehydrate-on-mount**: `AuthProvider`'s `useEffect` calls `rehydrate()` (checks `hasToken()`, reads `/users/me`, loads `role_permissions`) wrapped in a nested async function so setState calls aren't synchronous in the effect body (satisfies react-hooks/set-state-in-effect).
+
+---
+
 ## Update — 2026-07-13 Dashboard Refresh
 
 - Icons migrated to HugeIcons via Iconify (`@iconify/react` + `@iconify-json/hugeicons`) through `src/components/Icon/`.

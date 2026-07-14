@@ -8,12 +8,12 @@
  * Icon set: @iconify-json/hugeicons.
  */
 export const ICONS = {
-  dashboard: 'hugeicons:dashboard-square-01',
+  dashboard: 'hugeicons:dashboard-square-02',
   orders: 'hugeicons:package',
   customers: 'hugeicons:user-multiple',
   reports: 'hugeicons:analytics-01',
   search: 'hugeicons:search-01',
-  notification: 'hugeicons:notification-02',
+  notification: 'hugeicons:notification-01',
   settings: 'hugeicons:settings-02',
   add: 'hugeicons:add-01',
   total: 'hugeicons:clipboard',
@@ -24,6 +24,9 @@ export const ICONS = {
   chevronDown: 'hugeicons:arrow-down-01',
   chevronRight: 'hugeicons:arrow-right-01',
   chevronLeft: 'hugeicons:arrow-left-01',
+  close: 'hugeicons:cancel-01',
+  trash: 'hugeicons:delete-02',
+  logout: 'hugeicons:logout-05',
 } as const;
 
 export type IconName = keyof typeof ICONS;
