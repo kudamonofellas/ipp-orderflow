@@ -5,6 +5,17 @@
 > Token source of truth: `context/ui-context.md` + `context/ui-tokens.md`.
 > CSS implementation: `src/styles/tokens.css`.
 
+## Update — 2026-07-14 Range, Sorting & Nav Enhancements
+
+- **Persistent Auth Storage Pattern**: Migration of authentication session storage (`sessionStorage`) to permanent local storage (`localStorage`) to keep the user signed in across browser sessions.
+- **Custom Dropdown Selector Pattern**: Used for Metric Card Range selection, Order Stage selection, and Order Table sorting. Avoids native `<select>` dropdowns for a more premium visual alignment. Features:
+  - Custom button matching `--border-default` and `--radius-md` tokens.
+  - Hover states changing background to `--bg-surface-hover` and border to `--accent-primary`.
+  - Absolute positioned popover overlay (`z-index: 20`) with click-outside pointer detection and Escape key close synchronization.
+  - Embedded native input pickers (month, year, date) inside dropdown items to support complex sub-queries.
+- **Scrolling Panel Containment Pattern**: Intake and Needs Attention panels restrict maximum lists to `max-height: 240px; overflow-y: auto;` with compact padding, preventing layout growth on large message batches.
+- **Synchronized Stage Pill Navigation**: Triggering `navigate('/orders', { state: { stage: key } })` on Dashboard pills. In `Orders.tsx`, local state is updated dynamically during the render pass by comparison to `location.key` (avoiding useEffect cascading setState renders).
+
 ## Update — 2026-07-13 Auth + Create New Order
 
 - **Login page** (`src/pages/Login/`) — centered card on `--bg-muted`, `--radius-xl`, `--shadow-lg`, `--space-3xl` padding, max-width 420px. Brand logo + name at top, h2 title, subtitle, email + password fields per Input baseline, inline error alert (`--state-error` on `--bg-surface-hover`), primary submit button. Per ui-registry Modal baseline sizing conventions.

@@ -1,0 +1,8 @@
+{
+  "appId": "com.ipp.orderflow",
+  "appName": "IPP OrderFlow",
+  "webDir": "dist",
+  "android": {
+    "allowMixedContent": false
+  }
+}

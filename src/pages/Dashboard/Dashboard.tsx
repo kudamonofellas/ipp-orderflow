@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Icon } from '../../components/Icon/Icon';
 import type { IconName } from '../../components/Icon/icons';
 import { MetricCard } from '../../components/MetricCard/MetricCard';
@@ -10,7 +11,7 @@ import {
 } from '../../data/mockDashboard';
 import { useCan, useCurrentUserName } from '../../hooks/useAuth';
 import { ADMIN_HIGHLIGHT_STAGES, PIPELINE_STAGES, RETURN_STAGES } from '../../lib/pipeline';
-import { useDashboardCounts } from '../../hooks/useDashboardCounts';
+import { useDashboardCounts, type RangeWithLabel } from '../../hooks/useDashboardCounts';
 import { useOpenOrders } from '../../hooks/useOpenOrders';
 import { AttentionPanel } from './sections/AttentionPanel';
 import { IntakePanel } from './sections/IntakePanel';
@@ -26,8 +27,20 @@ const METRIC_ICONS: Record<string, IconName> = {
 
 /** Admin dashboard — mirrors context/designs/Dashboard.png. */
 export function Dashboard() {
-  const { orders: openOrders, loading: ordersLoading, error, total, page, pageSize, setPage, refetch: refetchOrders } = useOpenOrders();
-  const { metrics, stageCounts, loading: countsLoading, refetch: refetchCounts } = useDashboardCounts();
+  const navigate = useNavigate();
+  const [sortBy, setSortBy] = useState('-order_id');
+  const [totalRange, setTotalRange] = useState<RangeWithLabel>({ val: { type: 'today' }, label: 'Today' });
+  const [deliveredRange, setDeliveredRange] = useState<RangeWithLabel>({ val: { type: 'today' }, label: 'Today' });
+  const [returnedRange, setReturnedRange] = useState<RangeWithLabel>({ val: { type: 'today' }, label: 'Today' });
+  const [cancelledRange, setCancelledRange] = useState<RangeWithLabel>({ val: { type: 'today' }, label: 'Today' });
+
+  const { orders: openOrders, loading: ordersLoading, error, total, page, pageSize, setPage, refetch: refetchOrders } = useOpenOrders(sortBy);
+  const { metrics, stageCounts, loading: countsLoading, refetch: refetchCounts } = useDashboardCounts(
+    totalRange,
+    deliveredRange,
+    returnedRange,
+    cancelledRange,
+  );
   const canCreateOrders = useCan()('createOrders');
   const currentUserName = useCurrentUserName();
   const [newOrderOpen, setNewOrderOpen] = useState(false);
@@ -53,7 +66,7 @@ export function Dashboard() {
           <div className={styles.loading}>Loading dashboard…</div>
         ) : (
         <>
-        {/* Welcome + metrics row. "Add New Order" sits at the very end. */}
+        {/* Welcome + metrics row. "Add New Order" sits at the very end if allowed. */}
         <div className={styles.topRow}>
           <div className={styles.welcome}>
             <p className={styles.label}>Welcome</p>
@@ -67,21 +80,28 @@ export function Dashboard() {
                 icon={METRIC_ICONS[metric.id] ?? 'total'}
                 value={metric.value}
                 label={metric.label}
-                range={metric.range}
+                rangeLabel={metric.range}
+                onRangeChange={(val, label) => {
+                  if (metric.id === 'total') setTotalRange({ val, label });
+                  else if (metric.id === 'delivered') setDeliveredRange({ val, label });
+                  else if (metric.id === 'returned') setReturnedRange({ val, label });
+                  else if (metric.id === 'cancelled') setCancelledRange({ val, label });
+                }}
               />
             ))}
           </div>
 
-          <button
-            type="button"
-            className={styles.newOrderCard}
-            onClick={() => setNewOrderOpen(true)}
-            disabled={!canCreateOrders}
-            title={canCreateOrders ? 'Create a new order' : "Your role can't create orders"}
-          >
-            <Icon name="add" size={24} />
-            <span>New Order</span>
-          </button>
+          {canCreateOrders && (
+            <button
+              type="button"
+              className={styles.newOrderCard}
+              onClick={() => setNewOrderOpen(true)}
+              title="Create a new order"
+            >
+              <Icon name="add" size={24} />
+              <span>New Order</span>
+            </button>
+          )}
 
         </div>
 
@@ -96,6 +116,7 @@ export function Dashboard() {
               count={stage.count}
               label={stage.label}
               highlight={ADMIN_HIGHLIGHT_STAGES.includes(stage.stage)}
+              onClick={() => navigate('/orders', { state: { stage: stage.stage } })}
             />
           ))}
         </div>
@@ -110,6 +131,7 @@ export function Dashboard() {
               count={stage.count}
               label={stage.label}
               highlight={ADMIN_HIGHLIGHT_STAGES.includes(stage.stage)}
+              onClick={() => navigate('/orders', { state: { stage: stage.stage } })}
             />
           ))}
         </div>
@@ -128,6 +150,8 @@ export function Dashboard() {
           page={page}
           pageSize={pageSize}
           onPageChange={setPage}
+          sortBy={sortBy}
+          onSortChange={setSortBy}
         />
         </>
         )}

@@ -1,0 +1,404 @@
+/* ============================================================
+   IPP OrderFlow — design system
+   Flat, clean, responsive. Light + dark via prefers-color-scheme.
+   ============================================================ */
+
+:root {
+  --bg: #f4f2ec;
+  --surface: #ffffff;
+  --surface-2: #efece3;
+  --text: #1f1f1d;
+  --text-2: #6b6a64;
+  --text-3: #9a988f;
+  --border: #e4e1d7;
+  --border-2: #d0cdc2;
+
+  --info: #2f73c0;        --info-bg: #e7f0fb;   --info-text: #1a4f8a;
+  --success: #1d9e75;     --success-bg: #e1f5ee; --success-text: #0c6b50;
+  --warning: #b07512;     --warning-bg: #f8eeda; --warning-text: #7a4f0c;
+  --danger: #c5453a;      --danger-bg: #fbeae8;  --danger-text: #8f261d;
+
+  --c-admin: #2f73c0;
+  --c-intake: #0e8aa3;
+  --c-cold: #1d9e75;
+  --c-finance: #b07512;
+  --c-production: #6b62c9;
+  --c-courier: #c5532c;
+  --c-done: #5a8c1f;
+
+  --radius: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --shadow: 0 1px 2px rgba(0,0,0,.04);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #181816;
+    --surface: #232320;
+    --surface-2: #2c2c28;
+    --text: #f0efe9;
+    --text-2: #a8a69d;
+    --text-3: #75736b;
+    --border: #353530;
+    --border-2: #46453e;
+
+    --info: #5b9bdf;       --info-bg: #15304a;   --info-text: #b5d4f4;
+    --success: #4cc59a;    --success-bg: #0e3a2f; --success-text: #9fe1cb;
+    --warning: #d9a04a;    --warning-bg: #392b10; --warning-text: #fac775;
+    --danger: #e07a72;     --danger-bg: #381a17;  --danger-text: #f5c1bb;
+
+    --c-admin: #5b9bdf;
+    --c-intake: #45bdd6;
+    --c-cold: #4cc59a;
+    --c-finance: #d9a04a;
+    --c-production: #9a92e0;
+    --c-courier: #e08a64;
+    --c-done: #8fbf4a;
+    --shadow: 0 1px 2px rgba(0,0,0,.25);
+  }
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body, #root { height: 100%; }
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: inherit; text-decoration: none; }
+:focus-visible { outline: 2px solid var(--info); outline-offset: 2px; border-radius: 4px; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; scroll-behavior: auto !important; } }
+button { font-family: inherit; color: inherit; }
+
+/* Mobile bottom nav (the sidebar is hidden < 900px) */
+.mobtabs { display: none; }
+@media (max-width: 899px) {
+  .mobtabs { display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; background: var(--surface-2); border-top: 1px solid var(--border); padding-bottom: env(safe-area-inset-bottom, 0); }
+  .mobtab { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 7px 2px 6px; color: var(--text-3); font-size: 10px; font-weight: 500; text-decoration: none; }
+  .mobtab.active { color: var(--info); }
+  .input, .textarea, select { font-size: 16px; }  /* >=16px stops iOS auto-zoom on focus */
+}
+
+/* Print / Save-as-PDF: recolour to light, drop the app chrome, keep the order sheet + photos. */
+@media print {
+  :root { --bg: #fff; --surface: #fff; --surface-2: #f4f4f2; --text: #141414; --text-2: #454545; --text-3: #777; --border: #cfcfcf; }
+  body { background: #fff; }
+  .sidebar, .mobnav, .mobtabs, .sidebar-foot, .noprint, button, .btn { display: none !important; }
+  .pagehead-l > svg, .pagehead > .flex { display: none !important; }
+  .deskshell { display: block; }
+  .content { max-width: none; }
+  .pagehead { position: static; height: auto; border-bottom: 1px solid var(--border); padding: 0 0 10px; margin-bottom: 14px; }
+  .page { padding: 0; }
+  .card { break-inside: avoid; box-shadow: none; }
+  img { max-width: 100% !important; }
+  iframe { display: none !important; }
+  a[href] { color: #000; text-decoration: none; }
+}
+input, textarea, select { font-family: inherit; }
+
+/* ---------- layout ---------- */
+.app { min-height: 100%; display: flex; flex-direction: column; }
+
+/* mobile shell: stacked, max content width */
+.shell { width: 100%; max-width: 460px; margin: 0 auto; min-height: 100%; display: flex; flex-direction: column; }
+
+/* desktop shell: sidebar + content */
+.deskshell { display: flex; min-height: 100vh; }
+.sidebar {
+  width: 232px; flex-shrink: 0; background: var(--surface-2);
+  border-right: 1px solid var(--border); padding: 0;
+  position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column;
+}
+.sidebar-brand {
+  height: 60px; flex-shrink: 0; display: flex; align-items: center; gap: 9px;
+  padding: 0 18px; border-bottom: 1px solid var(--border);
+  font-size: 15px; font-weight: 700; letter-spacing: -0.01em;
+}
+.sidebar-nav { flex: 1; overflow-y: auto; padding: 14px 12px; }
+.sidebar-foot { flex-shrink: 0; padding: 12px; border-top: 1px solid var(--border); }
+.content { flex: 1; min-width: 0; max-width: 1240px; }
+.page { padding: 24px 30px 48px; }
+
+/* page header — same 60px height as the sidebar brand, so titles align with the logo
+   and the bottom border forms one continuous line across the top of the app */
+.pagehead {
+  height: 60px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between;
+  gap: 14px; padding: 0 30px; border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 10; background: var(--bg);
+}
+.pagehead-l { display: flex; align-items: center; gap: 11px; min-width: 0; }
+.pagehead-title { font-size: 19px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pagehead-sub { font-size: 12px; color: var(--text-2); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.mobnav { position: sticky; top: 0; z-index: 20; }
+@media (min-width: 900px) { .mobnav.topbar { display: none; } }
+@media (max-width: 899px) {
+  .deskshell { display: block; } .sidebar { display: none; }
+  .pagehead { position: static; height: auto; padding: 14px 16px; }
+  .page { padding: 16px; }
+}
+
+.topbar {
+  background: var(--surface); border-bottom: 0.5px solid var(--border);
+  padding: 11px 14px; display: flex; align-items: center; gap: 10px;
+  position: sticky; top: 0; z-index: 20;
+}
+.topbar .title { font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 7px; }
+.topbar .brand i, .topbar .title svg { color: var(--c-cold); }
+.spacer { margin-left: auto; }
+
+.page { padding: 14px; flex: 1; }
+.page-pad { padding: 14px; }
+
+/* Mobile: keep the LAST item clear of the fixed bottom nav (.mobtabs) + phone safe-area. This rule
+   MUST sit after the base `.page { padding: 14px }` above — an earlier mobile rule loses the cascade
+   to that later base rule, which is why bottom padding silently had no effect before. */
+@media (max-width: 899px) { .page { padding: 16px; padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px)); } }
+
+/* ---------- typography ---------- */
+.h1 { font-size: 20px; font-weight: 600; }
+.h2 { font-size: 16px; font-weight: 600; }
+.label { font-size: 11px; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: .05em; }
+.muted { color: var(--text-2); }
+.tiny { font-size: 12px; }
+.mono { font-family: var(--mono); }
+.tnum { font-variant-numeric: tabular-nums; }
+
+/* ---------- card ---------- */
+.card {
+  background: var(--surface); border: 0.5px solid var(--border);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow);
+}
+.card-pad { padding: 13px 15px; }
+.card + .card { margin-top: 10px; }
+
+/* ---------- buttons ---------- */
+.btn {
+  min-height: 44px; border-radius: var(--radius); border: none; cursor: pointer;
+  font-size: 14px; font-weight: 600; padding: 0 16px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  transition: filter .12s, background .12s, border-color .12s;
+}
+.btn:active { transform: translateY(0.5px); }
+.btn-primary { background: var(--info); color: #fff; }
+.btn-primary:hover { filter: brightness(1.05); }
+.btn-success { background: var(--success); color: #fff; }
+.btn-danger { background: var(--danger); color: #fff; }
+.btn-danger:hover { filter: brightness(1.05); }
+.btn-secondary { background: var(--surface); border: 0.5px solid var(--border-2); color: var(--text); }
+.btn-secondary:hover { background: var(--surface-2); }
+.btn-danger-outline { background: var(--surface); border: 0.5px solid var(--danger); color: var(--danger); }
+.btn-ghost { background: transparent; color: var(--text-2); }
+.btn:disabled { background: var(--surface-2); color: var(--text-3); cursor: not-allowed; border-color: var(--border); filter: none; }
+.btn-block { width: 100%; }
+.btn-sm { min-height: 36px; font-size: 13px; padding: 0 12px; }
+
+/* ---------- chips / tags ---------- */
+.chip {
+  display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600;
+  padding: 3px 9px; border-radius: 20px; background: var(--surface-2); color: var(--text-2);
+}
+.chip-info { background: var(--info-bg); color: var(--info-text); }
+.chip-success { background: var(--success-bg); color: var(--success-text); }
+.chip-warning { background: var(--warning-bg); color: var(--warning-text); }
+.chip-danger { background: var(--danger-bg); color: var(--danger-text); }
+
+/* status as dot + text (no bubble) */
+.status { display: inline-flex; align-items: center; gap: 8px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--text-3); }
+
+/* ---------- forms ---------- */
+.field { margin-bottom: 12px; }
+.field > label { display: block; font-size: 11px; color: var(--text-3); margin-bottom: 5px; }
+.grid2 .field > label { display: flex; align-items: center; gap: 6px; min-height: 20px; }  /* keep inputs aligned even when a label carries a chip */
+.input, .textarea, select.input {
+  width: 100%; min-height: 42px; background: var(--surface); color: var(--text);
+  border: 0.5px solid var(--border-2); border-radius: var(--radius); padding: 0 12px; font-size: 14px;
+  outline: none;
+}
+.textarea { min-height: 120px; padding: 10px 12px; line-height: 1.6; resize: vertical; }
+.input:focus, .textarea:focus { border-color: var(--info); box-shadow: 0 0 0 3px var(--info-bg); }
+
+/* ---------- order line (qty | name aligned) ---------- */
+.line { display: flex; align-items: baseline; }
+/* Quantity, unit and item name share the SAME size, weight and colour, so the qty reads as clearly
+   as the item itself (just separated by a divider). */
+.line .qty { min-width: 64px; text-align: right; padding-right: 11px; white-space: nowrap;
+  font-size: 15px; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; border-right: 1.5px solid var(--border-2); }
+.line .name { padding-left: 11px; font-size: 15px; font-weight: 600; line-height: 1.25; color: var(--text); }
+/* "Ordered: 1 loaf" reference shown after the name once the actual weight is the primary quantity */
+.line .name .qty-ref { font-size: 11px; font-weight: 400; color: var(--text-3); }
+
+/* ---------- list rows (standardized) ---------- */
+.rowcard {
+  background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--radius);
+  padding: 10px 13px; margin-bottom: 7px; display: flex; align-items: center; gap: 10px; cursor: pointer;
+}
+.rowcard:hover { border-color: var(--info); }
+.rowcard .grow { flex: 1; min-width: 0; }
+.rowcard .name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rowcard .meta { font-size: 11px; color: var(--text-3); margin-top: 2px; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------- toggle ---------- */
+.toggle { width: 42px; height: 24px; border-radius: 20px; background: var(--border-2); position: relative;
+  cursor: pointer; flex-shrink: 0; transition: background .15s; border: none; }
+.toggle::after { content: ''; position: absolute; top: 2px; left: 2px; width: 20px; height: 20px;
+  border-radius: 50%; background: #fff; transition: left .15s; }
+.toggle.on { background: var(--success); } .toggle.on::after { left: 20px; }
+
+/* ---------- helpers ---------- */
+.flex { display: flex; }
+.items { align-items: center; }
+.gap { gap: 8px; }
+.gap-lg { gap: 14px; }
+.between { justify-content: space-between; }
+.wrap { flex-wrap: wrap; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.grid2 .card + .card { margin-top: 0; }  /* gap handles spacing inside grids */
+.mt { margin-top: 12px; } .mt-lg { margin-top: 18px; }
+.mb { margin-bottom: 12px; }
+.sec-label { font-size: 11px; font-weight: 600; color: var(--text-3); text-transform: uppercase;
+  letter-spacing: .05em; margin: 0 2px 8px; }
+
+.stat { background: var(--surface-2); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 15px 17px 16px; text-align: center; }
+.stat-top { display: flex; flex-direction: column-reverse; align-items: center; gap: 7px; }
+.stat .l { font-size: 12.5px; color: var(--text-2); font-weight: 500; line-height: 1.3; }
+.stat .v { font-size: 29px; font-weight: 700; margin-top: 8px; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; line-height: 1; }
+/* tinted category icon, top-right — anchors the card and fills the empty space */
+.stat-ico { width: 34px; height: 34px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+/* clickable stat card / number → opens the matching filtered order list */
+.stat-link { cursor: pointer; transition: border-color .12s, box-shadow .12s; }
+.stat-link:hover { border-color: var(--info); box-shadow: 0 0 0 1px var(--info); }
+.num-link { cursor: pointer; display: inline-block; width: fit-content; }
+.num-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+.empty { text-align: center; color: var(--text-3); padding: 40px 20px; font-size: 14px; }
+
+/* nav (sidebar) */
+.nav { display: flex; align-items: center; gap: 10px; padding: 9px 11px; border-radius: var(--radius);
+  font-size: 14px; color: var(--text-2); cursor: pointer; margin-bottom: 2px; font-weight: 500; }
+.nav:hover { background: var(--surface); }
+.nav.active { background: var(--info-bg); color: var(--info-text); font-weight: 600; }
+
+/* progress / stepper */
+.steps { display: flex; align-items: center; gap: 5px; }
+.steps .sdot { width: 9px; height: 9px; border-radius: 50%; background: var(--border-2); }
+.steps .sdot.on { background: var(--info); }
+.steps .sline { flex: 1; height: 2px; background: var(--border-2); }
+
+/* avatar */
+.avatar { width: 40px; height: 40px; border-radius: 50%; background: var(--info-bg); color: var(--info-text);
+  display: flex; align-items: center; justify-content: center; font-weight: 600; flex-shrink: 0; }
+
+/* table (desktop) */
+.tbl { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.tbl th { font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-3);
+  text-align: left; padding: 9px 14px; border-bottom: 0.5px solid var(--border); }
+.tbl th.r, .tbl td.r { text-align: right; }
+.tbl td { font-size: 14px; padding: 13px 14px; border-bottom: 0.5px solid var(--border);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tbl tbody tr { cursor: pointer; }
+.tbl tbody tr:hover td { background: var(--surface-2); }
+.tbl td:first-child, .tbl th:first-child { padding-left: 20px; }
+
+/* dropdown */
+.dd { position: relative; }
+.dd-menu { position: absolute; top: calc(100% + 5px); right: 0; min-width: 170px; background: var(--surface);
+  border: 0.5px solid var(--border-2); border-radius: var(--radius); overflow: hidden; z-index: 40;
+  box-shadow: 0 6px 24px rgba(0,0,0,.10); }
+.dd-item { display: flex; align-items: center; gap: 8px; padding: 10px 13px; font-size: 14px; cursor: pointer; }
+.dd-item:hover { background: var(--surface-2); }
+.dd-item.on { color: var(--info); font-weight: 600; }
+
+/* segmented */
+.seg { display: inline-flex; gap: 5px; }
+.seg button { min-height: 34px; padding: 0 12px; border-radius: var(--radius); border: 0.5px solid var(--border-2);
+  background: var(--surface); color: var(--text-2); font-weight: 600; font-size: 13px; cursor: pointer; }
+.seg button.on { border-color: var(--info); background: var(--info-bg); color: var(--info-text); }
+/* compact segmented toggle inside a stat card (Delivered / Cancelled: today·week·month·year·📅) —
+   a single recessed pill track with the active segment filled, instead of separate bordered buttons */
+.seg-xs { gap: 2px; display: flex; background: var(--bg); padding: 3px; border-radius: 10px; border: 0.5px solid var(--border); }
+.seg-xs button { flex: 1; min-height: 27px; padding: 0 4px; font-size: 11px; font-weight: 600; border: 0; background: transparent; color: var(--text-2); border-radius: 7px; cursor: pointer; transition: background .12s, color .12s; }
+.seg-xs button:hover:not(.on) { color: var(--text); background: color-mix(in srgb, var(--text) 8%, transparent); }
+.seg-xs button.on { background: var(--info); color: #fff; border-color: transparent; }
+/* calendar (📅) toggle inside the segmented control — fixed width, icon only */
+.seg-xs .pn-cal { flex: 0 0 auto; width: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+/* native date picker used by the 📅 mode */
+.pn-date { font-size: 12px; padding: 2px 7px; border: 0.5px solid var(--border-2); border-radius: var(--radius); background: var(--surface); color: var(--text); font-variant-numeric: tabular-nums; color-scheme: light dark; }
+/* month / year stepper under the toggle (‹ Jul 2026 ›) */
+.period-nav { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 7px; min-height: 22px; }
+.period-nav .pn-lbl { font-size: 12px; font-weight: 600; color: var(--text-2); min-width: 64px; text-align: center; font-variant-numeric: tabular-nums; }
+.pn-arr { width: 22px; height: 22px; flex-shrink: 0; border-radius: var(--radius); border: 0.5px solid var(--border-2); background: var(--surface); color: var(--text-2); font-size: 15px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; }
+.pn-arr:disabled { opacity: 0.35; cursor: default; }
+
+/* channel select cards */
+.chan-card { display: flex; align-items: center; gap: 16px; width: 100%; text-align: left;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-xl);
+  padding: 20px; margin-bottom: 14px; box-shadow: var(--shadow); cursor: pointer;
+  transition: border-color .15s ease, box-shadow .15s ease, transform .1s ease; }
+.chan-card:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(0,0,0,.10); }
+.chan-horeca:hover { border-color: var(--info); }
+.chan-mf { opacity: .92; }
+.chan-mf:hover { border-color: var(--c-courier); }
+.chan-ic { width: 56px; height: 56px; border-radius: 15px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.chan-body { flex: 1; min-width: 0; }
+.chan-title { font-weight: 600; font-size: 18px; display: flex; align-items: center; gap: 8px; }
+.chan-sub { color: var(--text-2); font-size: 13px; margin-top: 3px; }
+.chan-arrow { color: var(--text-3); flex-shrink: 0; }
+
+/* "new version ready" banner — fixed, above everything, user taps Reload when ready */
+.update-banner { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 50;
+  display: flex; align-items: center; gap: 14px; max-width: calc(100vw - 28px);
+  background: var(--surface); border: 1px solid var(--info); border-radius: var(--radius-lg);
+  padding: 10px 12px 10px 16px; box-shadow: 0 8px 28px rgba(0,0,0,.18); font-size: 14px; }
+.update-banner .btn { flex-shrink: 0; }
+@media (max-width: 899px) { .update-banner { bottom: calc(66px + env(safe-area-inset-bottom, 0px)); } }
+
+/* Intake confirm: the original pasted order sits beside the form so you can cross-check. Side-by-side
+   on wide screens; stacks below the form when there isn't room. */
+.intake-cols { display: flex; gap: 22px; align-items: flex-start; }
+.intake-form { flex: 1 1 0; min-width: 0; max-width: 760px; }
+/* top: clears the 60px sticky .pagehead (+12px gap) so the panel doesn't slide under it when scrolling */
+.intake-raw { width: 300px; flex-shrink: 0; position: sticky; top: 72px; }
+.raw-paste { white-space: pre-wrap; overflow-wrap: anywhere; font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 12.5px; line-height: 1.55; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 12px 13px; margin: 0; color: var(--text); max-height: calc(100vh - 96px); overflow: auto; }
+/* Only stack the paste panel BELOW the form when there genuinely isn't room beside it (narrow
+   windows). Above this width it stays on the right so you can check side-by-side. */
+@media (max-width: 1023px) {
+  .intake-cols { display: block; }
+  .intake-raw { width: auto; max-width: 760px; position: static; margin-top: 16px; }
+}
+
+/* searchable product picker (type-to-filter combobox replacing the long native <select>) */
+.ppick { position: relative; }
+.ppick-field { display: flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 10px 0 12px;
+  border: 0.5px solid var(--border-2); border-radius: var(--radius); background: var(--surface); cursor: text; }
+.ppick-field.open { border-color: var(--info); box-shadow: 0 0 0 3px var(--info-bg); }
+.ppick-input { flex: 1; min-width: 0; height: 42px; border: none; background: transparent; color: var(--text); font-size: 14px; outline: none; }
+.ppick-input::placeholder { color: var(--text); opacity: 1; }   /* selected name shows full-strength as placeholder */
+.ppick-field.open .ppick-input::placeholder { color: var(--text-3); }
+.ppick-caret { color: var(--text-3); flex-shrink: 0; transition: transform .15s ease; }
+.ppick-menu { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 50; background: var(--surface);
+  border: 0.5px solid var(--border-2); border-radius: var(--radius); box-shadow: 0 8px 28px rgba(0,0,0,.18);
+  max-height: 300px; overflow-y: auto; padding: 4px; }
+.ppick-opt { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 11px;
+  border-radius: 6px; font-size: 14px; color: var(--text); cursor: pointer; }
+.ppick-opt.active { background: var(--surface-2); }
+.ppick-opt.sel { color: var(--info); font-weight: 600; }
+.ppick-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ppick-clear { color: var(--text-3); font-size: 13px; }
+.ppick-empty { padding: 10px 11px; color: var(--text-3); font-size: 13px; }
+.ppick-typed { padding: 6px 11px 5px; font-size: 11px; color: var(--text-3); border-bottom: 0.5px solid var(--border); margin-bottom: 3px; }
+.ppick-check { color: var(--info); flex-shrink: 0; }
+
+/* scrollbar tidy */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 8px; }

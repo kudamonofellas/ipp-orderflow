@@ -6,7 +6,10 @@
 .list {
   display: flex;
   flex-direction: column;
-  gap: var(--space-md);
+  gap: var(--space-sm);
+  max-height: 240px;
+  overflow-y: auto;
+  padding-right: var(--space-xs);
 }
 
 .row {
@@ -17,7 +20,7 @@
   background: var(--bg-surface);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
-  padding: var(--space-lg);
+  padding: var(--space-md);
   cursor: pointer;
   color: var(--text-secondary);
   transition:

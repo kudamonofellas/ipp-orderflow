@@ -91,7 +91,7 @@ function toOpenOrder(
 ): OpenOrder {
   return {
     id: row.id,
-    orderId: row.no ?? row.order_id ?? '—',
+    orderId: row.order_id ?? '—',
     status: row.stage ?? row.status ?? 'Draft',
     orderDate: formatDate(row.order_date ?? row.created_at),
     deliveryDate: formatDate(row.delivery_date),
@@ -104,8 +104,9 @@ function toOpenOrder(
 /**
  * @param stageFilter  'all' = all orders, or a specific stage key from the pipeline enum.
  * @param search       Free-text search on order number or customer name.
+ * @param sort         Directus sort order string (e.g. '-order_id').
  */
-export function useOrders(stageFilter: string = 'all', search: string = ''): UseOrdersResult {
+export function useOrders(stageFilter: string = 'all', search: string = '', sort: string = '-order_id'): UseOrdersResult {
   const [orders, setOrders] = useState<OpenOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -160,7 +161,7 @@ export function useOrders(stageFilter: string = 'all', search: string = ''): Use
             'customer_name',
             'created_at',
           ],
-          sort: ['-order_id'],
+          sort: [sort],
           limit: ORDERS_PAGE_SIZE,
           offset: (page - 1) * ORDERS_PAGE_SIZE,
         }),
@@ -209,7 +210,7 @@ export function useOrders(stageFilter: string = 'all', search: string = ''): Use
     return () => {
       cancelled = true;
     };
-  }, [page, nonce, stageFilter, search]);
+  }, [page, nonce, stageFilter, search, sort]);
 
   return { orders, loading, error, total, page, pageSize: ORDERS_PAGE_SIZE, setPage, refetch };
 }

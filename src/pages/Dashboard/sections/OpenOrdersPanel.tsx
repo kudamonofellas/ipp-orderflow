@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Icon } from '../../../components/Icon/Icon';
 import { Card } from '../../../components/Card/Card';
 import { useCan } from '../../../hooks/useAuth';
@@ -13,11 +13,20 @@ interface OpenOrdersPanelProps {
   page?: number;
   pageSize?: number;
   onPageChange?: (page: number) => void;
+  sortBy?: string;
+  onSortChange?: (sort: string) => void;
 }
 
 const currency = new Intl.NumberFormat('id-ID', {
   minimumFractionDigits: 0,
 });
+
+const SORT_OPTIONS = [
+  { key: '-order_id', label: 'Order ID (Desc)' },
+  { key: 'order_id', label: 'Order ID (Asc)' },
+  { key: '-delivery_date', label: 'Delivery Date (Desc)' },
+  { key: 'delivery_date', label: 'Delivery Date (Asc)' },
+];
 
 /** Open Orders panel: table of orders with expandable line rows + pagination. */
 export function OpenOrdersPanel({
@@ -28,7 +37,33 @@ export function OpenOrdersPanel({
   page = 1,
   pageSize = 20,
   onPageChange,
+  sortBy = '-order_id',
+  onSortChange,
 }: OpenOrdersPanelProps) {
+  const [sortOpen, setSortOpen] = useState(false);
+  const sortDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!sortOpen) return;
+
+    function handlePointerDown(event: MouseEvent) {
+      if (!sortDropdownRef.current?.contains(event.target as Node)) {
+        setSortOpen(false);
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') setSortOpen(false);
+    }
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [sortOpen]);
+
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const currentPage = Math.min(page, totalPages);
   const rangeStart = total === 0 ? 0 : (currentPage - 1) * pageSize + 1;
@@ -36,7 +71,42 @@ export function OpenOrdersPanel({
 
   return (
     <Card>
-      <h3 className={styles.heading}>Open Orders</h3>
+      <div className={styles.headerWrap}>
+        <h3 className={styles.heading}>Open Orders</h3>
+        {onSortChange && (
+          <div className={styles.sortContainer} ref={sortDropdownRef}>
+            <button
+              type="button"
+              className={styles.sortToggle}
+              aria-expanded={sortOpen}
+              onClick={() => setSortOpen((o) => !o)}
+            >
+              <span>{SORT_OPTIONS.find((o) => o.key === sortBy)?.label || 'Order ID (Desc)'}</span>
+              <Icon name="chevronDown" size={16} />
+            </button>
+            {sortOpen && (
+              <div className={styles.sortDropdown} role="dialog" aria-label="Sort options">
+                {SORT_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.key}
+                    type="button"
+                    className={[
+                      styles.sortDropdownItem,
+                      sortBy === opt.key ? styles.sortDropdownItemActive : '',
+                    ].join(' ')}
+                    onClick={() => {
+                      onSortChange(opt.key);
+                      setSortOpen(false);
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
       {error ? (
         <p className={styles.error}>{error}</p>
       ) : loading ? (
@@ -134,7 +204,7 @@ function OrderRows({ order }: { order: OpenOrder }) {
         <td>{order.salesRep}</td>
         <td>{order.customerName}</td>
         <td className={styles.itemsCount}>
-          {count} {count === 1 ? 'item' : 'items'}
+          {count > 0 ? `${count} ${count === 1 ? 'item' : 'items'}` : '-'}
         </td>
       </tr>
       {expanded && hasItems && (

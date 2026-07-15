@@ -11,6 +11,15 @@
 
 import type { Stage } from '../lib/pipeline';
 
+export type DateRangeType = 'today' | 'week' | 'month' | 'year' | 'specific';
+
+export interface DateRangeVal {
+  type: DateRangeType;
+  month?: string; // YYYY-MM
+  year?: number; // YYYY
+  date?: string; // YYYY-MM-DD
+}
+
 /** A dashboard metric card (Total / Delivered / Returned). */
 export interface DashboardMetric {
   id: string;

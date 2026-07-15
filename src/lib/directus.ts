@@ -78,10 +78,10 @@ interface AuthTokens {
   expires_at: number | null;
 }
 
-const sessionAuthStorage = {
+const localAuthStorage = {
   async get(): Promise<AuthTokens | null> {
     try {
-      const raw = sessionStorage.getItem(SESSION_KEY);
+      const raw = localStorage.getItem(SESSION_KEY);
       if (!raw) return null;
       return JSON.parse(raw) as AuthTokens;
     } catch {
@@ -91,12 +91,12 @@ const sessionAuthStorage = {
   async set(values: AuthTokens | null): Promise<void> {
     try {
       if (values === null || values.access_token === null) {
-        sessionStorage.removeItem(SESSION_KEY);
+        localStorage.removeItem(SESSION_KEY);
       } else {
-        sessionStorage.setItem(SESSION_KEY, JSON.stringify(values));
+        localStorage.setItem(SESSION_KEY, JSON.stringify(values));
       }
     } catch {
-      // sessionStorage might be unavailable (private mode) — silently ignore
+      // localStorage might be unavailable (private mode) — silently ignore
     }
   },
 };
@@ -110,7 +110,7 @@ const sessionAuthStorage = {
  *   configured with a long-lived static token (early read-only wiring).
  */
 const authClient = createDirectus(url)
-  .with(authentication('json', { storage: sessionAuthStorage }))
+  .with(authentication('json', { storage: localAuthStorage }))
   .with(rest());
 
 const tokenClient = staticTokenValue
@@ -218,7 +218,7 @@ export function hasToken(): boolean {
   if (typeof t === 'string' && (t as string).length > 0) return true;
   // Fall back to sessionStorage (the SDK may not have rehydrated into memory yet)
   try {
-    const raw = sessionStorage.getItem(SESSION_KEY);
+    const raw = localStorage.getItem(SESSION_KEY);
     if (!raw) return false;
     const parsed = JSON.parse(raw) as AuthTokens;
     return !!parsed.access_token;
@@ -230,7 +230,7 @@ export function hasToken(): boolean {
 /** Clear all auth state from sessionStorage (used by logout). */
 export function clearAuthStorage(): void {
   try {
-    sessionStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem(SESSION_KEY);
   } catch {
     // ignore
   }

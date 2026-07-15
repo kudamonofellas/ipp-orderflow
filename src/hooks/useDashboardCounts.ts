@@ -19,7 +19,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { aggregateOrders } from '../lib/directus';
-import type { DashboardMetric, StageCount } from '../types/dashboard';
+import type { DashboardMetric, StageCount, DateRangeVal } from '../types/dashboard';
 import { PIPELINE_STAGES, RETURN_STAGES, STAGE_LABELS, type Stage } from '../lib/pipeline';
 
 /** Ordered stage keys for the grid: main pipeline then return workflow. */
@@ -54,6 +54,75 @@ function statusToStage(status: string | null | undefined): Stage | null {
   return null;
 }
 
+/** Helper to convert a range type and value to a Directus order_date query object. */
+function getFilterForDateRange(rangeVal: DateRangeVal): Record<string, unknown> {
+  const filter: Record<string, unknown> = {};
+  const today = new Date();
+
+  if (rangeVal.type === 'today') {
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    filter.order_date = { _eq: `${yyyy}-${mm}-${dd}` };
+  } else if (rangeVal.type === 'week') {
+    const currentDay = today.getDay();
+    const distanceToMonday = currentDay === 0 ? -6 : 1 - currentDay;
+    const monday = new Date(today);
+    monday.setDate(today.getDate() + distanceToMonday);
+
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+
+    const format = (d: Date) => {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    };
+    filter.order_date = {
+      _between: [format(monday), format(sunday)],
+    };
+  } else if (rangeVal.type === 'month') {
+    if (rangeVal.month) {
+      const [yearStr, monthStr] = rangeVal.month.split('-');
+      const year = parseInt(yearStr, 10);
+      const monthIndex = parseInt(monthStr, 10) - 1;
+
+      const firstDay = new Date(year, monthIndex, 1);
+      const lastDay = new Date(year, monthIndex + 1, 0);
+
+      const format = (d: Date) => {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+      };
+      filter.order_date = {
+        _between: [format(firstDay), format(lastDay)],
+      };
+    } else {
+      const y = today.getFullYear();
+      const m = String(today.getMonth() + 1).padStart(2, '0');
+      filter.order_date = { _starts_with: `${y}-${m}` };
+    }
+  } else if (rangeVal.type === 'year') {
+    const year = rangeVal.year || today.getFullYear();
+    filter.order_date = {
+      _between: [`${year}-01-01`, `${year}-12-31`],
+    };
+  } else if (rangeVal.type === 'specific') {
+    if (rangeVal.date) {
+      filter.order_date = { _eq: rangeVal.date };
+    } else {
+      const yyyy = today.getFullYear();
+      const mm = String(today.getMonth() + 1).padStart(2, '0');
+      const dd = String(today.getDate()).padStart(2, '0');
+      filter.order_date = { _eq: `${yyyy}-${mm}-${dd}` };
+    }
+  }
+  return filter;
+}
+
 interface UseDashboardCountsResult {
   metrics: DashboardMetric[];
   stageCounts: StageCount[];
@@ -76,7 +145,17 @@ const EMPTY_STAGES: StageCount[] = STAGE_ORDER.map((stage) => ({
   count: 0,
 }));
 
-export function useDashboardCounts(): UseDashboardCountsResult {
+export interface RangeWithLabel {
+  val: DateRangeVal;
+  label: string;
+}
+
+export function useDashboardCounts(
+  totalRange: RangeWithLabel = { val: { type: 'today' }, label: 'Today' },
+  deliveredRange: RangeWithLabel = { val: { type: 'today' }, label: 'Today' },
+  returnedRange: RangeWithLabel = { val: { type: 'today' }, label: 'Today' },
+  cancelledRange: RangeWithLabel = { val: { type: 'today' }, label: 'Today' },
+): UseDashboardCountsResult {
   const [metrics, setMetrics] = useState<DashboardMetric[]>(EMPTY_METRICS);
   const [stageCounts, setStageCounts] = useState<StageCount[]>(EMPTY_STAGES);
   const [loading, setLoading] = useState(true);
@@ -92,44 +171,56 @@ export function useDashboardCounts(): UseDashboardCountsResult {
       setLoading(true);
       setError(null);
 
-      // Single aggregate call: count all orders grouped by status.
-      const result = await aggregateOrders({
+      // 1. Stage counts (unfiltered by date, grouped by status)
+      const stageResultPromise = aggregateOrders({
         aggregate: { count: ['*'] },
         groupBy: ['status'],
       });
 
+      // 2. Metrics (each has its own date filter)
+      const totalFilter = getFilterForDateRange(totalRange.val);
+      const deliveredFilter = {
+        ...getFilterForDateRange(deliveredRange.val),
+        status: { _eq: 'Delivered' },
+      };
+      const returnedFilter = {
+        ...getFilterForDateRange(returnedRange.val),
+        status: { _eq: 'Returned' },
+      };
+      const cancelledFilter = {
+        ...getFilterForDateRange(cancelledRange.val),
+        _or: [
+          { status: { _eq: 'Cancelled' } },
+          { status: { _eq: 'Canceled' } },
+        ],
+      };
+
+      const [stageRes, totalRes, deliveredRes, returnedRes, cancelledRes] = await Promise.all([
+        stageResultPromise,
+        aggregateOrders({ filter: totalFilter, aggregate: { count: ['*'] } }),
+        aggregateOrders({ filter: deliveredFilter, aggregate: { count: ['*'] } }),
+        aggregateOrders({ filter: returnedFilter, aggregate: { count: ['*'] } }),
+        aggregateOrders({ filter: cancelledFilter, aggregate: { count: ['*'] } }),
+      ]);
+
       if (cancelled) return;
 
-      if (result.error !== null) {
-        setError(`Failed to load counts: ${result.error}`);
+      if (stageRes.error !== null) {
+        setError(`Failed to load stage counts: ${stageRes.error}`);
+        setLoading(false);
+        return;
+      }
+      if (totalRes.error !== null || deliveredRes.error !== null || returnedRes.error !== null || cancelledRes.error !== null) {
+        setError(`Failed to load metrics: ${totalRes.error || deliveredRes.error || returnedRes.error || cancelledRes.error}`);
         setLoading(false);
         return;
       }
 
-      // Build a status → count lookup.
-      const byStatus = new Map<string, number>();
-      let total = 0;
-      for (const row of result.data) {
+      // Build stage counts
+      const stageMap = new Map<Stage, number>();
+      for (const row of stageRes.data) {
         const status = (row.status as string | null) ?? 'Draft';
         const count = Number(row.count ?? 0);
-        byStatus.set(status, count);
-        total += count;
-      }
-
-      // Metrics: total / delivered / returned / canceled.
-      const delivered = byStatus.get('Delivered') ?? 0;
-      const returned = byStatus.get('Returned') ?? 0;
-      const cancelledCount = (byStatus.get('Cancelled') ?? 0) + (byStatus.get('Canceled') ?? 0);
-      setMetrics([
-        { id: 'total', label: 'Total Orders', value: total, range: 'Today' },
-        { id: 'delivered', label: 'Delivered Orders', value: delivered, range: 'Today' },
-        { id: 'returned', label: 'Returned Orders', value: returned, range: 'Today' },
-        { id: 'cancelled', label: 'Canceled Orders', value: cancelledCount, range: 'Today' },
-      ]);
-
-      // Stage pills: map each status to a stage and sum.
-      const stageMap = new Map<Stage, number>();
-      for (const [status, count] of byStatus) {
         const stage = statusToStage(status);
         if (stage) {
           stageMap.set(stage, (stageMap.get(stage) ?? 0) + count);
@@ -143,6 +234,19 @@ export function useDashboardCounts(): UseDashboardCountsResult {
         })),
       );
 
+      // Extract metric values
+      const totalVal = Number(totalRes.data[0]?.count ?? 0);
+      const deliveredVal = Number(deliveredRes.data[0]?.count ?? 0);
+      const returnedVal = Number(returnedRes.data[0]?.count ?? 0);
+      const cancelledVal = Number(cancelledRes.data[0]?.count ?? 0);
+
+      setMetrics([
+        { id: 'total', label: 'Total Orders', value: totalVal, range: totalRange.label },
+        { id: 'delivered', label: 'Delivered Orders', value: deliveredVal, range: deliveredRange.label },
+        { id: 'returned', label: 'Returned Orders', value: returnedVal, range: returnedRange.label },
+        { id: 'cancelled', label: 'Canceled Orders', value: cancelledVal, range: cancelledRange.label },
+      ]);
+
       setLoading(false);
     }
 
@@ -150,7 +254,7 @@ export function useDashboardCounts(): UseDashboardCountsResult {
     return () => {
       cancelled = true;
     };
-  }, [nonce]);
+  }, [nonce, totalRange, deliveredRange, returnedRange, cancelledRange]);
 
   return { metrics, stageCounts, loading, error, refetch };
 }

@@ -13,6 +13,15 @@ change.
 
 ## Completed
 
+- **Auth persistence & UI enhancements (2026-07-14):**
+  - Token persistence changed from `sessionStorage` to `localStorage` to keep the user logged in until explicit sign-out.
+  - Wired `MetricCard` range selection dropdowns with options (Today, This Week, Select Month, Select Year, Select Specific Date) sending queries to parallel backend aggregate endpoints.
+  - Gated the "Add New Order" CTA button on the Dashboard so it completely disappears for roles without the `createOrders` capability.
+  - Linked Dashboard `StagePill` buttons (both current pipeline and return workflow) to navigate to the Orders registry page with the pre-selected filter applied.
+  - Reduced height and added overflow scrollbars to WhatsApp Intake and Needs Attention panels to keep the page structure compact.
+  - Updated Orders Page list display to show `orders.order_id` in the ID column and output `"-"` for 0-item entries.
+  - Upgraded Stage Selection on the Orders page and order listing header to support styled custom dropdown toggle elements.
+  - Added functioning sort buttons/dropdowns in the order table header.
 - `src/styles/tokens.css` — full CSS custom property token system (colors, type scale, spacing, radius, shadows, transitions, focus, dark theme overrides) wired into `main.tsx`
 - `src/styles/reset.css` — modern CSS reset (box-sizing, margin/padding zero, form font inheritance, focus-visible, reduced-motion scroll, selection color)
 - `src/styles/global.css` — base element styles using tokens (body, headings, links, code, form defaults, buttons, tables, scrollbar, `.sr-only` + `.truncate` utilities)

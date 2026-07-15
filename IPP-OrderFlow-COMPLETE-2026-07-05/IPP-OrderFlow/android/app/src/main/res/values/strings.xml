@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">IPP OrderFlow</string>
+    <string name="title_activity_main">IPP OrderFlow</string>
+    <string name="package_name">com.ipp.orderflow</string>
+    <string name="custom_url_scheme">com.ipp.orderflow</string>
+</resources>

@@ -1,0 +1,100 @@
+IPP ORDERFLOW — GO-LIVE CHECKLIST
+=================================
+What to connect to take the app online, in order. The code is prepared for
+each of these (hook points marked "SEAM" in the source); for every item the
+split is:  YOU create the account/key  →  CLAUDE wires it into the code
+→ rebuild + redeploy. Items 1+2 are the real go-live; 3-5 are optional.
+
+
+STEP 1 — FIREBASE PROJECT  (the backbone: one account unlocks 4 things)
+-----------------------------------------------------------------------
+Cost: free tier (Spark) is enough to start. Paid only at real scale.
+
+What YOU do (~20 minutes):
+  1. Go to https://console.firebase.google.com — sign in with a Google
+     account that BELONGS TO THE COMPANY (not a personal one you might lose).
+  2. "Add project" → name it  ipp-orderflow  → Google Analytics OFF → Create.
+  3. In the project, click the web icon ( </> ) → register app "IPP OrderFlow"
+     → COPY the firebaseConfig code block it shows you → send it to Claude.
+     (It looks like: apiKey, authDomain, projectId, storageBucket, ...)
+  4. Left menu → Build → Realtime Database → Create database →
+     location: Singapore (asia-southeast1) → start in LOCKED mode.
+  5. Build → Storage → Get started → same region.
+  6. Build → Authentication → Get started → enable "Email/Password".
+
+What CLAUDE wires with that config (one working session):
+  * Shared live database  — every device sees the same orders instantly;
+    warehouse weighs on the PC, the courier's phone updates in real time.
+  * Cross-device courier tracking — office watches the driver on the map
+    (the SEAM in src/lib/live.js switches from same-browser to Firebase).
+  * Photos in the cloud — proof photos visible from every device
+    (today they live only on the device that took them).
+  * Real logins — email + password with recovery, replacing the demo
+    login and device PINs. Security rules so only your team can read data.
+  * One-time migration: your PC's existing data is uploaded as the
+    starting database (via the app's Backup file).
+
+STEP 2 — HOSTING (HTTPS web address)
+------------------------------------
+Cost: free (Firebase Hosting — same project as Step 1).
+Why: the office/any phone can open the app at https://ipp-orderflow.web.app
+     without installing anything, always the newest version. HTTPS is also
+     required for GPS + camera in phone browsers.
+
+What YOU do: nothing extra — same Firebase project.
+What CLAUDE does: `firebase deploy` setup; from then on every app update
+     goes live with one command. The APK keeps working too — after Step 1
+     it talks to the same database, so browser + APK users are in sync.
+
+STEP 3 — REAL AI INTAKE (optional but big time-saver)
+-----------------------------------------------------
+Cost: pay-per-use, small at IPP volume (roughly a few dollars/month).
+Why: replaces the rule-based recognizer with Claude reading the ACTUAL
+     WhatsApp text / PO photo / PDF — customers' messy orders parsed
+     properly, including new phrasings it has never seen.
+
+What YOU do (~10 minutes):
+  1. https://console.anthropic.com → create account → billing → add a
+     payment method → API Keys → Create key → send it to Claude PRIVATELY.
+What CLAUDE does: a small server function (hosted in the same Firebase
+     project) that keeps the key secret — the key must NEVER sit in the
+     app itself — and swaps the intake parser to call it, with the current
+     rule-based matcher kept as offline fallback.
+
+STEP 4 — GOOGLE MAPS API (optional, cosmetic)
+---------------------------------------------
+Today the app uses the free keyless map embed — works fine.
+A Maps API key adds: address autocomplete at intake, better live-tracking
+map, ETA estimates. ~free at low volume ($200/month credit).
+YOU: console.cloud.google.com → enable Maps JavaScript API → key → send it.
+
+STEP 5 — ACCURATE (your stated hope: automate accounting)
+----------------------------------------------------------
+Two stages, both AFTER steps 1-2:
+  a) READ-ONLY first (agreed earlier): pull prices/values so the dashboard
+     shows real money (re-enables the "Value today" tile).
+  b) FULL automation (your aspiration): push DO/SI/faktur from the app.
+Accurate Online has an official API (developer account at
+https://developer.accurate.id). YOU: register the developer account +
+create an API token from your Accurate account. This is the largest
+integration — plan it as its own project once 1-2 are running.
+
+
+ORDER OF OPERATIONS
+-------------------
+  1. You create the Firebase project + send the firebaseConfig   (20 min)
+  2. Claude wires database/photos/logins/tracking + migrates data (1 session)
+  3. Claude deploys to Firebase Hosting → team gets the https link
+  4. Claude rebuilds the APK pointed at Firebase → reinstall on phones
+  5. Then optionally: Anthropic key (AI intake) → Maps key → Accurate.
+
+AFTER GO-LIVE, WHAT CHANGES DAY-TO-DAY
+--------------------------------------
+  * Everyone sees the same orders, live. No more per-device copies.
+  * Logins are real (email+password, recoverable). Demo login disappears.
+  * Backup/Restore stays as an extra safety net on top of the cloud.
+  * The PWA install ("Add to Home screen" from the https link) becomes an
+    alternative to the APK — same app, auto-updating.
+
+WHAT TO SEND CLAUDE TO START:  the firebaseConfig block from Step 1.3.
+That single message kicks off the whole go-live.

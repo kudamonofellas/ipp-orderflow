@@ -114,7 +114,7 @@ function toOpenOrder(
   };
 }
 
-export function useOpenOrders(): UseOpenOrdersResult {
+export function useOpenOrders(sort: string = '-order_id'): UseOpenOrdersResult {
   const [orders, setOrders] = useState<OpenOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -149,7 +149,7 @@ export function useOpenOrders(): UseOpenOrdersResult {
             'customer_name',
             'created_at',
           ],
-          sort: ['-order_id'],
+          sort: [sort],
           limit: OPEN_ORDERS_PAGE_SIZE,
           offset: (page - 1) * OPEN_ORDERS_PAGE_SIZE,
         }),
@@ -199,7 +199,7 @@ export function useOpenOrders(): UseOpenOrdersResult {
     return () => {
       cancelled = true;
     };
-  }, [page, nonce]);
+  }, [page, nonce, sort]);
 
   return { orders, loading, error, total, page, pageSize: OPEN_ORDERS_PAGE_SIZE, setPage, refetch };
 }
