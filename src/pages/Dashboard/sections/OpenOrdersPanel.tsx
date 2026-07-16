@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Icon } from '../../../components/Icon/Icon';
 import { Card } from '../../../components/Card/Card';
 import { useCan } from '../../../hooks/useAuth';
@@ -27,6 +28,21 @@ const SORT_OPTIONS = [
   { key: '-delivery_date', label: 'Delivery Date (Desc)' },
   { key: 'delivery_date', label: 'Delivery Date (Asc)' },
 ];
+
+const STATUS_PILL: Record<string, { label: string; color: string }> = {
+  intake: { label: 'New Order', color: '#3B82F6' },
+  awaiting: { label: 'Awaiting Pickup', color: '#F97316' },
+  cold: { label: 'Cold Storage Picking', color: '#22C55E' },
+  finance: { label: 'Finance Review', color: '#EAB308' },
+  production: { label: 'Processing', color: '#A855F7' },
+  packing: { label: 'Packing', color: '#A855F7' },
+  finalise: { label: 'Finalising', color: '#6366F1' },
+  dispatch: { label: 'Dispatched', color: '#F97316' },
+  delivered: { label: 'Delivered', color: '#22C55E' },
+  cancelled: { label: 'Cancelled', color: '#6B7280' },
+  returned: { label: 'Returned', color: '#EF4444' },
+  outstanding: { label: 'Outstanding', color: '#EAB308' },
+}
 
 /** Open Orders panel: table of orders with expandable line rows + pagination. */
 export function OpenOrdersPanel({
@@ -107,38 +123,42 @@ export function OpenOrdersPanel({
           </div>
         )}
       </div>
-      {error ? (
-        <p className={styles.error}>{error}</p>
-      ) : loading ? (
-        <p className={styles.muted}>Loading orders…</p>
+
+      {loading ? (
+        <div className={styles.muted}>Loading orders…</div>
+      ) : error ? (
+        <div className={styles.error}>{error}</div>
       ) : orders.length === 0 ? (
-        <p className={styles.muted}>No open orders.</p>
+        <div className={styles.muted}>No open orders.</div>
       ) : (
         <>
-          <table className={styles.table}>
-            <thead>
-              <tr>
-                <th className={styles.arrowHead} aria-label="Expand" />
-                <th>Order ID</th>
-                <th>Status</th>
-                <th>Order Date</th>
-                <th>Delivery Date</th>
-                <th>Sales Rep</th>
-                <th>Customer</th>
-                <th>Item</th>
-              </tr>
-            </thead>
-            <tbody>
-              {orders.map((order) => (
-                <OrderRows key={order.id} order={order} />
-              ))}
-            </tbody>
-          </table>
-          <footer className={styles.pagination}>
-            <span className={styles.pageInfo}>
-              {rangeStart}–{rangeEnd} of {total}
+          <div style={{ overflowX: 'auto' }}>
+            <table className={styles.table}>
+              <thead>
+                <tr>
+                  <th className={styles.arrowHead} aria-label="Expand" />
+                  <th style={{ textAlign: 'left' }}>Order ID</th>
+                  <th style={{ textAlign: 'left' }}>Status</th>
+                  <th style={{ textAlign: 'left' }}>Order Date</th>
+                  <th style={{ textAlign: 'left' }}>Delivery Date</th>
+                  <th style={{ textAlign: 'left' }}>Sales Rep</th>
+                  <th style={{ textAlign: 'left' }}>Customer</th>
+                  <th style={{ textAlign: 'right' }}>Items</th>
+                </tr>
+              </thead>
+              <tbody>
+                {orders.map((order) => (
+                  <OrderRows key={order.id} order={order} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <footer className={styles.footer}>
+            <span className={styles.footerRange}>
+              Showing {rangeStart}–{rangeEnd} of {total}
             </span>
-            <div className={styles.pageControls}>
+            <div className={styles.pageActions}>
               <button
                 type="button"
                 className={styles.pageButton}
@@ -148,8 +168,8 @@ export function OpenOrdersPanel({
               >
                 <Icon name="chevronLeft" size={16} />
               </button>
-              <span className={styles.pageIndicator}>
-                {currentPage} / {totalPages}
+              <span className={styles.pageNum}>
+                Page {currentPage} of {totalPages}
               </span>
               <button
                 type="button"
@@ -169,26 +189,29 @@ export function OpenOrdersPanel({
 }
 
 function OrderRows({ order }: { order: OpenOrder }) {
+  const navigate = useNavigate();
   const [expanded, setExpanded] = useState(false);
   const canSeePrices = useCan()('seePrices');
   const count = order.lines.length;
   const hasItems = count > 0;
 
-  function toggle() {
+  function toggle(e: React.MouseEvent) {
+    e.stopPropagation();
     if (hasItems) setExpanded((v) => !v);
+  }
+
+  function handleRowClick() {
+    navigate(`/orders/${order.id}`);
   }
 
   return (
     <>
-      {/* Whole row is clickable to expand (not just the arrow). */}
       <tr
-        className={[styles.orderRow, hasItems ? styles.clickable : '']
-          .filter(Boolean)
-          .join(' ')}
-        onClick={toggle}
+        className={`${styles.orderRow} ${styles.clickable}`}
+        onClick={handleRowClick}
         aria-expanded={hasItems ? expanded : undefined}
       >
-        <td className={styles.arrowCell}>
+        <td className={styles.arrowCell} onClick={toggle}>
           {hasItems && (
             <Icon
               name="chevronRight"
@@ -198,7 +221,9 @@ function OrderRows({ order }: { order: OpenOrder }) {
           )}
         </td>
         <td className={styles.orderId}>{order.orderId}</td>
-        <td>{order.status}</td>
+        <td>
+          <StatusPill status={order.status} />
+        </td>
         <td>{order.orderDate}</td>
         <td>{order.deliveryDate}</td>
         <td>{order.salesRep}</td>
@@ -234,4 +259,20 @@ function OrderRows({ order }: { order: OpenOrder }) {
       )}
     </>
   );
+}
+
+function StatusPill({ status }: { status: string }) {
+  const config = STATUS_PILL[status] ?? { label: status, color: '#6B7280' }
+  return (
+    <span
+      className={styles.statusPill}
+      style={{
+        backgroundColor: config.color + '22',
+        color: config.color,
+        borderColor: config.color + '55',
+      }}
+    >
+      {config.label}
+    </span>
+  )
 }

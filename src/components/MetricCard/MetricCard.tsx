@@ -45,17 +45,21 @@ export function MetricCard({ icon, value, label, rangeLabel, onRangeChange }: Me
           <Icon name={icon} size={24} />
         </span>
         <div className={styles.rangeContainer} ref={containerRef}>
-          <button
-            type="button"
-            className={styles.rangeToggle}
-            aria-expanded={open}
-            onClick={() => setOpen((prev) => !prev)}
-          >
-            {rangeLabel}
-            <Icon name="chevronDown" size={16} />
-          </button>
+          {onRangeChange ? (
+            <button
+              type="button"
+              className={styles.rangeToggle}
+              aria-expanded={open}
+              onClick={() => setOpen((prev) => !prev)}
+            >
+              {rangeLabel}
+              <Icon name="chevronDown" size={16} />
+            </button>
+          ) : (
+            <span className={styles.rangeStatic}>{rangeLabel}</span>
+          )}
 
-          {open && (
+          {onRangeChange && open && (
             <div className={styles.dropdown} role="dialog" aria-label="Select Date Range">
               <button
                 type="button"

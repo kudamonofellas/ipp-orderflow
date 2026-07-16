@@ -164,3 +164,4 @@ export const CustomersCollectionArraySchema = z.array(CustomersCollectionSchema)
 export const ProductsCollectionArraySchema = z.array(ProductsCollectionSchema);
 export const OrderLinesCollectionArraySchema = z.array(OrderLinesCollectionSchema);
 export const CorrectionsCollectionArraySchema = z.array(CorrectionsCollectionSchema);
+export const OrderHistoryCollectionArraySchema = z.array(OrderHistoryCollectionSchema);

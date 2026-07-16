@@ -35,6 +35,26 @@
   margin-left: auto;
 }
 
+.addBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px var(--space-md);
+  border-radius: var(--radius-md);
+  background: var(--accent-primary);
+  color: #fff;
+  border: none;
+  font: var(--text-body);
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity var(--duration-fast);
+  white-space: nowrap;
+}
+
+.addBtn:hover {
+  opacity: 0.9;
+}
+
 /* Filter toggles */
 .filterGroup {
   display: flex;
@@ -184,7 +204,7 @@
   display: inline-flex;
   align-items: center;
   padding: 2px 8px;
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-md);
   font: var(--text-caption);
   font-weight: 500;
   background: var(--bg-muted);
@@ -225,7 +245,7 @@
   height: 12px;
   border-radius: 50%;
   background: #fff;
-  box-shadow: 0 1px 3px rgba(0,0,0,.2);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .2);
   transition: transform var(--duration-fast);
 }
 
@@ -293,11 +313,13 @@
     flex-direction: column;
     align-items: flex-start;
   }
+
   .controls {
     margin-left: 0;
     width: 100%;
     flex-wrap: wrap;
   }
+
   .searchInput {
     width: 100%;
     flex: 1;

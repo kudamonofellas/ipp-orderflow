@@ -1,0 +1,337 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xl);
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
+.titleSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.title {
+  font: var(--text-h1);
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.backBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  background: transparent;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: 6px 12px;
+  font: var(--text-body);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--duration-fast);
+}
+
+.backBtn:hover {
+  background: var(--bg-surface-hover);
+  border-color: var(--accent-primary);
+  color: var(--text-primary);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px var(--space-md);
+  border-radius: var(--radius-md);
+  font: var(--text-body);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--duration-fast);
+}
+
+.btnPrimary {
+  composes: btn;
+  background: var(--accent-primary);
+  color: #fff;
+  border: none;
+}
+
+.btnPrimary:hover {
+  opacity: 0.9;
+}
+
+.btnSecondary {
+  composes: btn;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  color: var(--text-secondary);
+}
+
+.btnSecondary:hover {
+  background: var(--bg-surface-hover);
+  border-color: var(--accent-primary);
+  color: var(--text-primary);
+}
+
+/* Customer card */
+.customerCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.profileRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--accent-primary);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.customerInfo h3 {
+  font: var(--text-h3);
+  color: var(--text-primary);
+  margin: 0 0 4px;
+}
+
+.customerInfo p {
+  font: var(--text-caption);
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.detailsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-md);
+  border-top: 1px solid var(--border-subtle);
+  padding-top: var(--space-md);
+}
+
+.detailItem {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.detailLabel {
+  font: var(--text-label);
+  color: var(--text-muted);
+}
+
+.detailValue {
+  font: var(--text-body);
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+/* Stepper / Timeline */
+.stepper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: relative;
+  padding: var(--space-md) 0;
+}
+
+.stepper::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--border-default);
+  z-index: 1;
+  transform: translateY(-50%);
+}
+
+.step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-xs);
+  position: relative;
+  z-index: 2;
+}
+
+.stepDot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--bg-surface);
+  border: 2px solid var(--border-default);
+  transition: all var(--duration-fast);
+}
+
+.stepActive .stepDot {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 4px var(--focus-ring-color);
+}
+
+.stepCompleted .stepDot {
+  background: var(--status-success, #2ecc71);
+  border-color: var(--status-success, #2ecc71);
+}
+
+.stepLabel {
+  font: var(--text-caption);
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.stepActive .stepLabel {
+  color: var(--accent-primary);
+  font-weight: 600;
+}
+
+/* Table styling */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th {
+  font: var(--text-label);
+  color: var(--text-primary);
+  font-weight: 600;
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: 1.5px solid var(--border-default);
+}
+
+.table td {
+  font: var(--text-body);
+  color: var(--text-primary);
+  padding: var(--space-md);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.totalRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font: var(--text-body);
+  font-weight: 600;
+  padding-top: var(--space-md);
+  border-top: 1.5px solid var(--border-default);
+}
+
+.totalValue {
+  font-size: 18px;
+  color: var(--accent-primary);
+}
+
+/* History logs */
+.historyList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  max-height: 240px;
+  overflow-y: auto;
+  padding-right: var(--space-xs);
+}
+
+.historyItem {
+  display: flex;
+  gap: var(--space-md);
+  font: var(--text-body);
+  color: var(--text-secondary);
+}
+
+.historyTime {
+  color: var(--text-muted);
+  width: 130px;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.historyContent {
+  flex: 1;
+}
+
+/* Notes section */
+.notesList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
+}
+
+.noteItem {
+  background: var(--bg-muted);
+  border-radius: var(--radius-md);
+  padding: var(--space-sm) var(--space-md);
+  font: var(--text-body);
+  color: var(--text-primary);
+}
+
+.noteHeader {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 4px;
+  font: var(--text-caption);
+  color: var(--text-muted);
+}
+
+.noteForm {
+  display: flex;
+  gap: var(--space-sm);
+}
+
+.noteInput {
+  flex: 1;
+  font: var(--text-body);
+  color: var(--text-primary);
+  background: var(--bg-muted);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: var(--space-sm) var(--space-md);
+}
+
+.noteInput:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+/* print styles */
+@media print {
+  .backBtn,
+  .actions,
+  .noteForm,
+  .notesList,
+  .historyList {
+    display: none !important;
+  }
+}

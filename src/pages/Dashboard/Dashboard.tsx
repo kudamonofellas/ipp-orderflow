@@ -22,9 +22,9 @@ import styles from './Dashboard.module.css';
 import type { ParsedOrderDraft } from '../../lib/directus';
 
 const METRIC_ICONS: Record<string, IconName> = {
-  total: 'total',
+  open: 'total',
+  today: 'store',
   delivered: 'delivered',
-  returned: 'returned',
   cancelled: 'cancelled',
 };
 
@@ -32,16 +32,12 @@ const METRIC_ICONS: Record<string, IconName> = {
 export function Dashboard() {
   const navigate = useNavigate();
   const [sortBy, setSortBy] = useState('-order_id');
-  const [totalRange, setTotalRange] = useState<RangeWithLabel>({ val: { type: 'today' }, label: 'Today' });
   const [deliveredRange, setDeliveredRange] = useState<RangeWithLabel>({ val: { type: 'today' }, label: 'Today' });
-  const [returnedRange, setReturnedRange] = useState<RangeWithLabel>({ val: { type: 'today' }, label: 'Today' });
   const [cancelledRange, setCancelledRange] = useState<RangeWithLabel>({ val: { type: 'today' }, label: 'Today' });
 
   const { orders: openOrders, loading: ordersLoading, error, total, page, pageSize, setPage, refetch: refetchOrders } = useOpenOrders(sortBy);
   const { metrics, stageCounts, loading: countsLoading, refetch: refetchCounts } = useDashboardCounts(
-    totalRange,
     deliveredRange,
-    returnedRange,
     cancelledRange,
   );
   const canCreateOrders = useCan()('createOrders');
@@ -102,12 +98,14 @@ export function Dashboard() {
                 value={metric.value}
                 label={metric.label}
                 rangeLabel={metric.range}
-                onRangeChange={(val, label) => {
-                  if (metric.id === 'total') setTotalRange({ val, label });
-                  else if (metric.id === 'delivered') setDeliveredRange({ val, label });
-                  else if (metric.id === 'returned') setReturnedRange({ val, label });
-                  else if (metric.id === 'cancelled') setCancelledRange({ val, label });
-                }}
+                onRangeChange={
+                  (metric.id === 'delivered' || metric.id === 'cancelled')
+                    ? (val, label) => {
+                        if (metric.id === 'delivered') setDeliveredRange({ val, label });
+                        else if (metric.id === 'cancelled') setCancelledRange({ val, label });
+                      }
+                    : undefined
+                }
               />
             ))}
           </div>

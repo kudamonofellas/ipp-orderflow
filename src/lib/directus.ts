@@ -28,15 +28,19 @@ import {
   rest,
   staticToken,
   updateItem,
+  deleteItem,
 } from '@directus/sdk';
 import {
+  CustomersCollectionSchema,
   CustomersCollectionArraySchema,
   CorrectionsCollectionSchema,
   MessagesCollectionArraySchema,
   OrderHistoryCollectionSchema,
+  OrderHistoryCollectionArraySchema,
   OrderLinesCollectionArraySchema,
   OrdersCollectionArraySchema,
   OrdersCollectionSchema,
+  ProductsCollectionSchema,
   ProductsCollectionArraySchema,
 } from './schemas';
 import type {
@@ -480,6 +484,28 @@ export async function appendOrderHistory(
   }
 }
 
+/** Read order history for a single order by order_id, validated through zod. */
+export async function readOrderHistory(
+  orderId: string,
+): Promise<DirectusResult<OrderHistoryCollection[]>> {
+  try {
+    const raw = await getClient().request(
+      readItems('order_history', {
+        filter: { order_id: { _eq: orderId } } as never,
+        sort: ['at'] as never,
+        limit: -1,
+      }),
+    );
+    const parsed = OrderHistoryCollectionArraySchema.safeParse(raw);
+    if (!parsed.success) {
+      return { data: null, error: `Invalid order_history response: ${parsed.error.message}` };
+    }
+    return { data: parsed.data, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
 /** Patch an order (e.g. stage transition). Used by later pipeline units. */
 export async function updateOrder(
   id: string,
@@ -554,8 +580,9 @@ export async function parseOrderText(
 ): Promise<DirectusResult<ParsedOrderDraft>> {
   try {
     const internalToken = import.meta.env.VITE_INTERNAL_TOKEN;
-    const baseUrl = import.meta.env.VITE_DIRECTUS_URL;
-    const res = await fetch(`${baseUrl}/order-api/parse-order`, {
+    const isDev = import.meta.env.DEV;
+    const url = isDev ? '/order-api/parse-order' : `${import.meta.env.VITE_DIRECTUS_URL}/order-api/parse-order`;
+    const res = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -626,6 +653,74 @@ export async function upsertCorrection(
       return { data: null, error: `Invalid corrections response: ${parsed.error.message}` };
     }
     return { data: parsed.data, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+/* ============================================================ Customers CRUD === */
+
+export async function createCustomer(
+  input: Omit<CustomersCollection, 'id' | 'created_at' | 'updated_at'> & { id?: string },
+): Promise<DirectusResult<CustomersCollection>> {
+  try {
+    const raw = await getClient().request(createItem('customers', input as never));
+    const parsed = CustomersCollectionSchema.safeParse(raw);
+    if (!parsed.success) {
+      return { data: null, error: `Invalid customer response: ${parsed.error.message}` };
+    }
+    return { data: parsed.data, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+export async function updateCustomer(
+  id: string,
+  patch: Partial<CustomersCollection>,
+): Promise<DirectusResult<CustomersCollection>> {
+  try {
+    const raw = await getClient().request(updateItem('customers', id, patch as never));
+    const parsed = CustomersCollectionSchema.safeParse(raw);
+    if (!parsed.success) {
+      return { data: null, error: `Invalid customer response: ${parsed.error.message}` };
+    }
+    return { data: parsed.data, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+export async function deleteCustomer(id: string): Promise<DirectusResult<void>> {
+  try {
+    await getClient().request(deleteItem('customers', id));
+    return { data: undefined, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+/* ============================================================ Products CRUD === */
+
+export async function createProduct(
+  input: Omit<ProductsCollection, 'id' | 'created_at' | 'updated_at'> & { id?: string },
+): Promise<DirectusResult<ProductsCollection>> {
+  try {
+    const raw = await getClient().request(createItem('products', input as never));
+    const parsed = ProductsCollectionSchema.safeParse(raw);
+    if (!parsed.success) {
+      return { data: null, error: `Invalid product response: ${parsed.error.message}` };
+    }
+    return { data: parsed.data, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+export async function deleteProduct(id: string): Promise<DirectusResult<void>> {
+  try {
+    await getClient().request(deleteItem('products', id));
+    return { data: undefined, error: null };
   } catch (err) {
     return { data: null, error: errMsg(err) };
   }

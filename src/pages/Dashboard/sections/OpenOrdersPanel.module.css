@@ -34,6 +34,17 @@
   padding: var(--space-sm) var(--space-md);
 }
 
+.statusPill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--radius-md);
+  font: var(--text-caption);
+  font-weight: 500;
+  background: var(--bg-muted);
+  color: var(--text-muted);
+}
+
 .arrowHead {
   width: 40px;
 }

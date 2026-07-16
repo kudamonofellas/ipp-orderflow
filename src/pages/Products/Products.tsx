@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Icon } from '../../components/Icon/Icon';
 import { readProducts, updateProduct } from '../../lib/directus';
 import { useAuth } from '../../hooks/useAuth';
@@ -11,6 +12,7 @@ type ActiveFilter = 'all' | 'active' | 'oos';
 
 /** Products page: searchable, filterable list. Warehouse/Admin/Owner can toggle OOS. */
 export function Products() {
+  const navigate = useNavigate();
   const { can } = useAuth();
   const canToggleOOS = can('manage_products');
 
@@ -97,7 +99,8 @@ export function Products() {
     setPage(1);
   };
 
-  const handleToggleActive = async (product: ProductsCollection) => {
+  const handleToggleActive = async (e: React.MouseEvent, product: ProductsCollection) => {
+    e.stopPropagation();
     if (!canToggleOOS) return;
     setTogglingId(product.id);
     const newValue = !product.active;
@@ -156,6 +159,16 @@ export function Products() {
               onChange={(e) => handleSearchChange(e.target.value)}
             />
           </div>
+          {canToggleOOS && (
+            <button
+              type="button"
+              className={styles.addBtn}
+              onClick={() => navigate('/products/new')}
+            >
+              <Icon name="add" size={16} />
+              New Product
+            </button>
+          )}
         </div>
       </div>
 
@@ -190,6 +203,8 @@ export function Products() {
                 <tr
                   key={p.id}
                   className={`${styles.tr} ${p.active === false ? styles.inactive : ''}`}
+                  onClick={() => navigate(`/products/${p.id}`)}
+                  style={{ cursor: 'pointer' }}
                 >
                   <td className={styles.td}>
                     <div className={styles.nameCell}>
@@ -215,7 +230,7 @@ export function Products() {
                       <button
                         id={`product-toggle-${p.id}`}
                         className={styles.toggle}
-                        onClick={() => handleToggleActive(p)}
+                        onClick={(e) => handleToggleActive(e, p)}
                         disabled={togglingId === p.id}
                         aria-label={p.active ? 'Mark out of stock' : 'Mark active'}
                         title={p.active ? 'Mark out of stock' : 'Mark active'}

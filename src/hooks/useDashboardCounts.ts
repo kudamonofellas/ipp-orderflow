@@ -1,22 +1,3 @@
-/**
- * Fetch real order counts from Directus for the dashboard metrics + stage pills.
- *
- * Replaces the mock `metrics` and `stageCounts` exports from mockDashboard.ts.
- * Uses a single aggregate() call grouped by `status` (per code-standards.md:
- * use aggregate() for counts, never readItems() + .length).
- *
- * The real `orders.status` column is a free-text varchar (default 'Draft').
- * The values currently in the DB map to the dashboard as:
- *   - 'Open'    → intake stage + Total Orders metric
- *   - 'Delivered' → delivered stage + Delivered Orders metric
- *   - 'Returned'  → returned (off-pipeline) + Returned Orders metric
- *   - other statuses are counted into their matching stage pill where the
- *     label matches, otherwise ignored.
- *
- * As the pipeline is wired and `orders.stage` replaces `orders.status`, this
- * mapping will move into the domain layer (src/lib/domain.ts).
- */
-
 import { useCallback, useEffect, useState } from 'react';
 import { aggregateOrders } from '../lib/directus';
 import type { DashboardMetric, StageCount, DateRangeVal } from '../types/dashboard';
@@ -54,72 +35,85 @@ function statusToStage(status: string | null | undefined): Stage | null {
   return null;
 }
 
-/** Helper to convert a range type and value to a Directus order_date query object. */
-function getFilterForDateRange(rangeVal: DateRangeVal): Record<string, unknown> {
+/** Helper to convert a range type and value to timezone-accurate filter on specific date fields. */
+function getFilterForField(rangeVal: DateRangeVal, field: 'order_date' | 'delivered_at' | 'created_at' | 'updated_at'): Record<string, unknown> {
   const filter: Record<string, unknown> = {};
   const today = new Date();
+  const isDatetime = field === 'delivered_at' || field === 'created_at' || field === 'updated_at';
+
+  // Helper to format Date to YYYY-MM-DD
+  const format = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+
+  let start: Date;
+  let end: Date;
 
   if (rangeVal.type === 'today') {
-    const yyyy = today.getFullYear();
-    const mm = String(today.getMonth() + 1).padStart(2, '0');
-    const dd = String(today.getDate()).padStart(2, '0');
-    filter.order_date = { _eq: `${yyyy}-${mm}-${dd}` };
+    start = new Date(today);
+    start.setHours(0, 0, 0, 0);
+    end = new Date(start);
+    end.setDate(start.getDate() + 1);
   } else if (rangeVal.type === 'week') {
     const currentDay = today.getDay();
     const distanceToMonday = currentDay === 0 ? -6 : 1 - currentDay;
-    const monday = new Date(today);
-    monday.setDate(today.getDate() + distanceToMonday);
+    start = new Date(today);
+    start.setDate(today.getDate() + distanceToMonday);
+    start.setHours(0, 0, 0, 0);
 
-    const sunday = new Date(monday);
-    sunday.setDate(monday.getDate() + 6);
-
-    const format = (d: Date) => {
-      const y = d.getFullYear();
-      const m = String(d.getMonth() + 1).padStart(2, '0');
-      const day = String(d.getDate()).padStart(2, '0');
-      return `${y}-${m}-${day}`;
-    };
-    filter.order_date = {
-      _between: [format(monday), format(sunday)],
-    };
+    end = new Date(start);
+    end.setDate(start.getDate() + 7);
   } else if (rangeVal.type === 'month') {
     if (rangeVal.month) {
       const [yearStr, monthStr] = rangeVal.month.split('-');
       const year = parseInt(yearStr, 10);
       const monthIndex = parseInt(monthStr, 10) - 1;
-
-      const firstDay = new Date(year, monthIndex, 1);
-      const lastDay = new Date(year, monthIndex + 1, 0);
-
-      const format = (d: Date) => {
-        const y = d.getFullYear();
-        const m = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        return `${y}-${m}-${day}`;
-      };
-      filter.order_date = {
-        _between: [format(firstDay), format(lastDay)],
-      };
+      start = new Date(year, monthIndex, 1);
+      end = new Date(year, monthIndex + 1, 1);
     } else {
-      const y = today.getFullYear();
-      const m = String(today.getMonth() + 1).padStart(2, '0');
-      filter.order_date = { _starts_with: `${y}-${m}` };
+      start = new Date(today.getFullYear(), today.getMonth(), 1);
+      end = new Date(today.getFullYear(), today.getMonth() + 1, 1);
     }
   } else if (rangeVal.type === 'year') {
     const year = rangeVal.year || today.getFullYear();
-    filter.order_date = {
-      _between: [`${year}-01-01`, `${year}-12-31`],
-    };
+    start = new Date(year, 0, 1);
+    end = new Date(year + 1, 0, 1);
   } else if (rangeVal.type === 'specific') {
     if (rangeVal.date) {
-      filter.order_date = { _eq: rangeVal.date };
+      start = new Date(rangeVal.date + 'T00:00:00');
+      end = new Date(start);
+      end.setDate(start.getDate() + 1);
     } else {
-      const yyyy = today.getFullYear();
-      const mm = String(today.getMonth() + 1).padStart(2, '0');
-      const dd = String(today.getDate()).padStart(2, '0');
-      filter.order_date = { _eq: `${yyyy}-${mm}-${dd}` };
+      start = new Date(today);
+      start.setHours(0, 0, 0, 0);
+      end = new Date(start);
+      end.setDate(start.getDate() + 1);
+    }
+  } else {
+    start = new Date(today);
+    start.setHours(0, 0, 0, 0);
+    end = new Date(start);
+    end.setDate(start.getDate() + 1);
+  }
+
+  if (isDatetime) {
+    filter[field] = {
+      _between: [start.toISOString(), end.toISOString()],
+    };
+  } else {
+    if (rangeVal.type === 'today' || (rangeVal.type === 'specific' && rangeVal.date)) {
+      filter[field] = { _eq: format(start) };
+    } else {
+      const lastDay = new Date(end.getTime() - 1);
+      filter[field] = {
+        _between: [format(start), format(lastDay)],
+      };
     }
   }
+
   return filter;
 }
 
@@ -133,10 +127,10 @@ interface UseDashboardCountsResult {
 
 /** Empty state used while loading. */
 const EMPTY_METRICS: DashboardMetric[] = [
-  { id: 'total', label: 'Total Orders', value: 0, range: 'Today' },
+  { id: 'open', label: 'Open Orders', value: 0, range: 'All' },
+  { id: 'today', label: "Today's Orders", value: 0, range: 'Today' },
   { id: 'delivered', label: 'Delivered Orders', value: 0, range: 'Today' },
-  { id: 'returned', label: 'Returned Orders', value: 0, range: 'Today' },
-  { id: 'cancelled', label: 'Canceled Orders', value: 0, range: 'Today' },
+  { id: 'cancelled', label: 'Cancelled Orders', value: 0, range: 'Today' },
 ];
 
 const EMPTY_STAGES: StageCount[] = STAGE_ORDER.map((stage) => ({
@@ -151,9 +145,7 @@ export interface RangeWithLabel {
 }
 
 export function useDashboardCounts(
-  totalRange: RangeWithLabel = { val: { type: 'today' }, label: 'Today' },
   deliveredRange: RangeWithLabel = { val: { type: 'today' }, label: 'Today' },
-  returnedRange: RangeWithLabel = { val: { type: 'today' }, label: 'Today' },
   cancelledRange: RangeWithLabel = { val: { type: 'today' }, label: 'Today' },
 ): UseDashboardCountsResult {
   const [metrics, setMetrics] = useState<DashboardMetric[]>(EMPTY_METRICS);
@@ -177,26 +169,39 @@ export function useDashboardCounts(
         groupBy: ['status'],
       });
 
-      // 2. Metrics (each has its own date filter)
-      const totalFilter = getFilterForDateRange(totalRange.val);
-      const deliveredFilter = {
-        ...getFilterForDateRange(deliveredRange.val),
-        status: { _eq: 'Delivered' },
-      };
-      const returnedFilter = {
-        ...getFilterForDateRange(returnedRange.val),
-        status: { _eq: 'Returned' },
-      };
-      const cancelledFilter = {
-        ...getFilterForDateRange(cancelledRange.val),
-        cancelled: { _eq: true },
+      // 2. Metrics (each has its own filter/logic)
+      // Open Orders: exclude terminal stages ('delivered', 'cancelled', 'returned')
+      const openFilter = {
+        _and: [
+          { cancelled: { _neq: true } },
+          { stage: { _nin: ['delivered', 'cancelled', 'returned'] } },
+        ],
       };
 
-      const [stageRes, totalRes, deliveredRes, returnedRes, cancelledRes] = await Promise.all([
+      // Today's Orders: filter by creation date = today
+      const todayFilter = getFilterForField({ type: 'today' }, 'created_at');
+
+      // Delivered: stage === 'delivered', period range
+      const deliveredFilter = {
+        _and: [
+          { stage: { _eq: 'delivered' } },
+          getFilterForField(deliveredRange.val, 'delivered_at'),
+        ],
+      };
+
+      // Cancelled: cancelled === true, period range
+      const cancelledFilter = {
+        _and: [
+          { cancelled: { _eq: true } },
+          getFilterForField(cancelledRange.val, 'updated_at'),
+        ],
+      };
+
+      const [stageRes, openRes, todayRes, deliveredRes, cancelledRes] = await Promise.all([
         stageResultPromise,
-        aggregateOrders({ filter: totalFilter, aggregate: { count: ['*'] } }),
+        aggregateOrders({ filter: openFilter, aggregate: { count: ['*'] } }),
+        aggregateOrders({ filter: todayFilter, aggregate: { count: ['*'] } }),
         aggregateOrders({ filter: deliveredFilter, aggregate: { count: ['*'] } }),
-        aggregateOrders({ filter: returnedFilter, aggregate: { count: ['*'] } }),
         aggregateOrders({ filter: cancelledFilter, aggregate: { count: ['*'] } }),
       ]);
 
@@ -207,8 +212,17 @@ export function useDashboardCounts(
         setLoading(false);
         return;
       }
-      if (totalRes.error !== null || deliveredRes.error !== null || returnedRes.error !== null || cancelledRes.error !== null) {
-        setError(`Failed to load metrics: ${totalRes.error || deliveredRes.error || returnedRes.error || cancelledRes.error}`);
+      if (
+        openRes.error !== null ||
+        todayRes.error !== null ||
+        deliveredRes.error !== null ||
+        cancelledRes.error !== null
+      ) {
+        setError(
+          `Failed to load metrics: ${
+            openRes.error || todayRes.error || deliveredRes.error || cancelledRes.error
+          }`,
+        );
         setLoading(false);
         return;
       }
@@ -232,16 +246,16 @@ export function useDashboardCounts(
       );
 
       // Extract metric values
-      const totalVal = Number(totalRes.data[0]?.count ?? 0);
+      const openVal = Number(openRes.data[0]?.count ?? 0);
+      const todayVal = Number(todayRes.data[0]?.count ?? 0);
       const deliveredVal = Number(deliveredRes.data[0]?.count ?? 0);
-      const returnedVal = Number(returnedRes.data[0]?.count ?? 0);
       const cancelledVal = Number(cancelledRes.data[0]?.count ?? 0);
 
       setMetrics([
-        { id: 'total', label: 'Total Orders', value: totalVal, range: totalRange.label },
+        { id: 'open', label: 'Open Orders', value: openVal, range: 'All' },
+        { id: 'today', label: "Today's Orders", value: todayVal, range: 'Today' },
         { id: 'delivered', label: 'Delivered Orders', value: deliveredVal, range: deliveredRange.label },
-        { id: 'returned', label: 'Returned Orders', value: returnedVal, range: returnedRange.label },
-        { id: 'cancelled', label: 'Canceled Orders', value: cancelledVal, range: cancelledRange.label },
+        { id: 'cancelled', label: 'Cancelled Orders', value: cancelledVal, range: cancelledRange.label },
       ]);
 
       setLoading(false);
@@ -251,7 +265,7 @@ export function useDashboardCounts(
     return () => {
       cancelled = true;
     };
-  }, [nonce, totalRange, deliveredRange, returnedRange, cancelledRange]);
+  }, [nonce, deliveredRange, cancelledRange]);
 
   return { metrics, stageCounts, loading, error, refetch };
 }

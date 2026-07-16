@@ -37,6 +37,14 @@
   border-color: var(--accent-primary);
 }
 
+.rangeStatic {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px var(--space-sm);
+  font: var(--text-label);
+  color: var(--text-muted);
+}
+
 .body {
   display: flex;
   align-items: baseline;

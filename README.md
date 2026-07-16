@@ -14,15 +14,22 @@ It streamlines the entire order lifecycle—from automatic WhatsApp message inge
 
 ## 🚀 Project Context & Phase
 
-We are currently in **Phase 1 (App Shell + Admin Dashboard)**, transitioning the application from a frontend-only React prototype (which stored data in `localStorage` and `IndexedDB`) into a production-grade codebase integrated with the company's live backend services.
+We have successfully advanced through the core features of **Phase 1 (App Shell + Admin Dashboard & Directories)**, establishing robust database integration with Directus and completing the manual/automated order intake flows.
 
 ### Current Implementation Status
-*   **App Shell & Layout**: Centralized theme token system, modern reset, global styling, and a responsive TopNav with a notifications popover.
-*   **Authentication & Role Context**: Directus-backed login page with persistent `sessionStorage` token management to keep users signed in across page reloads.
-*   **Admin Dashboard**: Real-time metric cards, stacked Stage Pills showing counts of orders at each stage, and panels for Intake messages and items needing attention.
-*   **Manual Order Creation**: A full modal workflow gating order generation with the role's capability checks, customer/product pickers, automatic sequential order ID generation, and transaction history log.
-*   **Orders Page**: Full order registry with paginated backend fetches, filter dropdowns for pipeline and return stages, and text search (by order number, ID, or customer name).
-*   **Catch-weight Order Lines**: Displays line-item details with unit counts and catch weights, batch-loaded cleanly to prevent n+1 query issues.
+*   **Authentication & Longevity**: Fully integrated email/password authentication using the Directus JSON auth SDK. Access/refresh tokens are stored securely in `localStorage` for tab-persistent sessions, with automatic refresh retry policies on Directus API 401 token expiration.
+*   **Multi-Step WhatsApp Intake**:
+    1.  **Channel Selection**: Simple modal choosing Horeca (B2B) vs Meatfellas (B2C, disabled for soon).
+    2.  **Intake Modal**: A text area to paste WhatsApp groups text messages + attachment input, sending requests to the parsing API.
+    3.  **New Order Prefill**: Auto-populates line items, delivery dates, and matched customer fields from parsed API responses, showing confidence status badges (`recognized`, `probable`, `unrecognized`).
+*   **Learned Mappings & Corrections**: Manual corrections made by admins during order review (e.g. matching an unrecognized text line to a catalog product) write directly to the `corrections` collection in Directus. Future parses benefit globally from this mapping, training the parsing service.
+*   **Customers & Products Directories**:
+    *   `/customers` page displays a searchable, paginated registry of accounts. Clickable rows navigate to `/customers/:id`.
+    *   `/products` page displays searchable, paginated list of catalog items with category filters. Users with the `manage_products` capability can toggle stock statuses (Active / Out of Stock) inline with optimistic UI updates.
+*   **Dossier Detail Pages**:
+    *   **Order Detail (`/orders/:id`)**: Renders progressive status stepper, live total calculations, WhatsApp confirmation text builder, printing stylesheet, and notes/history logging.
+    *   **Customer Detail (`/customers/:id`)**: Renders customer contact details, live credit limits vs. flight-order exposure figures, and clickable past order records.
+    *   **Product Detail (`/products/:id`)**: Edit form for names, catch-weights, categories, and OOS flags, with deletion safety checks.
 
 ---
 

@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Icon } from '../../components/Icon/Icon';
+import { useAuth } from '../../hooks/useAuth';
 import { readCustomers } from '../../lib/directus';
 import type { CustomersCollection } from '../../types/directus';
 import styles from './Customers.module.css';
@@ -8,6 +10,10 @@ const PAGE_SIZE = 20;
 
 /** Customers list page: searchable table of all customer records. */
 export function Customers() {
+  const navigate = useNavigate();
+  const auth = useAuth();
+  const canManage = auth.can('manage_customers');
+
   const [customers, setCustomers] = useState<CustomersCollection[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -91,6 +97,16 @@ export function Customers() {
               onChange={(e) => handleSearch(e.target.value)}
             />
           </div>
+          {canManage && (
+            <button
+              type="button"
+              className={styles.addBtn}
+              onClick={() => navigate('/customers/new')}
+            >
+              <Icon name="add" size={16} />
+              New Customer
+            </button>
+          )}
         </div>
       </div>
 
@@ -121,7 +137,12 @@ export function Customers() {
               </tr>
             ) : (
               customers.map((c) => (
-                <tr key={c.id} className={styles.tr}>
+                <tr
+                  key={c.id}
+                  className={styles.tr}
+                  onClick={() => navigate(`/customers/${c.id}`)}
+                  style={{ cursor: 'pointer' }}
+                >
                   <td className={styles.td}>
                     <div className={styles.nameCell}>
                       <span className={styles.name}>{c.name}</span>
@@ -181,3 +202,4 @@ export function Customers() {
     </main>
   );
 }
+

@@ -5,13 +5,23 @@ change.
 
 ## Current Phase
 
-- In progress — Refactoring authentication longevity, implementing Products & Customers views, and building Horeca Channel intake copy-paste message parser using the server-side API.
+- Stable and complete: token refresh retry flow, Customers and Products CRUD and directory pages, multi-step intake flow (Channel Select -> WhatsApp Intake -> prefilled New Order), corrections upserting, and detailed dossiers (Orders, Customers, Products).
 
 ## Current Goal
 
-- Complete Customers page, Products page (with OOS toggles), Channel Selection modal, and copy-paste intake modal flow (connecting to the `/order-api/parse-order` endpoint and Directus `corrections` table). Implement auth token refresh retry flow on API 401 error.
+- Next phase features: Reports page implementation, corrections review admin UI, pipeline stage-transition UI.
 
 ## Completed
+
+- **Token longevity, WhatsApp intake flow, Products & Customers CRUD, and Dossiers (2026-07-16):**
+  - Token refresh retry flow on Directus 401 API errors (auto refresh with SDK tokens, fallback check on mount).
+  - Metrics cards correct calculation (CORS config with headers, cancelled orders mapping to DB boolean `cancelled: true`).
+  - Added new pages: `/customers` (clickable paginated search table), `/customers/:id` (credit profile + exposure + order history + create/update), `/products` (paginated active/OOS toggles), `/products/:id` (metadata fields + OOS flag + delete safeguards).
+  - WhatsApp Intake Modal: 3-step checkout flow (Horeca select -> WhatsApp text parse API call with `x-internal-token` header -> prefilled `NewOrderModal` review and corrections mapping).
+  - Corrections mapping: inline unrecognized line mapping writes to Directus `corrections` for server-side parser training.
+  - Order Detail Dossier (`/orders/:id`): progress stepper, client-side order total, print stylesheet, WhatsApp invoice copy builder, and team notes/history logging.
+  - Router wiring and navigation links updated in `App.tsx`, `Customers.tsx`, `Products.tsx`, and stylesheets.
+  - Compilation is clean (`npm run build` runs successfully).
 
 - **Auth persistence & UI enhancements (2026-07-14):**
   - Token persistence changed from `sessionStorage` to `localStorage` to keep the user logged in until explicit sign-out.
