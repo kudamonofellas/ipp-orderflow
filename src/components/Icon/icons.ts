@@ -11,6 +11,7 @@ export const ICONS = {
   dashboard: 'hugeicons:dashboard-square-02',
   orders: 'hugeicons:license-draft',
   customers: 'hugeicons:user-multiple',
+  products: 'hugeicons:package',
   reports: 'hugeicons:analytics-01',
   search: 'hugeicons:search-01',
   notification: 'hugeicons:notification-01',
@@ -27,6 +28,11 @@ export const ICONS = {
   close: 'hugeicons:cancel-01',
   trash: 'hugeicons:delete-02',
   logout: 'hugeicons:logout-05',
+  check: 'hugeicons:checkmark-circle-02',
+  whatsapp: 'hugeicons:whatsapp',
+  attach: 'hugeicons:attachment-01',
+  upload: 'hugeicons:upload-01',
+  store: 'hugeicons:store-01',
 } as const;
 
 export type IconName = keyof typeof ICONS;

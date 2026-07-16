@@ -7,14 +7,19 @@ IPP-OrderFlow is a B2B / Horeca order-management application for **PT Inti Panga
 ## Goals
 
 1. **Replace the prototype's local-only storage with a real backend** — all orders, customers, products, returns, proof photos, and documents persist in Postgres (`horeca_orders`) via Directus, visible across devices and roles in realtime.
-2. **Automate WhatsApp intake** — inbound messages from the customer WhatsApp group (via Evolution API → n8n) are parsed into draft orders in Directus, replacing the prototype's manual paste + smart-fake `recognize.js`.
+2. **Automate WhatsApp intake, keep manual paste** — orders can be created two ways: (a) Admin pastes a raw WhatsApp order message into the app and the form auto-fills, or (b) inbound messages from the customer WhatsApp group (via Evolution API → n8n) are parsed into draft orders in Directus automatically. Both paths share one parsing service (a production port of the prototype's `recognize.js` logic) so matching behavior is identical regardless of entry point — see "Message Parsing" under Features.
 3. **Give every role a focused, role-aware workspace** — each role sees the stages it is responsible for (e.g. Warehouse sees Cold Storage + Packing, Finance sees the approval gate, Courier sees dispatch + delivery proof), with a configurable capability matrix the Owner can tune.
 4. **Ship a responsive web app first, APK later** — Phase 1 is a responsive web app that works well on phone browsers (installable as a PWA). The Capacitor Android APK is a later phase but remains a goal. Live courier GPS tracking uses Directus realtime (replacing the prototype's same-browser BroadcastChannel hack).
 5. **Keep the existing infrastructure untouched** — no Firebase, no new servers; the app runs on the already-deployed `*.kudafellas.cloud` stack.
 
 ## Core User Flow
 
-1. **Intake** — A customer sends an order in the WhatsApp group. Evolution API forwards the message to n8n, which parses it into a draft order in Directus. Admin reviews and confirms the parsed lines against real SKUs.
+1. **Intake** — an order reaches the pipeline one of three ways:
+   - **Manual paste**: Admin copies a WhatsApp order message and pastes it into the app; the parsing service returns a draft and the form auto-fills for review.
+   - **Automated WhatsApp**: a customer sends an order in the WhatsApp group. Evolution API forwards the message to n8n, which calls the same parsing service and writes a draft order straight into Directus, surfaced in the WhatsApp Intake panel.
+   - **Manual entry**: Admin fills the "New Order" form from scratch, bypassing parsing entirely.
+
+   In every path, Admin reviews the resulting lines — confirming, correcting, or manually picking a product for any line the parser couldn't match — before the order enters the pipeline.
 2. **Cold Storage (Warehouse)** — Warehouse staff pull the order, perform pull & catch-weight weighing (kg/loaf), and attach photo proof. Weight lines self-satisfy; counted units (pcs/box/ekor) may be short.
 3. **Finance (parallel to Cold Storage)** — Finance reviews the order and Approves or Rejects it. This gate runs in parallel with Cold Storage.
 4. **Production** — Production receives cut instructions (e.g. steak 2cm, vacuum per pcs) and marks the order CUTTING → PACKING → READY.
@@ -29,12 +34,23 @@ IPP-OrderFlow is a B2B / Horeca order-management application for **PT Inti Panga
 
 ### Intake & Messaging
 
-- WhatsApp group message ingestion via Evolution API → n8n
-- Message parsing into draft orders in Directus (replaces prototype's `recognize.js`)
+- **Two parsed-entry paths, one parsing service:**
+  - **Copy-paste (Admin, in-app)** — Admin pastes a raw order message (WhatsApp text, note, etc.) into the app; the form auto-fills from the parsed draft, same UX as the prototype's `Intake.jsx` flow.
+  - **Automated WhatsApp** — inbound messages from the customer WhatsApp group (via Evolution API → n8n) are parsed into draft orders written directly into Directus, no manual paste needed.
+  - Both paths call the same **parsing service** (a server-side port of the prototype's `recognize.js` — product/customer name matching, quantity/unit/price/cut extraction, delivery-date detection) so recognition behavior is consistent regardless of entry point. See "Message Parsing" below for how it works.
 - WhatsApp Intake dashboard panel with triage state: Unprocessed / Parsed (needs review) / Linked to order
 - Per-message cards: sender, time, preview, badges (Edited, Has photo, OCR ready, Parsed), linked `order_id`
 - Attachments collection: photos, OCR text, captions, linked to messages
-- **Admin can manually create a new order in-app** — a "New Order" CTA in the top bar opens a form to enter customer, product lines, and quantities directly, bypassing WhatsApp intake when needed
+- **Admin can manually create a new order in-app** — a "New Order" CTA in the top bar opens a form to enter customer, product lines, and quantities directly, bypassing parsing entirely when needed
+
+### Message Parsing
+
+- A shared **parsing service** (n8n workflow or Node function on the existing stack) is called by both the in-app copy-paste flow and the n8n WhatsApp automation — one implementation, not two.
+- Input: raw text (+ optional language hint). Output: a structured draft — customer match, delivery date, payment method, and item lines (each with matched `productId`, qty, unit, price, cut instructions, and a match status).
+- **Product/customer matching** — Products live in a Directus `products` table (fields include `accurateName`, grade, brand, form, origin, etc.); customer matching runs name/phone/fuzzy-token tiers against the Directus `customers` table.
+- **Match status per line** — `recognized` / `probable` / `unrecognized`, shown as a colored badge in the review UI. Unrecognized or low-confidence lines require Admin to manually pick the product before confirming.
+- **Learned corrections** — when Admin manually assigns a product to a line the parser missed, the correction is saved to a Directus `corrections` table (raw-text-tokens → productId), replacing the prototype's per-device `localStorage` memory so corrections apply for every user, every device, going forward.
+- **Fallback matching (future/optional)** — lines that remain `unrecognized` after rule-based matching may be passed to the Claude API with the product catalog as context, as a secondary matching pass before falling back to a fully manual pick.
 
 ### Order Pipeline
 
@@ -109,7 +125,10 @@ IPP-OrderFlow is a B2B / Horeca order-management application for **PT Inti Panga
 - React 18 + React Router 6 + Vite 5 frontend, ported from the prototype
 - `@directus/sdk` integration replacing the prototype's localStorage reducer
 - WhatsApp intake automation via Evolution API → n8n → Directus
+- **Shared parsing service** (production port of prototype's `recognize.js`) called by both the in-app copy-paste flow and the n8n WhatsApp flow
+- Directus `products` table (migrated from prototype's `data/products.js`) and `corrections` table (replaces prototype's per-device `localStorage` learned corrections)
 - **Admin manual order creation in-app** ("New Order" CTA + form)
+- **Admin copy-paste order creation in-app** (paste raw text → auto-filled draft via the parsing service, reviewed before confirming)
 - Order pipeline UI for all 8 stages + returns sub-flow
 - Role-based access with configurable capability matrix
 - Dashboard redesign (top-bar nav, WhatsApp Intake, Needs Attention)
@@ -122,7 +141,7 @@ IPP-OrderFlow is a B2B / Horeca order-management application for **PT Inti Panga
 
 - Firebase (entirely dropped — replaced by Directus + Postgres)
 - Cloud Functions
-- Prototype's `recognize.js` smart-fake parser (replaced by n8n)
+- Prototype's `recognize.js` as a **client-side, localStorage-backed** parser — the matching logic itself is kept and ported server-side into the shared parsing service (see Message Parsing); only the old implementation (browser-only, per-device corrections) is dropped, not the copy-paste feature
 - Prototype's `live.js` BroadcastChannel same-browser tracking (replaced by Directus realtime)
 - Manual demo login (replaced by Directus auth)
 - Full inventory management for Warehouse (only cold storage queue in v1)
@@ -132,7 +151,7 @@ IPP-OrderFlow is a B2B / Horeca order-management application for **PT Inti Panga
 
 ## Success Criteria
 
-1. A signed-in Admin can receive a WhatsApp order, review the parsed draft, and confirm it into the pipeline — the order then progresses through all 8 stages to `delivered` with every role's action recorded in Postgres.
+1. A signed-in Admin can create an order via either parsed path — pasting a WhatsApp message in-app, or receiving one automatically through the Evolution API → n8n flow — review the parsed draft (correcting any unrecognized lines), and confirm it into the pipeline. The order then progresses through all 8 stages to `delivered` with every role's action recorded in Postgres, and any manual product correction is saved for future parses.
 2. A Warehouse user can weigh an order (pull & catch-weight), attach a photo proof, and the weight line self-satisfies while counted-unit lines correctly allow shortages.
 3. A Finance user can approve or reject an order at the finance gate, with the gate running in parallel to Cold Storage.
 4. A Courier can pick up, deliver, and upload 3 proof photos, and the office dashboard sees the courier's GPS position update in realtime via Directus subscriptions.

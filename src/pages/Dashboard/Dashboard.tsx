@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Icon } from '../../components/Icon/Icon';
 import type { IconName } from '../../components/Icon/icons';
+import { ChannelSelectModal } from '../../components/ChannelSelectModal/ChannelSelectModal';
+import { IntakeModal } from '../../components/IntakeModal/IntakeModal';
 import { MetricCard } from '../../components/MetricCard/MetricCard';
 import { NewOrderModal } from '../../components/NewOrderModal/NewOrderModal';
 import { StagePill } from '../../components/StagePill/StagePill';
@@ -17,6 +19,7 @@ import { AttentionPanel } from './sections/AttentionPanel';
 import { IntakePanel } from './sections/IntakePanel';
 import { OpenOrdersPanel } from './sections/OpenOrdersPanel';
 import styles from './Dashboard.module.css';
+import type { ParsedOrderDraft } from '../../lib/directus';
 
 const METRIC_ICONS: Record<string, IconName> = {
   total: 'total',
@@ -43,14 +46,32 @@ export function Dashboard() {
   );
   const canCreateOrders = useCan()('createOrders');
   const currentUserName = useCurrentUserName();
-  const [newOrderOpen, setNewOrderOpen] = useState(false);
 
-  const isLoading = ordersLoading || countsLoading;
+  // Multi-step "Add New Order" flow:
+  // step 0: idle, step 1: channel selection, step 2: intake, step 3: order form
+  const [orderStep, setOrderStep] = useState<0 | 1 | 2 | 3>(0);
+  const [parsedDraft, setParsedDraft] = useState<ParsedOrderDraft | null>(null);
+
+  function startNewOrder() { setOrderStep(1); }
+  function closeAll() { setOrderStep(0); setParsedDraft(null); }
+
+  function handleChannelSelect(_channel: 'horeca') {
+    // channel stored for IntakeModal label — currently only horeca
+    setOrderStep(2);
+  }
+
+  function handleParsed(draft: ParsedOrderDraft) {
+    setParsedDraft(draft);
+    setOrderStep(3);
+  }
 
   function handleOrderCreated() {
     refetchOrders();
     refetchCounts();
+    closeAll();
   }
+
+  const isLoading = ordersLoading || countsLoading;
 
   const currentPipeline = stageCounts.filter((stage) =>
     PIPELINE_STAGES.some((pipeline) => pipeline.key === stage.stage),
@@ -94,8 +115,9 @@ export function Dashboard() {
           {canCreateOrders && (
             <button
               type="button"
+              id="dashboard-new-order"
               className={styles.newOrderCard}
-              onClick={() => setNewOrderOpen(true)}
+              onClick={startNewOrder}
               title="Create a new order"
             >
               <Icon name="add" size={24} />
@@ -157,10 +179,24 @@ export function Dashboard() {
         )}
       </div>
 
+      <ChannelSelectModal
+        open={orderStep === 1}
+        onClose={closeAll}
+        onSelect={handleChannelSelect}
+      />
+
+      <IntakeModal
+        open={orderStep === 2}
+        channel="horeca"
+        onClose={closeAll}
+        onParsed={handleParsed}
+      />
+
       <NewOrderModal
-        open={newOrderOpen}
-        onClose={() => setNewOrderOpen(false)}
+        open={orderStep === 3}
+        onClose={closeAll}
         onCreated={handleOrderCreated}
+        prefill={parsedDraft}
       />
     </div>
   );

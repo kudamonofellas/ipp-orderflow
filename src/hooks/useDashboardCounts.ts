@@ -189,10 +189,7 @@ export function useDashboardCounts(
       };
       const cancelledFilter = {
         ...getFilterForDateRange(cancelledRange.val),
-        _or: [
-          { status: { _eq: 'Cancelled' } },
-          { status: { _eq: 'Canceled' } },
-        ],
+        cancelled: { _eq: true },
       };
 
       const [stageRes, totalRes, deliveredRes, returnedRes, cancelledRes] = await Promise.all([

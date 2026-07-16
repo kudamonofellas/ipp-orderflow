@@ -8,7 +8,10 @@ import {
   getNextOrderNo,
   readCustomers,
   readProducts,
+  upsertCorrection,
   type CreateOrderLineInput,
+  type ParsedOrderDraft,
+  type ParsedOrderLine,
 } from '../../lib/directus';
 import type { CustomersCollection, ProductsCollection } from '../../types/directus';
 import styles from './NewOrderModal.module.css';
@@ -17,6 +20,8 @@ interface NewOrderModalProps {
   open: boolean;
   onClose: () => void;
   onCreated: () => void;
+  /** Optional prefill from the WhatsApp intake parser. */
+  prefill?: ParsedOrderDraft | null;
 }
 
 interface LineDraft {
@@ -25,6 +30,10 @@ interface LineDraft {
   freeText: string;
   qty: string;
   unit: string;
+  /** From parser: 'recognized' | 'probable' | 'unrecognized' | undefined */
+  parseStatus?: ParsedOrderLine['status'];
+  /** Raw text from parser — shown when status is 'unrecognized' */
+  rawText?: string;
 }
 
 const UNITS = ['kg', 'gram', 'pack', 'pcs', 'box', 'ekor', 'loaf'] as const;
@@ -45,8 +54,9 @@ function todayISO(): string {
 
 /** Modal form: pick an existing customer + add product lines (or free-text).
  *  Submit creates an `orders` row + N `order_lines` rows + 1 `order_history` row.
+ *  Accepts an optional `prefill` from the WhatsApp intake parser to pre-fill all fields.
  *  Every submit passes through `can('createOrders')` first (domain layer). */
-export function NewOrderModal({ open, onClose, onCreated }: NewOrderModalProps) {
+export function NewOrderModal({ open, onClose, onCreated, prefill }: NewOrderModalProps) {
   const can = useAuth().can;
   const currentUserName = useCurrentUserName();
   const allowed = can('createOrders');
@@ -78,12 +88,49 @@ export function NewOrderModal({ open, onClose, onCreated }: NewOrderModalProps) 
       if (c.error === null) setCustomers(c.data);
       if (p.error === null) setProducts(p.data);
       setLoadingOpts(false);
+
+      // Apply prefill after products/customers are loaded
+      if (prefill && !cancelled) {
+        // Pre-select customer by id, or by best name match
+        if (prefill.customerId) {
+          setCustomerId(prefill.customerId);
+        } else if (prefill.customerTyped && c.data) {
+          const typed = prefill.customerTyped.toLowerCase();
+          const match = c.data.find(
+            (cu) =>
+              cu.name.toLowerCase().includes(typed) ||
+              (cu.company_name ?? '').toLowerCase().includes(typed),
+          );
+          if (match) setCustomerId(match.id);
+        }
+        // Pre-fill delivery date
+        if (prefill.deliver) setDeliverAt(prefill.deliver);
+        // Pre-fill notes from ref/address
+        if (prefill.ref) setNotes(prefill.ref);
+        // Pre-fill sales
+        if (prefill.sales) setSales(prefill.sales);
+        // Pre-fill lines from parsed lines
+        if (prefill.lines && prefill.lines.length > 0 && p.data) {
+          const productMap = new Map(p.data.map((pr) => [pr.id, pr.name]));
+          setLines(
+            prefill.lines.map((pl) => ({
+              id: newLineId(),
+              productId: pl.productId && productMap.has(pl.productId) ? pl.productId : '',
+              freeText: pl.productId ? '' : pl.name,
+              qty: String(pl.qty ?? 1),
+              unit: pl.unit || 'kg',
+              parseStatus: pl.status,
+              rawText: pl.raw,
+            })),
+          );
+        }
+      }
     }
     loadOptions();
     return () => {
       cancelled = true;
     };
-  }, [open, currentUserName]);
+  }, [open, currentUserName, prefill]);
 
   useEffect(() => {
     if (!open) return;
@@ -189,6 +236,12 @@ export function NewOrderModal({ open, onClose, onCreated }: NewOrderModalProps) 
       close();
       return;
     }
+
+    // Persist any corrections the user made for unrecognized lines
+    const correctionPromises = cleanLines
+      .filter((l) => l.productId && l.rawText)
+      .map((l) => upsertCorrection(l.rawText!, l.productId));
+    await Promise.allSettled(correctionPromises);
 
     await appendOrderHistory({
       order_id: orderId,

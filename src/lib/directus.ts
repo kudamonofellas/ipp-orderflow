@@ -5,13 +5,11 @@
  * Never to Postgres, n8n, or Evolution API. All reads/writes go through here.
  *
  * Auth: email/password login via the `authentication('json')` composable.
- * Tokens (access + refresh) are persisted in `sessionStorage` so a page
- * reload within the same browser tab keeps the user signed in — the SDK
+ * Tokens (access + refresh) are persisted in `localStorage` so a page
+ * reload keeps the user signed in until they explicitly sign out. The SDK
  * reads from this storage on mount and auto-refreshes when the access token
- * expires. This does NOT violate architecture.md invariant #2 (which is
- * about business data, not auth state). Closing the tab clears sessionStorage
- * and logs the user out. A static-token fallback is kept so early read-only
- * wiring (VITE_DIRECTUS_TOKEN) keeps working during the migration.
+ * expires. A static-token fallback is kept so early read-only wiring
+ * (VITE_DIRECTUS_TOKEN) keeps working during the migration.
  *
  * Per code-standards.md: all Directus calls go through this wrapper — never
  * call createDirectus() ad-hoc in a component. All methods return
@@ -33,6 +31,7 @@ import {
 } from '@directus/sdk';
 import {
   CustomersCollectionArraySchema,
+  CorrectionsCollectionSchema,
   MessagesCollectionArraySchema,
   OrderHistoryCollectionSchema,
   OrderLinesCollectionArraySchema,
@@ -41,6 +40,7 @@ import {
   ProductsCollectionArraySchema,
 } from './schemas';
 import type {
+  CorrectionsCollection,
   CustomersCollection,
   MessagesCollection,
   OrderHistoryCollection,
@@ -212,16 +212,22 @@ export async function readMe(): Promise<DirectusResult<DirectusUser>> {
   }
 }
 
-/** True if the auth client currently holds a non-empty access token. */
+/** True if the auth client currently holds a valid (non-expired) access token. */
 export function hasToken(): boolean {
   const t = authClient.getToken() as unknown;
   if (typeof t === 'string' && (t as string).length > 0) return true;
-  // Fall back to sessionStorage (the SDK may not have rehydrated into memory yet)
+  // Fall back to localStorage (the SDK may not have rehydrated into memory yet)
   try {
     const raw = localStorage.getItem(SESSION_KEY);
     if (!raw) return false;
     const parsed = JSON.parse(raw) as AuthTokens;
-    return !!parsed.access_token;
+    if (!parsed.access_token) return false;
+    // If we have a refresh token, we can attempt a refresh even if access token
+    // is expired — so return true to let the caller try rehydration.
+    if (parsed.refresh_token) return true;
+    // No refresh token: check if access token is still valid.
+    if (parsed.expires_at && Date.now() >= parsed.expires_at) return false;
+    return true;
   } catch {
     return false;
   }
@@ -484,6 +490,140 @@ export async function updateOrder(
     const parsed = OrdersCollectionSchema.safeParse(raw);
     if (!parsed.success) {
       return { data: null, error: `Invalid order response: ${parsed.error.message}` };
+    }
+    return { data: parsed.data, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+/** Patch a product (e.g. toggle active/OOS). Roles: Warehouse, Admin, Owner. */
+export async function updateProduct(
+  id: string,
+  patch: Record<string, unknown>,
+): Promise<DirectusResult<ProductsCollection>> {
+  try {
+    const raw = await getClient().request(updateItem('products', id, patch as never));
+    const parsed = ProductsCollectionArraySchema.element.safeParse(raw);
+    if (!parsed.success) {
+      return { data: null, error: `Invalid product response: ${parsed.error.message}` };
+    }
+    return { data: parsed.data, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+/* ============================================================ Parse API === */
+
+/**
+ * The structured draft returned by the shared parsing service.
+ * Mirrors the output shape of the server-side port of recognize.js.
+ */
+export interface ParsedOrderDraft {
+  customerTyped: string | null;
+  customerId: string | null;
+  customerMatch: 'exact' | 'phone' | 'fuzzy' | 'new' | 'none' | null;
+  deliver: string | null;
+  dateGuessed: boolean;
+  paymentMethod: string | null;
+  address: string | null;
+  phone: string | null;
+  ref: string | null;
+  sales: string | null;
+  lines: ParsedOrderLine[];
+}
+
+export interface ParsedOrderLine {
+  raw: string;
+  qty: number;
+  unit: string;
+  productId: string | null;
+  name: string;
+  status: 'recognized' | 'probable' | 'unrecognized';
+  cuts: string[];
+  price: string | null;
+}
+
+/**
+ * POST raw WhatsApp text to the shared parsing service and return a structured
+ * order draft. Uses the x-internal-token header from VITE_INTERNAL_TOKEN.
+ */
+export async function parseOrderText(
+  text: string,
+): Promise<DirectusResult<ParsedOrderDraft>> {
+  try {
+    const internalToken = import.meta.env.VITE_INTERNAL_TOKEN;
+    const baseUrl = import.meta.env.VITE_DIRECTUS_URL;
+    const res = await fetch(`${baseUrl}/order-api/parse-order`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-internal-token': internalToken ?? '',
+      },
+      body: JSON.stringify({ text }),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      return { data: null, error: `Parse API error ${res.status}: ${body}` };
+    }
+    const data = (await res.json()) as ParsedOrderDraft;
+    return { data, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+/* =========================================================== Corrections === */
+
+/**
+ * Upsert a learned correction into the Directus `corrections` table.
+ * If a row with this token_key already exists, update product_id and increment
+ * times_used. Otherwise create a new row.
+ *
+ * Called when Admin manually assigns a product to a parser-unrecognized line
+ * so that future parses benefit from the correction globally.
+ */
+export async function upsertCorrection(
+  tokenKey: string,
+  productId: string,
+): Promise<DirectusResult<CorrectionsCollection>> {
+  try {
+    // Check for existing correction with the same token_key
+    const existing = (await getClient().request(
+      readItems('corrections', {
+        filter: { token_key: { _eq: tokenKey } } as never,
+        limit: 1,
+        fields: ['id', 'times_used'] as never,
+      }),
+    )) as Array<{ id: string; times_used: number | null }>;
+
+    if (existing && existing.length > 0) {
+      const row = existing[0];
+      const raw = await getClient().request(
+        updateItem('corrections', row.id, {
+          product_id: productId,
+          times_used: (row.times_used ?? 0) + 1,
+        } as never),
+      );
+      const parsed = CorrectionsCollectionSchema.safeParse(raw);
+      if (!parsed.success) {
+        return { data: null, error: `Invalid corrections response: ${parsed.error.message}` };
+      }
+      return { data: parsed.data, error: null };
+    }
+
+    // Create new correction
+    const raw = await getClient().request(
+      createItem('corrections', {
+        token_key: tokenKey,
+        product_id: productId,
+        times_used: 1,
+      } as never),
+    );
+    const parsed = CorrectionsCollectionSchema.safeParse(raw);
+    if (!parsed.success) {
+      return { data: null, error: `Invalid corrections response: ${parsed.error.message}` };
     }
     return { data: parsed.data, error: null };
   } catch (err) {

@@ -16,6 +16,7 @@ import {
   hasToken,
   login as directusLogin,
   logout as directusLogout,
+  refresh as directusRefresh,
   readMe,
   type DirectusUser,
 } from '../lib/directus';
@@ -56,10 +57,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     async function init() {
-      // On mount, check if there's a token in sessionStorage (survives reload).
-      // If so, rehydrate the user from /users/me. If not, just set loading false.
+      // On mount, if a token exists in localStorage, attempt to rehydrate the
+      // user. If readMe() fails (e.g. access token expired), try a token
+      // refresh first. If refresh also fails, clear storage and go to login.
       if (hasToken()) {
-        await rehydrate();
+        const firstTry = await rehydrate();
+        if (!firstTry.ok && !cancelled) {
+          // Access token may be expired — try refreshing
+          const refreshed = await directusRefresh();
+          if (refreshed.error === null && !cancelled) {
+            // Refresh succeeded: rehydrate with the new token
+            await rehydrate();
+          } else if (!cancelled) {
+            // Both failed: clear auth state cleanly
+            setUser(null);
+            setRole(null);
+            setLoading(false);
+          }
+        }
       } else {
         setLoading(false);
       }

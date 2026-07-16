@@ -147,9 +147,20 @@ export const OrderHistoryCollectionSchema = z.object({
   stage: z.string().nullable().optional(),
 });
 
+/** Directus `corrections` collection row (learned product-match corrections). */
+export const CorrectionsCollectionSchema = z.object({
+  id: z.string(),
+  token_key: z.string(),
+  product_id: z.string(),
+  created_by: z.string().nullable().optional(),
+  date_created: z.string().nullable().optional(),
+  times_used: z.number().nullable().optional(),
+});
+
 /** Array validators for list responses. */
 export const OrdersCollectionArraySchema = z.array(OrdersCollectionSchema);
 export const MessagesCollectionArraySchema = z.array(MessagesCollectionSchema);
 export const CustomersCollectionArraySchema = z.array(CustomersCollectionSchema);
 export const ProductsCollectionArraySchema = z.array(ProductsCollectionSchema);
 export const OrderLinesCollectionArraySchema = z.array(OrderLinesCollectionSchema);
+export const CorrectionsCollectionArraySchema = z.array(CorrectionsCollectionSchema);

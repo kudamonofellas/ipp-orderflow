@@ -11,6 +11,7 @@
 
 import type { z } from 'zod';
 import type {
+  CorrectionsCollectionSchema,
   CustomersCollectionSchema,
   MessagesCollectionSchema,
   OrderHistoryCollectionSchema,
@@ -25,3 +26,4 @@ export type CustomersCollection = z.infer<typeof CustomersCollectionSchema>;
 export type ProductsCollection = z.infer<typeof ProductsCollectionSchema>;
 export type OrderLinesCollection = z.infer<typeof OrderLinesCollectionSchema>;
 export type OrderHistoryCollection = z.infer<typeof OrderHistoryCollectionSchema>;
+export type CorrectionsCollection = z.infer<typeof CorrectionsCollectionSchema>;

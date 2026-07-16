@@ -8,11 +8,12 @@
 | Language    | TypeScript                         | Type safety on the frontend (prototype was plain JS).                         |
 | UI          | lucide-react + plain CSS           | Icons + styling. No Tailwind. Light/dark theme, EN/Bahasa i18n.               |
 | Backend API | Directus 12.0.2 (headless CMS)     | REST/GraphQL API, auth, file storage, role ACLs, realtime. Replaces Firebase. |
-| Database    | PostgreSQL (`horeca_orders` db)    | Single source of truth for all business data.                                 |
+| Database    | PostgreSQL (`horeca_orders_dev` / `horeca_orders` db) | Dev vs Prod databases on Postgres. Single source of truth for all business data. |
 | Automation  | n8n (+ its own Postgres)           | WhatsApp intake workflow: parses group messages → draft orders in Directus.   |
 | WhatsApp    | Evolution API (+ Postgres + Redis) | WhatsApp integration; webhooks → n8n.                                         |
 | Files       | Directus Files (`directus_files`)  | Proof photos, attachments — visible across devices.                           |
 | Proxy/TLS   | Traefik + Let's Encrypt            | Reverse proxy, auto-HTTPS on `*.kudafellas.cloud`.                            |
+| Parsing Svc | Shared Parser REST API             | Node endpoint at `/order-api/parse-order` for copy-paste WhatsApp intake parsing. |
 | Mobile      | Capacitor 8 (later phase)          | Android APK — NOT in Phase 1, but remains a goal.                             |
 | LLM gateway | Hermes (GPT-4o)                    | **On hold** per user — not wired in Phase 1.                                  |
 
@@ -22,9 +23,10 @@
 - `context/` — Project documentation (overview, architecture, schema snapshots). Not shipped.
 - `.agents/memories/` — Imported session notes + project context. Not shipped.
 - **Directus (prod `admin.kudafellas.cloud` / dev `dev-admin.kudafellas.cloud`)** — Owns all business collections, auth, roles, file storage, realtime subscriptions. The frontend talks to this via `@directus/sdk`.
-- **n8n** — Owns the WhatsApp intake automation. Reads from Evolution API webhooks, writes draft orders + messages into Directus. The frontend does NOT call n8n directly.
+- **Shared Parsing Service (`dev-admin.kudafellas.cloud/order-api/parse-order`)** — A server-side REST endpoint that parses raw WhatsApp order text into a structured draft (customer match, delivery date, item lines with match status). Called by the frontend copy-paste intake flow using the `x-internal-token` header (`VITE_INTERNAL_TOKEN` in `.env`). This same parsing logic is also invoked by the n8n WhatsApp automation flow — one implementation shared by both paths. The frontend does NOT call n8n directly.
+- **n8n** — Owns the WhatsApp intake automation. Reads from Evolution API webhooks, calls the shared parsing service, and writes draft orders + messages into Directus. The frontend does NOT call n8n directly.
 - **Evolution API** — Owns the WhatsApp connection. Sends webhooks to n8n. The frontend does NOT talk to Evolution API.
-- **Postgres `horeca_orders`** — The business database Directus sits on top of. Not accessed directly by the frontend (always via Directus).
+- **Postgres `horeca_orders_dev`** (dev) / **`horeca_orders`** (prod) — The business database Directus sits on top of. Not accessed directly by the frontend (always via Directus). We are currently in development using `horeca_orders_dev`.
 
 ## Storage Model
 
@@ -99,6 +101,7 @@ The current schema is **intake-focused** (WhatsApp → order draft). It does not
 - **`courier_locations`** — ephemeral live courier GPS (replaces BroadcastChannel `ipp-live-loc`). Upserted per ping. Fields: `courier` (→ `directus_users`), `lat` NUMERIC(9,6), `lng` NUMERIC(9,6), `at` TIMESTAMPTZ. Prefer Directus realtime subscriptions over polling.
 - **`role_permissions`** — Owner-configurable per-role capability overrides (replaces `settings.permissions`). Composite PK (`capability`, `role`). Owner is always allowed and not stored here. Absence of a row falls back to the coded default in the domain layer.
 - **`settings`** — singleton operational settings (replaces `DEFAULT_SETTINGS`). Fields: `require_photo` BOOL, `tol_below_pct` INT, `tol_above_pct` INT, `dispatch_proof_required` BOOL, `lang` TEXT.
+- **`corrections`** — Learned product-matching corrections. When Admin manually assigns a product to a parser-unrecognized line, the correction is saved here so every future parse benefits from it. Fields: `id` UUID PK, `token_key` VARCHAR(500) UNIQUE (normalized token string from the raw line text), `product_id` UUID (→ `products`), `created_by` UUID (→ `directus_users`), `date_created` TIMESTAMPTZ, `times_used` INT. The shared parsing service reads this table before doing fuzzy matching.
 
 #### `orders` extensions (fields to add to the existing collection)
 

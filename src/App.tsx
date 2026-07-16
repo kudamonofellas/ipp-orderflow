@@ -3,9 +3,11 @@ import type { ReactNode } from 'react';
 import { AppLayout } from './layouts/AppLayout/AppLayout';
 import { AuthProvider } from './hooks/RoleContext';
 import { useAuth } from './hooks/useAuth';
+import { Customers } from './pages/Customers/Customers';
 import { Dashboard } from './pages/Dashboard/Dashboard';
 import { Login } from './pages/Login/Login';
 import { Orders } from './pages/Orders/Orders';
+import { Products } from './pages/Products/Products';
 import { Placeholder } from './pages/Placeholder/Placeholder';
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
@@ -46,7 +48,8 @@ export default function App() {
           >
             <Route index element={<Dashboard />} />
             <Route path="orders" element={<Orders />} />
-            <Route path="customers" element={<Placeholder title="Customers" />} />
+            <Route path="customers" element={<Customers />} />
+            <Route path="products" element={<Products />} />
             <Route path="reports" element={<Placeholder title="Reports" />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>

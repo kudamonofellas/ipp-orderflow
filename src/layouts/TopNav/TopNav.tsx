@@ -17,6 +17,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/', label: 'Dashboard', icon: 'dashboard' },
   { to: '/orders', label: 'Orders', icon: 'orders' },
   { to: '/customers', label: 'Customers', icon: 'customers' },
+  { to: '/products', label: 'Products', icon: 'products' },
   { to: '/reports', label: 'Reports', icon: 'reports' },
 ];
 

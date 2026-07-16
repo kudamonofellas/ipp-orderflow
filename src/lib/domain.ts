@@ -39,6 +39,8 @@ export type Capability =
   | 'processReturns'
   | 'manageRoles'
   | 'manageSettings'
+  | 'manage_products'
+  | 'cancelOrders'
   | 'seePrices';
 
 /**
@@ -54,12 +56,15 @@ export const ALLOW: Record<Exclude<Role, 'Owner'>, Partial<Record<Capability, bo
     advanceStage: true,
     printDocuments: true,
     processReturns: true,
+    manage_products: true,
+    cancelOrders: true,
     seePrices: true,
   },
   Warehouse: {
     weighColdStorage: true,
     packWarehouse: true,
     advanceStage: true,
+    manage_products: true,
   },
   Production: {
     cutProduction: true,

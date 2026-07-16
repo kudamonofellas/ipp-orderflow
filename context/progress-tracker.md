@@ -5,11 +5,11 @@ change.
 
 ## Current Phase
 
-- In progress — app shell + Admin Dashboard
+- In progress — Refactoring authentication longevity, implementing Products & Customers views, and building Horeca Channel intake copy-paste message parser using the server-side API.
 
 ## Current Goal
 
-- Ship the Admin Dashboard UI (matching `context/designs/Dashboard.png`) on top of the design-system foundation, then wire it to Directus in a later unit
+- Complete Customers page, Products page (with OOS toggles), Channel Selection modal, and copy-paste intake modal flow (connecting to the `/order-api/parse-order` endpoint and Directus `corrections` table). Implement auth token refresh retry flow on API 401 error.
 
 ## Completed
 
