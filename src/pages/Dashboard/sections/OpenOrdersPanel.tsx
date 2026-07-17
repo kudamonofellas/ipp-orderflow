@@ -154,11 +154,11 @@ export function OpenOrdersPanel({
             </table>
           </div>
 
-          <footer className={styles.footer}>
-            <span className={styles.footerRange}>
+          <footer className={styles.pagination}>
+            <span className={styles.pageInfo}>
               Showing {rangeStart}–{rangeEnd} of {total}
             </span>
-            <div className={styles.pageActions}>
+            <div className={styles.pageControls}>
               <button
                 type="button"
                 className={styles.pageButton}
@@ -168,8 +168,8 @@ export function OpenOrdersPanel({
               >
                 <Icon name="chevronLeft" size={16} />
               </button>
-              <span className={styles.pageNum}>
-                Page {currentPage} of {totalPages}
+              <span className={styles.pageIndicator}>
+                {currentPage} / {totalPages}
               </span>
               <button
                 type="button"

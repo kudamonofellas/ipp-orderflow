@@ -29,7 +29,7 @@
 
 .table th {
   font: var(--text-label);
-  color: var(--text-primary);
+  color: var(--text-muted);
   font-weight: 600;
   padding: var(--space-sm) var(--space-md);
 }
@@ -43,6 +43,7 @@
   font-weight: 500;
   background: var(--bg-muted);
   color: var(--text-muted);
+  text-transform: uppercase;
 }
 
 .arrowHead {

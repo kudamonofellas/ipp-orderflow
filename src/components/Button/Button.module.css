@@ -22,6 +22,27 @@
   background: var(--accent-primary-dark);
 }
 
+.secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: 6px var(--space-sm);
+  font: var(--text-label);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) var(--ease-default),
+    border-color var(--duration-fast) var(--ease-default);
+}
+
+.secondary:hover {
+  background: var(--bg-surface-hover);
+  border-color: var(--accent-primary);
+}
+
 .ghost {
   background: transparent;
   color: var(--text-secondary);

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card } from '../../components/Card/Card';
 import { Icon } from '../../components/Icon/Icon';
+import { Button } from '../../components/Button/Button'
 import { useAuth } from '../../hooks/useAuth';
 import {
   readCustomers,
@@ -181,10 +182,10 @@ export function CustomerDetail() {
     <div className={styles.container}>
       <header className={styles.header}>
         <div className={styles.titleSection}>
-          <button type="button" className={styles.backBtn} onClick={() => navigate('/customers')}>
+          <Button type="button" variant='secondary' onClick={() => navigate('/customers')}>
             <Icon name="chevronLeft" size={16} />
             Back
-          </button>
+          </Button>
           <div className={styles.titleRow}>
             <h1 className={styles.title}>
               {isNew ? 'New Customer' : name}
@@ -356,10 +357,10 @@ export function CustomerDetail() {
                   <td>
                     {o.order_date
                       ? new Date(o.order_date).toLocaleDateString('en-US', {
-                          month: 'short',
-                          day: 'numeric',
-                          year: 'numeric',
-                        })
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric',
+                      })
                       : '—'}
                   </td>
                   <td style={{ textAlign: 'right' }}>{currency.format(getOrderValue(o.id))}</td>

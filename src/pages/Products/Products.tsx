@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Icon } from '../../components/Icon/Icon';
-import { readProducts, updateProduct } from '../../lib/directus';
+import { Card } from '../../components/Card/Card';
+import { readProducts, updateProduct, aggregateProducts } from '../../lib/directus';
 import { useAuth } from '../../hooks/useAuth';
 import type { ProductsCollection } from '../../types/directus';
 import styles from './Products.module.css';
 
 const PAGE_SIZE = 25;
+
 
 type ActiveFilter = 'all' | 'active' | 'oos';
 
@@ -65,10 +67,9 @@ export function Products() {
           sort: ['name'],
           fields: ['id', 'name', 'accurate_name', 'category', 'brand', 'form', 'pack', 'active'],
         }),
-        readProducts({
-          filter,
-          limit: -1,
-          fields: ['id'],
+        aggregateProducts({
+          aggregate: { count: '*' },
+          ...(Object.keys(filter).length ? { query: { filter } } : {}),
         }),
       ]);
 
@@ -76,7 +77,15 @@ export function Products() {
         setError(dataRes.error);
       } else {
         setProducts(dataRes.data ?? []);
-        setTotal(countRes.data?.length ?? 0);
+        if (countRes.error) {
+          // Count failed independently of the data fetch — don't block the
+          // list from rendering, but don't silently claim a total of 0 either.
+          console.warn('Failed to fetch product count:', countRes.error);
+          setTotal(dataRes.data?.length ?? 0);
+        } else {
+          const countValue = Number(countRes.data?.[0]?.count ?? 0);
+          setTotal(Number.isNaN(countValue) ? 0 : countValue);
+        }
       }
       setLoading(false);
     };
@@ -121,6 +130,9 @@ export function Products() {
   };
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const rangeStart = total === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1;
+  const rangeEnd = Math.min(currentPage * PAGE_SIZE, total);
 
   const FILTERS: { key: ActiveFilter; label: string }[] = [
     { key: 'all', label: 'All' },
@@ -130,6 +142,7 @@ export function Products() {
 
   return (
     <main className={styles.main}>
+
       <div className={styles.header}>
         <h1 className={styles.title}>Products</h1>
         {!loading && (
@@ -172,108 +185,115 @@ export function Products() {
         </div>
       </div>
 
-      <div className={styles.tableWrapper}>
-        <table className={styles.table}>
-          <thead className={styles.thead}>
-            <tr>
-              <th className={styles.th}>Name</th>
-              <th className={styles.th}>Category</th>
-              <th className={styles.th}>Brand</th>
-              <th className={styles.th}>Form / Pack</th>
-              {canToggleOOS && (
-                <th className={`${styles.th} ${styles.right}`}>Active</th>
-              )}
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr className={styles.stateRow}>
-                <td colSpan={canToggleOOS ? 5 : 4}>Loading products…</td>
+      <Card>
+        <div>
+          <table className={styles.table}>
+            <thead>
+              <tr>
+                <th className={styles.th}>Name</th>
+                <th className={styles.th}>Category</th>
+                <th className={styles.th}>Brand</th>
+                <th className={styles.th}>Form / Pack</th>
+                {canToggleOOS && (
+                  <th className={styles.th}>Active</th>
+                )}
               </tr>
-            ) : error ? (
-              <tr className={styles.stateRow}>
-                <td colSpan={canToggleOOS ? 5 : 4}>Error: {error}</td>
-              </tr>
-            ) : products.length === 0 ? (
-              <tr className={styles.stateRow}>
-                <td colSpan={canToggleOOS ? 5 : 4}>No products found</td>
-              </tr>
-            ) : (
-              products.map((p) => (
-                <tr
-                  key={p.id}
-                  className={`${styles.tr} ${p.active === false ? styles.inactive : ''}`}
-                  onClick={() => navigate(`/products/${p.id}`)}
-                  style={{ cursor: 'pointer' }}
-                >
-                  <td className={styles.td}>
-                    <div className={styles.nameCell}>
-                      <span className={styles.name}>{p.name}</span>
-                      {p.accurate_name && p.accurate_name !== p.name && (
-                        <span className={styles.accurateName}>{p.accurate_name}</span>
-                      )}
-                    </div>
-                  </td>
-                  <td className={styles.td}>
-                    {p.category ? (
-                      <span className={styles.pill}>{p.category}</span>
-                    ) : (
-                      '—'
-                    )}
-                  </td>
-                  <td className={styles.td}>{p.brand ?? '—'}</td>
-                  <td className={styles.td}>
-                    {[p.form, p.pack].filter(Boolean).join(' / ') || '—'}
-                  </td>
-                  {canToggleOOS && (
-                    <td className={`${styles.td} ${styles.right}`}>
-                      <button
-                        id={`product-toggle-${p.id}`}
-                        className={styles.toggle}
-                        onClick={(e) => handleToggleActive(e, p)}
-                        disabled={togglingId === p.id}
-                        aria-label={p.active ? 'Mark out of stock' : 'Mark active'}
-                        title={p.active ? 'Mark out of stock' : 'Mark active'}
-                      >
-                        <span className={styles.toggleLabel}>
-                          {p.active ? 'Active' : 'OOS'}
-                        </span>
-                        <span className={`${styles.toggleTrack} ${p.active ? styles.on : ''}`}>
-                          <span className={styles.toggleThumb} />
-                        </span>
-                      </button>
-                    </td>
-                  )}
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr className={styles.stateRow}>
+                  <td colSpan={canToggleOOS ? 5 : 4}>Loading products…</td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ) : error ? (
+                <tr className={styles.stateRow}>
+                  <td colSpan={canToggleOOS ? 5 : 4}>Error: {error}</td>
+                </tr>
+              ) : products.length === 0 ? (
+                <tr className={styles.stateRow}>
+                  <td colSpan={canToggleOOS ? 5 : 4}>No products found</td>
+                </tr>
+              ) : (
+                products.map((p) => (
+                  <tr
+                    key={p.id}
+                    className={`${styles.orderRow} ${styles.clickable} ${p.active === false ? styles.inactive : ''}`}
+                    onClick={() => navigate(`/products/${p.id}`)}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <td className={styles.td}>
+                      <div className={styles.nameCell}>
+                        <span className={styles.name}>{p.name}</span>
+                        {p.accurate_name && p.accurate_name !== p.name && (
+                          <span className={styles.accurateName}>{p.accurate_name}</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className={styles.td}>
+                      {p.category ? (
+                        <span className={styles.pill}>{p.category}</span>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+                    <td className={styles.td}>{p.brand ?? '—'}</td>
+                    <td className={styles.td}>
+                      {[p.form, p.pack].filter(Boolean).join(' / ') || '—'}
+                    </td>
+                    {canToggleOOS && (
+                      <td className={styles.td}>
+                        <button
+                          id={`product-toggle-${p.id}`}
+                          className={styles.toggle}
+                          onClick={(e) => handleToggleActive(e, p)}
+                          disabled={togglingId === p.id}
+                          aria-label={p.active ? 'Mark out of stock' : 'Mark active'}
+                          title={p.active ? 'Mark out of stock' : 'Mark active'}
+                        >
+                          <span className={styles.toggleLabel}>
+                            {p.active ? 'Active' : 'OOS'}
+                          </span>
+                          <span className={`${styles.toggleTrack} ${p.active ? styles.on : ''}`}>
+                            <span className={styles.toggleThumb} />
+                          </span>
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
 
-        {!loading && !error && totalPages > 1 && (
-          <div className={styles.pagination}>
-            <button
-              className={styles.pageBtn}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page === 1}
-              aria-label="Previous page"
-            >
-              <Icon name="chevronLeft" size={16} />
-            </button>
+          <footer className={styles.pagination}>
             <span className={styles.pageInfo}>
-              {page} / {totalPages}
+              Showing {rangeStart}–{rangeEnd} of {total}
             </span>
-            <button
-              className={styles.pageBtn}
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={page === totalPages}
-              aria-label="Next page"
-            >
-              <Icon name="chevronRight" size={16} />
-            </button>
-          </div>
-        )}
-      </div>
+            <div className={styles.pageControls}>
+              <button
+                type="button"
+                className={styles.pageButton}
+                onClick={() => setPage?.(currentPage - 1)}
+                disabled={currentPage <= 1}
+                aria-label="Previous page"
+              >
+                <Icon name="chevronLeft" size={16} />
+              </button>
+              <span className={styles.pageIndicator}>
+                {currentPage} / {totalPages}
+              </span>
+              <button
+                type="button"
+                className={styles.pageButton}
+                onClick={() => setPage?.(currentPage + 1)}
+                disabled={currentPage >= totalPages}
+                aria-label="Next page"
+              >
+                <Icon name="chevronRight" size={16} />
+              </button>
+            </div>
+          </footer>
+        </div>
+      </Card>
     </main>
   );
 }

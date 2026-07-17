@@ -3,7 +3,7 @@ import styles from './Button.module.css';
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   children: ReactNode;
-  variant?: 'primary' | 'ghost';
+  variant?: 'primary' | 'secondary' | 'ghost';
 }
 
 /** Solid primary or ghost button. Matches the Button baseline in ui-registry.md. */

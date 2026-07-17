@@ -82,98 +82,98 @@ export function Dashboard() {
         {isLoading ? (
           <div className={styles.loading}>Loading dashboard…</div>
         ) : (
-        <>
-        {/* Welcome + metrics row. "Add New Order" sits at the very end if allowed. */}
-        <div className={styles.topRow}>
-          <div className={styles.welcome}>
-            <p className={styles.label}>Welcome</p>
-            <h1 className={styles.welcomeName}>{currentUserName || '—'}</h1>
-          </div>
+          <>
+            {/* Welcome + metrics row. "Add New Order" sits at the very end if allowed. */}
+            <div className={styles.topRow}>
+              <div className={styles.welcome}>
+                <p className={styles.label}>Welcome</p>
+                <h1 className={styles.welcomeName}>{currentUserName || '—'}</h1>
+              </div>
 
-          <div className={styles.metricsRow}>
-            {metrics.map((metric) => (
-              <MetricCard
-                key={metric.id}
-                icon={METRIC_ICONS[metric.id] ?? 'total'}
-                value={metric.value}
-                label={metric.label}
-                rangeLabel={metric.range}
-                onRangeChange={
-                  (metric.id === 'delivered' || metric.id === 'cancelled')
-                    ? (val, label) => {
-                        if (metric.id === 'delivered') setDeliveredRange({ val, label });
-                        else if (metric.id === 'cancelled') setCancelledRange({ val, label });
-                      }
-                    : undefined
-                }
-              />
-            ))}
-          </div>
+              <div className={styles.metricsRow}>
+                {metrics.map((metric) => (
+                  <MetricCard
+                    key={metric.id}
+                    icon={METRIC_ICONS[metric.id] ?? 'total'}
+                    value={metric.value}
+                    label={metric.label}
+                    rangeLabel={metric.range}
+                    onRangeChange={
+                      (metric.id === 'delivered' || metric.id === 'cancelled')
+                        ? (val, label) => {
+                          if (metric.id === 'delivered') setDeliveredRange({ val, label });
+                          else if (metric.id === 'cancelled') setCancelledRange({ val, label });
+                        }
+                        : undefined
+                    }
+                  />
+                ))}
+              </div>
 
-          {canCreateOrders && (
-            <button
-              type="button"
-              id="dashboard-new-order"
-              className={styles.newOrderCard}
-              onClick={startNewOrder}
-              title="Create a new order"
-            >
-              <Icon name="add" size={24} />
-              <span>New Order</span>
-            </button>
-          )}
+              {canCreateOrders && (
+                <button
+                  type="button"
+                  id="dashboard-new-order"
+                  className={styles.newOrderCard}
+                  onClick={startNewOrder}
+                  title="Create a new order"
+                >
+                  <Icon name="add" size={24} />
+                  <span>New Order</span>
+                </button>
+              )}
 
-        </div>
+            </div>
 
-        {/* Stage pills grid. Stages owned by the current role are highlighted. */}
-        <div className={styles.label}>
-          Current order pipeline
-        </div>
-        <div className={styles.currentStages}>
-          {currentPipeline.map((stage) => (
-            <StagePill
-              key={stage.stage}
-              count={stage.count}
-              label={stage.label}
-              highlight={ADMIN_HIGHLIGHT_STAGES.includes(stage.stage)}
-              onClick={() => navigate('/orders', { state: { stage: stage.stage } })}
+            {/* Stage pills grid. Stages owned by the current role are highlighted. */}
+            <div className={styles.label}>
+              Current order pipeline
+            </div>
+            <div className={styles.currentStages}>
+              {currentPipeline.map((stage) => (
+                <StagePill
+                  key={stage.stage}
+                  count={stage.count}
+                  label={stage.label}
+                  highlight={ADMIN_HIGHLIGHT_STAGES.includes(stage.stage)}
+                  onClick={() => navigate('/orders', { state: { stage: stage.stage } })}
+                />
+              ))}
+            </div>
+
+            <div className={styles.label}>
+              Returns workflow
+            </div>
+            <div className={styles.returnStages}>
+              {returnsWorkflow.map((stage) => (
+                <StagePill
+                  key={stage.stage}
+                  count={stage.count}
+                  label={stage.label}
+                  highlight={ADMIN_HIGHLIGHT_STAGES.includes(stage.stage)}
+                  onClick={() => navigate('/orders', { state: { stage: stage.stage } })}
+                />
+              ))}
+            </div>
+
+            {/* Attention + intake side by side. Open orders full width below. */}
+            <div className={styles.panels}>
+              <IntakePanel messages={intakeMessages} />
+              <AttentionPanel items={attentionItems} />
+            </div>
+
+            <OpenOrdersPanel
+              orders={openOrders}
+              loading={ordersLoading}
+              error={error}
+              total={total}
+              page={page}
+              pageSize={pageSize}
+              onPageChange={setPage}
+              sortBy={sortBy}
+              onSortChange={setSortBy}
             />
-          ))}
-        </div>
-
-        <div className={styles.label}>
-          Returns workflow
-        </div>
-        <div className={styles.returnStages}>
-          {returnsWorkflow.map((stage) => (
-            <StagePill
-              key={stage.stage}
-              count={stage.count}
-              label={stage.label}
-              highlight={ADMIN_HIGHLIGHT_STAGES.includes(stage.stage)}
-              onClick={() => navigate('/orders', { state: { stage: stage.stage } })}
-            />
-          ))}
-        </div>
-
-        {/* Attention + intake side by side. Open orders full width below. */}
-        <div className={styles.panels}>
-          <IntakePanel messages={intakeMessages} />
-          <AttentionPanel items={attentionItems} />
-        </div>
-
-        <OpenOrdersPanel
-          orders={openOrders}
-          loading={ordersLoading}
-          error={error}
-          total={total}
-          page={page}
-          pageSize={pageSize}
-          onPageChange={setPage}
-          sortBy={sortBy}
-          onSortChange={setSortBy}
-        />
-        </>
+          </>
         )}
       </div>
 

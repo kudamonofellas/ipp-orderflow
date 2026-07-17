@@ -367,6 +367,40 @@ export async function aggregateOrders(
 }
 
 /**
+ * Aggregate customer counts (e.g. total matching a filter for pagination).
+ *
+ * Per code-standards.md: use aggregate() for counts, never readItems() + .length.
+ */
+export async function aggregateCustomers(
+  query: DirectusQuery,
+): Promise<DirectusResult<AggregateCountRow[]>> {
+  try {
+    const raw = await getClient().request(aggregate('customers', query as never));
+    const rows = Array.isArray(raw) ? (raw as AggregateCountRow[]) : [];
+    return { data: rows, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+/**
+ * Aggregate product counts (e.g. total matching a filter for pagination).
+ *
+ * Per code-standards.md: use aggregate() for counts, never readItems() + .length.
+ */
+export async function aggregateProducts(
+  query: DirectusQuery,
+): Promise<DirectusResult<AggregateCountRow[]>> {
+  try {
+    const raw = await getClient().request(aggregate('products', query as never));
+    const rows = Array.isArray(raw) ? (raw as AggregateCountRow[]) : [];
+    return { data: rows, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+/**
  * Compute the next sequential order number for the current year.
  *
  * Reads the max existing `no` for `IPP-<year>-NNNN` rows and returns the next.

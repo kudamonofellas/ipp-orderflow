@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { AppLayout } from './layouts/AppLayout/AppLayout';
 import { AuthProvider } from './hooks/RoleContext';
 import { useAuth } from './hooks/useAuth';
-import { Customers } from './pages/Customers/Customers';
+import { Customers } from './pages/Customers/Customers'
 import { CustomerDetail } from './pages/CustomerDetail/CustomerDetail';
 import { Dashboard } from './pages/Dashboard/Dashboard';
 import { Login } from './pages/Login/Login';

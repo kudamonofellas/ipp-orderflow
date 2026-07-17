@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Icon } from '../../components/Icon/Icon';
+import { Card } from '../../components/Card/Card';
 import { useAuth } from '../../hooks/useAuth';
-import { readCustomers } from '../../lib/directus';
+import { readCustomers, aggregateCustomers } from '../../lib/directus';
 import type { CustomersCollection } from '../../types/directus';
 import styles from './Customers.module.css';
 
@@ -46,10 +47,9 @@ export function Customers() {
           sort: ['name'],
           fields: ['id', 'name', 'company_name', 'channel', 'contact', 'area', 'pay_method', 'term_days'],
         }),
-        readCustomers({
-          filter,
-          limit: -1,
-          fields: ['id'],
+        aggregateCustomers({
+          aggregate: { count: '*' },
+          ...(Object.keys(filter).length ? { query: { filter } } : {}),
         }),
       ]);
 
@@ -57,7 +57,15 @@ export function Customers() {
         setError(dataRes.error);
       } else {
         setCustomers(dataRes.data ?? []);
-        setTotal(countRes.data?.length ?? 0);
+        if (countRes.error) {
+          // Count failed independently of the data fetch — don't block the
+          // list from rendering, but don't silently claim a total of 0 either.
+          console.warn('Failed to fetch customer count:', countRes.error);
+          setTotal(dataRes.data?.length ?? 0);
+        } else {
+          const countValue = Number(countRes.data?.[0]?.count ?? 0);
+          setTotal(Number.isNaN(countValue) ? 0 : countValue);
+        }
       }
       setLoading(false);
     };
@@ -77,6 +85,9 @@ export function Customers() {
   };
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const rangeStart = total === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1;
+  const rangeEnd = Math.min(currentPage * PAGE_SIZE, total);
 
   return (
     <main className={styles.main}>
@@ -110,9 +121,9 @@ export function Customers() {
         </div>
       </div>
 
-      <div className={styles.tableWrapper}>
+      <Card>
         <table className={styles.table}>
-          <thead className={styles.thead}>
+          <thead>
             <tr>
               <th className={styles.th}>Name / Company</th>
               <th className={styles.th}>Channel</th>
@@ -138,10 +149,9 @@ export function Customers() {
             ) : (
               customers.map((c) => (
                 <tr
+                  className={`${styles.orderRow} ${styles.clickable}`}
                   key={c.id}
-                  className={styles.tr}
                   onClick={() => navigate(`/customers/${c.id}`)}
-                  style={{ cursor: 'pointer' }}
                 >
                   <td className={styles.td}>
                     <div className={styles.nameCell}>
@@ -175,30 +185,37 @@ export function Customers() {
           </tbody>
         </table>
 
-        {!loading && !error && totalPages > 1 && (
-          <div className={styles.pagination}>
+        <footer className={styles.pagination}>
+          <span className={styles.pageInfo}>
+            Showing {rangeStart}–{rangeEnd} of {total}
+          </span>
+          <div className={styles.pageControls}>
             <button
-              className={styles.pageBtn}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page === 1}
+              type="button"
+              className={styles.pageButton}
+              onClick={() => setPage?.(currentPage - 1)}
+              disabled={currentPage <= 1}
               aria-label="Previous page"
             >
               <Icon name="chevronLeft" size={16} />
             </button>
-            <span className={styles.pageInfo}>
-              {page} / {totalPages}
+            <span className={styles.pageIndicator}>
+              {currentPage} / {totalPages}
             </span>
             <button
-              className={styles.pageBtn}
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={page === totalPages}
+              type="button"
+              className={styles.pageButton}
+              onClick={() => setPage?.(currentPage + 1)}
+              disabled={currentPage >= totalPages}
               aria-label="Next page"
             >
               <Icon name="chevronRight" size={16} />
             </button>
           </div>
-        )}
-      </div>
+        </footer>
+
+
+      </Card>
     </main>
   );
 }
