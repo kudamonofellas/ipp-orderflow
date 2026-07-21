@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Icon } from '../Icon/Icon';
+import { Button } from '../Button/Button';
 import { useAuth, useCurrentUserName } from '../../hooks/useAuth';
 import {
   appendOrderHistory,
@@ -429,12 +430,12 @@ export function NewOrderModal({ open, onClose, onCreated, prefill }: NewOrderMod
           )}
 
           <footer className={styles.footer}>
-            <button type="button" className={styles.cancelBtn} onClick={close} disabled={submitting}>
+            <Button variant="ghost" size="md" onClick={close} disabled={submitting}>
               Cancel
-            </button>
-            <button type="submit" className={styles.submitBtn} disabled={submitting || !allowed || loadingOpts}>
+            </Button>
+            <Button type="submit" variant="primary" size="md" disabled={submitting || !allowed || loadingOpts}>
               {submitting ? 'Creating…' : 'Create order'}
-            </button>
+            </Button>
           </footer>
         </form>
       </div>

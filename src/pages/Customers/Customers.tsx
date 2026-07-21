@@ -25,10 +25,10 @@ export function Customers() {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    setLoading(true);
-    setError(null);
+    async function load() {
+      setLoading(true);
+      setError(null);
 
-    const load = async () => {
       const filter: Record<string, unknown> = {};
       if (search.trim()) {
         filter['_or'] = [

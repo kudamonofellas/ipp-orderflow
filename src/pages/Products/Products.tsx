@@ -53,10 +53,10 @@ export function Products() {
   }, [search, activeFilter]);
 
   useEffect(() => {
-    setLoading(true);
-    setError(null);
+    async function load() {
+      setLoading(true);
+      setError(null);
 
-    const load = async () => {
       const filter = buildFilter();
 
       const [dataRes, countRes] = await Promise.all([

@@ -13,12 +13,6 @@
   gap: var(--space-md);
 }
 
-.titleSection {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
-}
-
 .titleRow {
   display: flex;
   align-items: center;
@@ -26,29 +20,9 @@
 }
 
 .title {
-  font: var(--text-h1);
+  font: var(--text-h2);
   color: var(--text-primary);
   margin: 0;
-}
-
-.backBtn {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-xs);
-  background: transparent;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  padding: 6px 12px;
-  font: var(--text-body);
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: all var(--duration-fast);
-}
-
-.backBtn:hover {
-  background: var(--bg-surface-hover);
-  border-color: var(--accent-primary);
-  color: var(--text-primary);
 }
 
 .card {

@@ -1,6 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { AppLayout } from './layouts/AppLayout/AppLayout';
+import { SidebarProvider } from './layouts/Sidebar/Sidebar';
 import { AuthProvider } from './hooks/RoleContext';
 import { useAuth } from './hooks/useAuth';
 import { Customers } from './pages/Customers/Customers'
@@ -45,7 +46,9 @@ export default function App() {
           <Route
             element={
               <ProtectedRoute>
-                <AppLayout />
+                <SidebarProvider>
+                  <AppLayout />
+                </SidebarProvider>
               </ProtectedRoute>
             }
           >
@@ -57,6 +60,7 @@ export default function App() {
             <Route path="products" element={<Products />} />
             <Route path="products/:id" element={<ProductDetail />} />
             <Route path="reports" element={<Placeholder title="Reports" />} />
+            <Route path="settings" element={<Placeholder title="Settings" />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>

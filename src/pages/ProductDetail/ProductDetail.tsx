@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card } from '../../components/Card/Card';
 import { Icon } from '../../components/Icon/Icon';
+import { Button } from '../../components/Button/Button';
 import { useAuth } from '../../hooks/useAuth';
 import {
   readProducts,
@@ -163,11 +164,11 @@ export function ProductDetail() {
   return (
     <div className={styles.container}>
       <header className={styles.header}>
-        <div className={styles.titleSection}>
-          <button type="button" className={styles.backBtn} onClick={() => navigate('/products')}>
+        <div>
+          <Button type="button" variant="tertiary" onClick={() => navigate('/products')}>
             <Icon name="chevronLeft" size={16} />
             Back
-          </button>
+          </Button>
           <div className={styles.titleRow}>
             <h1 className={styles.title}>
               {isNew ? 'New Product' : name}
@@ -278,19 +279,19 @@ export function ProductDetail() {
             )}
 
             <div className={styles.actions}>
-              <button type="submit" className={styles.btnPrimary} disabled={saving || !name.trim()}>
+              <Button type="submit" variant="primary" size="md" disabled={saving || !name.trim()}>
                 {saving ? 'Saving…' : 'Save Product'}
-              </button>
+              </Button>
               {!isNew && (
-                <button
-                  type="button"
-                  className={styles.btnDanger}
+                <Button
+                  variant="secondary"
+                  size="md"
                   onClick={handleDelete}
                   disabled={saving}
                   title="Delete Product"
                 >
                   <Icon name="trash" size={16} />
-                </button>
+                </Button>
               )}
             </div>
           </form>

@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
+import { Button } from '../../components/Button/Button';
 import { Icon } from '../../components/Icon/Icon';
 import logo from '../../assets/logo.svg';
 import styles from './Login.module.css';
@@ -76,13 +77,14 @@ export function Login() {
             </p>
           )}
 
-          <button
+          <Button
             type="submit"
-            className={styles.submit}
+            variant="primary"
+            size="lg"
             disabled={submitting || loading || !email || !password}
           >
             {submitting || loading ? 'Signing in…' : 'Sign in'}
-          </button>
+          </Button>
         </form>
       </div>
     </div>

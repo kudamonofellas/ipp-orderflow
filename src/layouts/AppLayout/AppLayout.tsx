@@ -1,12 +1,12 @@
 import { Outlet } from 'react-router-dom';
-import { TopNav } from '../TopNav/TopNav';
+import { Sidebar } from '../Sidebar/Sidebar';
 import styles from './AppLayout.module.css';
 
-/** App shell: fixed top nav + routed content area. */
+/** App shell: collapsible sidebar + routed content area that pushes with it. */
 export function AppLayout() {
   return (
     <div className={styles.shell}>
-      <TopNav />
+      <Sidebar />
       <main className={styles.content}>
         <Outlet />
       </main>

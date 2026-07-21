@@ -18,21 +18,13 @@
   text-align: center;
 }
 
-/* ===== Welcome + metrics =====
-   Welcome | 3 metric cards | Add New Order (at the very end). */
+/* ===== TopRow: welcome (left) | actions (right) ===== */
 .topRow {
-  display: grid;
-  grid-template-columns: 160px 1fr auto;
-  gap: var(--space-3xl);
+  display: flex;
   align-items: center;
-}
-
-.metricsRow {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 200px));
-  gap: var(--space-4xl);
-  align-items: center;
-  justify-content: center;
+  justify-content: space-between;
+  gap: var(--space-lg);
+  flex-wrap: wrap;
 }
 
 .welcome {
@@ -47,35 +39,26 @@
   color: var(--text-secondary);
 }
 
+.heading {
+  font: var(--text-h3);
+}
+
 .welcomeName {
   font: var(--text-h2);
-  color: var(--text-primary);
+  color: var(--accent-primary);
 }
 
-
-/* "Add New Order" as a card matching the metric cards, at the row's end. */
-.newOrderCard {
+.topActions {
   display: flex;
-  flex-direction: row;
   align-items: center;
-  justify-content: center;
-  gap: var(--space-sm);
-  background: var(--accent-primary);
-  color: var(--text-on-accent);
-  border: none;
-  border-radius: var(--radius-lg);
-  padding: var(--space-sm) var(--space-md);
-  min-height: 40px;
-  align-self: center;
-  cursor: pointer;
-  font: 500 16px/1.3 var(--font-sans);
-  white-space: nowrap;
-  text-align: center;
-  transition: background-color var(--duration-fast) var(--ease-default);
+  gap: var(--space-md);
 }
 
-.newOrderCard:hover {
-  background: var(--accent-primary-dark);
+/* ===== Metrics row — 4 cards ===== */
+.metricsRow {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-lg);
 }
 
 /* ===== Stage pills ===== */
@@ -85,56 +68,66 @@
   gap: var(--space-md);
 }
 
-.returnStages {
+/* ===== 3-column panels grid ===== */
+.panelsGrid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--space-md);
-}
-
-/* ===== Panels: attention + intake side by side ===== */
-.panels {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: 280px minmax(0, 1fr) minmax(0, 1fr);
   gap: var(--space-lg);
   align-items: stretch;
+  align-content: start;
 }
 
-.panels > * {
+.panelsGrid>* {
   height: 100%;
+  min-height: 0;
+}
+
+.panelsGridTwo {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: var(--space-lg);
+  align-items: stretch;
+  align-content: start;
+}
+
+.panelsGridTwo>* {
+  height: 100%;
+  min-height: 0;
 }
 
 /* ===== Responsive ===== */
-@media (max-width: 1024px) {
-  .topRow {
-    grid-template-columns: 1fr;
+@media (max-width: 1280px) {
+  .panelsGrid {
+    grid-template-columns: 240px minmax(0, 1fr) minmax(0, 1fr);
   }
+}
+
+@media (max-width: 1024px) {
   .metricsRow {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .newOrderCard {
-    grid-column: 1 / -1;
-    flex-direction: row;
-  }
+
   .currentStages {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
-  .returnStages {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .panels {
+
+  .panelsGrid,
+  .panelsGridTwo {
     grid-template-columns: 1fr;
   }
 }
 
 @media (max-width: 640px) {
   .topRow {
-    grid-template-columns: 1fr;
+    flex-direction: column;
+    align-items: flex-start;
   }
+
   .metricsRow {
     grid-template-columns: 1fr;
   }
-  .currentStages,
-  .returnStages {
+
+  .currentStages {
     grid-template-columns: 1fr;
   }
 }

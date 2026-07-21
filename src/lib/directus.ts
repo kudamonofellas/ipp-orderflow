@@ -29,6 +29,7 @@ import {
   staticToken,
   updateItem,
   deleteItem,
+  uploadFiles,
 } from '@directus/sdk';
 import {
   CustomersCollectionSchema,
@@ -42,6 +43,8 @@ import {
   OrdersCollectionSchema,
   ProductsCollectionSchema,
   ProductsCollectionArraySchema,
+  AttachmentsCollectionSchema,
+  AttachmentsCollectionArraySchema,
 } from './schemas';
 import type {
   CorrectionsCollection,
@@ -51,6 +54,7 @@ import type {
   OrderLinesCollection,
   OrdersCollection,
   ProductsCollection,
+  AttachmentsCollection,
 } from '../types/directus';
 
 const url = import.meta.env.VITE_DIRECTUS_URL;
@@ -540,6 +544,90 @@ export async function readOrderHistory(
   }
 }
 
+/* ============================================================ Attachments === */
+
+/**
+ * Read all attachments for an order — both WhatsApp-sourced rows (message_id set)
+ * and manually-logged document entries (message_id null, number/note/label set).
+ * Sorted newest-first.
+ */
+export async function readAttachments(
+  orderId: string,
+): Promise<DirectusResult<AttachmentsCollection[]>> {
+  try {
+    const raw = await getClient().request(
+      readItems('attachments', {
+        filter: { order_uuid: { _eq: orderId } } as never,
+        sort: ['-created_at'] as never,
+        limit: -1,
+      }),
+    );
+    const parsed = AttachmentsCollectionArraySchema.safeParse(raw);
+    if (!parsed.success) {
+      return { data: null, error: `Invalid attachments response: ${parsed.error.message}` };
+    }
+    return { data: parsed.data, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+/**
+ * Shape for a manually-logged document entry.
+ * message_id is intentionally absent (stays null in DB) to distinguish from
+ * WhatsApp-sourced attachments.
+ */
+
+
+
+export interface CreateAttachmentInput {
+  order_uuid: string;
+  doc_type: string;        // 'DO' | 'SI' | 'Return Note' | 'Other'
+  number?: string;         // document number e.g. "DO-2026-0042"
+  note?: string;           // admin free-text note
+  label?: string;          // display label e.g. "Signed Invoice"
+  document_file?: string;  // uuid from directus_files after uploadFile()
+  created_by?: string;     // directus user uuid from useCurrentUserId()
+}
+
+export async function createAttachment(
+  input: CreateAttachmentInput,
+): Promise<DirectusResult<AttachmentsCollection>> {
+  try {
+    const raw = await getClient().request(createItem('attachments', input as never));
+    const parsed = AttachmentsCollectionSchema.safeParse(raw);
+    if (!parsed.success) {
+      return { data: null, error: `Invalid attachment response: ${parsed.error.message}` };
+    }
+    return { data: parsed.data, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+/**
+ * Upload a file to Directus Files and return its uuid.
+ * Pass the returned id as `document_file` in createAttachment().
+ */
+export async function uploadFile(
+  file: File,
+  folder?: string,
+): Promise<DirectusResult<{ id: string }>> {
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (folder) formData.append('folder', folder);
+    const raw = await getClient().request(uploadFiles(formData));
+    const result = raw as unknown as { id: string };
+    if (!result?.id) {
+      return { data: null, error: 'File upload returned no id' };
+    }
+    return { data: { id: result.id }, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
 /** Patch an order (e.g. stage transition). Used by later pipeline units. */
 export async function updateOrder(
   id: string,
@@ -550,6 +638,22 @@ export async function updateOrder(
     const parsed = OrdersCollectionSchema.safeParse(raw);
     if (!parsed.success) {
       return { data: null, error: `Invalid order response: ${parsed.error.message}` };
+    }
+    return { data: parsed.data, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+export async function updateOrderLine(
+  id: string,
+  patch: Record<string, unknown>,
+): Promise<DirectusResult<OrderLinesCollection>> {
+  try {
+    const raw = await getClient().request(updateItem('order_lines', id, patch as never));
+    const parsed = OrderLinesCollectionArraySchema.element.safeParse(raw);
+    if (!parsed.success) {
+      return { data: null, error: `Invalid order_line response: ${parsed.error.message}` };
     }
     return { data: parsed.data, error: null };
   } catch (err) {

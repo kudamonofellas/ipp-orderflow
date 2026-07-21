@@ -43,6 +43,7 @@ export function MetricCard({ icon, value, label, rangeLabel, onRangeChange }: Me
       <div className={styles.header}>
         <span className={styles.iconWrap}>
           <Icon name={icon} size={24} />
+          <span className={styles.count}>{value}</span>
         </span>
         <div className={styles.rangeContainer} ref={containerRef}>
           {onRangeChange ? (
@@ -134,7 +135,6 @@ export function MetricCard({ icon, value, label, rangeLabel, onRangeChange }: Me
         </div>
       </div>
       <div className={styles.body}>
-        <span className={styles.value}>{value}</span>
         <span className={styles.label}>{label}</span>
       </div>
     </article>

@@ -1,18 +1,45 @@
+/* Base layout shared by every variant + size. */
 .button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: var(--space-sm);
-  font: var(--text-button);
+  gap: var(--space-xs);
   border-radius: var(--radius-md);
-  padding: var(--space-sm) var(--space-lg);
-  border: none;
   cursor: pointer;
+  border: none;
+  font: var(--text-label);
   transition:
     background-color var(--duration-fast) var(--ease-default),
+    border-color var(--duration-fast) var(--ease-default),
     color var(--duration-fast) var(--ease-default);
 }
 
+.button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* ===== Sizes ===== */
+.sm {
+  min-height: 32px;
+  padding: var(--space-xs) var(--space-sm);
+  font: var(--text-caption);
+}
+
+.md {
+  min-height: 40px;
+  padding: var(--space-sm) var(--space-md);
+  font: var(--text-label);
+}
+
+.lg {
+  min-height: 48px;
+  padding: var(--space-md) var(--space-lg);
+  font: var(--text-body);
+  font-weight: 500;
+}
+
+/* ===== Variants ===== */
 .primary {
   background: var(--accent-primary);
   color: var(--text-on-accent);
@@ -23,24 +50,25 @@
 }
 
 .secondary {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-xs);
   background: var(--bg-surface);
   border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  padding: 6px var(--space-sm);
-  font: var(--text-label);
   color: var(--text-secondary);
-  cursor: pointer;
-  transition:
-    background-color var(--duration-fast) var(--ease-default),
-    border-color var(--duration-fast) var(--ease-default);
 }
 
 .secondary:hover {
   background: var(--bg-surface-hover);
   border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+.tertiary {
+  background: var(--bg-surface);
+  color: var(--accent-primary);
+  padding: 0%;
+}
+
+.tertiary:hover {
+  color: color-mix(in srgb, var(--accent-primary), transparent 30%);
 }
 
 .ghost {
@@ -51,4 +79,14 @@
 .ghost:hover {
   background: var(--bg-surface-hover);
   color: var(--text-primary);
+}
+
+.button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.fullWidth,
+.full-width {
+  width: 100%;
 }

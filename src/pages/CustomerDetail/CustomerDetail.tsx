@@ -181,21 +181,23 @@ export function CustomerDetail() {
   return (
     <div className={styles.container}>
       <header className={styles.header}>
-        <div className={styles.titleSection}>
-          <Button type="button" variant='secondary' onClick={() => navigate('/customers')}>
+        <div>
+
+          <Button type="button" variant="tertiary" onClick={() => navigate('/customers')}>
             <Icon name="chevronLeft" size={16} />
             Back
           </Button>
           <div className={styles.titleRow}>
-            <h1 className={styles.title}>
+            <div className={styles.avatar}>{(name || 'C').charAt(0).toUpperCase()}</div>
+            <h3 className={styles.title}>
               {isNew ? 'New Customer' : name}
-            </h1>
+            </h3>
           </div>
         </div>
       </header>
 
       {canEdit ? (
-        <Card>
+        <Card className={styles.card}>
           <form className={styles.form} onSubmit={handleSave}>
             <div className={styles.field}>
               <label className={styles.label}>Restaurant / Outlet Name *</label>
@@ -307,9 +309,9 @@ export function CustomerDetail() {
                 />
               </div>
             </div>
-            <button type="submit" className={styles.btnPrimary} disabled={saving || !name.trim()}>
+            <Button type="submit" variant="primary" size="md" disabled={saving || !name.trim()}>
               {saving ? 'Saving…' : 'Save Customer'}
-            </button>
+            </Button>
           </form>
         </Card>
       ) : (
@@ -324,7 +326,7 @@ export function CustomerDetail() {
       )}
 
       {!isNew && seeCredit && parseInt(creditLimit, 10) > 0 && (
-        <Card>
+        <Card className={styles.card}>
           <h3 className={styles.heading}>Credit Profile</h3>
           <div className={styles.exposureRow}>
             <span>Account Exposure (In Flight Orders)</span>
@@ -338,7 +340,7 @@ export function CustomerDetail() {
       )}
 
       {!isNew && orders.length > 0 && (
-        <Card>
+        <Card className={styles.card}>
           <h3 className={styles.heading}>Order History</h3>
           <table className={styles.table}>
             <thead>

@@ -13,10 +13,9 @@
   gap: var(--space-md);
 }
 
-.titleSection {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
+.heading {
+  font: var(--text-h3);
+  margin-bottom: var(--space-lg);
 }
 
 .titleRow {
@@ -26,29 +25,19 @@
 }
 
 .title {
-  font: var(--text-h1);
+  font: var(--text-h2);
   color: var(--text-primary);
   margin: 0;
 }
 
-.backBtn {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-xs);
-  background: transparent;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  padding: 6px 12px;
+.body {
   font: var(--text-body);
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: all var(--duration-fast);
+  color: var(--text-primary);
 }
 
-.backBtn:hover {
-  background: var(--bg-surface-hover);
-  border-color: var(--accent-primary);
-  color: var(--text-primary);
+.muted {
+  font: var(--text-body);
+  color: var(--text-muted);
 }
 
 .actions {
@@ -57,40 +46,25 @@
   gap: var(--space-sm);
 }
 
-.btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px var(--space-md);
-  border-radius: var(--radius-md);
-  font: var(--text-body);
-  font-weight: 500;
-  cursor: pointer;
-  transition: all var(--duration-fast);
+.stageActions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
 }
 
-.btnPrimary {
-  composes: btn;
-  background: var(--accent-primary);
-  color: #fff;
-  border: none;
+.orderActions {
+  display: flex;
+  flex-direction: row;
+  gap: 0.75rem;
 }
 
-.btnPrimary:hover {
-  opacity: 0.9;
+.orderActions>* {
+  flex: 1;
 }
 
-.btnSecondary {
-  composes: btn;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-default);
-  color: var(--text-secondary);
-}
-
-.btnSecondary:hover {
-  background: var(--bg-surface-hover);
-  border-color: var(--accent-primary);
-  color: var(--text-primary);
+.actionBtn {
+  width: 100%;
+  justify-content: center;
 }
 
 /* Customer card */
@@ -159,13 +133,18 @@
 /* Stepper / Timeline */
 .stepper {
   display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.stepperTrack {
+  display: flex;
   align-items: center;
   justify-content: space-between;
   position: relative;
-  padding: var(--space-md) 0;
 }
 
-.stepper::before {
+.stepperTrack::before {
   content: '';
   position: absolute;
   top: 50%;
@@ -173,8 +152,13 @@
   right: 0;
   height: 2px;
   background: var(--border-default);
-  z-index: 1;
   transform: translateY(-50%);
+  z-index: 1;
+}
+
+.stepperLabels {
+  display: flex;
+  justify-content: space-between;
 }
 
 .step {
@@ -196,14 +180,14 @@
 }
 
 .stepActive .stepDot {
-  background: var(--accent-primary);
+  background: var(--accent-primary-light);
   border-color: var(--accent-primary);
   box-shadow: 0 0 0 4px var(--focus-ring-color);
 }
 
 .stepCompleted .stepDot {
-  background: var(--status-success, #2ecc71);
-  border-color: var(--status-success, #2ecc71);
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
 }
 
 .stepLabel {
@@ -252,6 +236,36 @@
   font-size: 18px;
   color: var(--accent-primary);
 }
+
+/* Document */
+.docList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+
+
+.docForm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.docFormTop {
+  display: flex;
+  gap: var(--space-md);
+}
+
+.docSelect {
+  width: 120px;
+  flex-shrink: 0;
+}
+
+.docInput {
+  flex: 1;
+}
+
 
 /* History logs */
 .historyList {
@@ -327,6 +341,7 @@
 
 /* print styles */
 @media print {
+
   .backBtn,
   .actions,
   .noteForm,

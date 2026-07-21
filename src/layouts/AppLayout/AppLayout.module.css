@@ -1,10 +1,13 @@
 .shell {
   min-height: 100vh;
   background: var(--bg-base);
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
 }
 
 .content {
-  max-width: var(--content-max-width);
-  margin: 0 auto;
-  padding: var(--space-xl) var(--nav-padding-x) var(--space-3xl);
+  flex: 1 1 0%;
+  min-width: 0;
+  padding: var(--space-xl) var(--space-xl) var(--space-3xl);
 }

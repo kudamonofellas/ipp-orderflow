@@ -9,7 +9,7 @@ interface IntakePanelProps {
 /** WhatsApp Intake panel: triage message preview cards. */
 export function IntakePanel({ messages }: IntakePanelProps) {
   return (
-    <Card>
+    <Card className={styles.card}>
       <h3 className={styles.heading}>WhatsApp Intake</h3>
       <ul className={styles.list}>
         {messages.map((msg) => (

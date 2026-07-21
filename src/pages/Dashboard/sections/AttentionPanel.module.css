@@ -1,13 +1,16 @@
 .heading {
   font: var(--text-h3);
   margin-bottom: var(--space-lg);
+  flex-shrink: 0;
 }
 
 .list {
+  list-style: none;
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);
-  max-height: 240px;
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding-right: var(--space-xs);
 }
@@ -17,20 +20,18 @@
   align-items: center;
   justify-content: flex-start;
   width: 100%;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  padding: var(--space-md);
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: var(--space-sm) var(--space-xs);
   cursor: pointer;
   color: var(--text-secondary);
   transition:
-    background-color var(--duration-fast) var(--ease-default),
-    border-color var(--duration-fast) var(--ease-default);
+    background-color var(--duration-fast) var(--ease-default);
 }
 
 .row:hover {
   background: var(--bg-surface-hover);
-  border-color: var(--accent-primary);
 }
 
 .content {

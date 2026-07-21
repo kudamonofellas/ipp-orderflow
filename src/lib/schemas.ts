@@ -117,6 +117,31 @@ export const ProductsCollectionSchema = z.object({
   updated_at: z.string().nullable().optional(),
 });
 
+/**
+ * Directus `attachments` collection row.
+ *
+ * WhatsApp-sourced rows (message_id set) come from the n8n OCR pipeline.
+ * Manually-logged document entries (message_id null) use number/note/
+ * created_by/label instead — added via ALTER TABLE, not yet in snapshot.json.
+ */
+export const AttachmentsCollectionSchema = z.object({
+  id: z.number().nullable().optional(),
+  message_id: z.string().nullable().optional(),
+  order_uuid: z.string().nullable().optional(),
+  sender_phone: z.string().nullable().optional(),
+  doc_type: z.string().nullable().optional(),
+  file_path: z.string().nullable().optional(),
+  document_file: z.string().nullable().optional(),
+  caption: z.string().nullable().optional(),
+  ocr_text: z.string().nullable().optional(),
+  created_at: z.string().nullable().optional(),
+  // added via ALTER TABLE — not yet in snapshot.json
+  number: z.string().nullable().optional(),
+  note: z.string().nullable().optional(),
+  created_by: z.string().nullable().optional(),
+  label: z.string().nullable().optional(),
+});
+
 /** Directus `order_lines` collection row. */
 export const OrderLinesCollectionSchema = z.object({
   id: z.string(),
@@ -165,3 +190,4 @@ export const ProductsCollectionArraySchema = z.array(ProductsCollectionSchema);
 export const OrderLinesCollectionArraySchema = z.array(OrderLinesCollectionSchema);
 export const CorrectionsCollectionArraySchema = z.array(CorrectionsCollectionSchema);
 export const OrderHistoryCollectionArraySchema = z.array(OrderHistoryCollectionSchema);
+export const AttachmentsCollectionArraySchema = z.array(AttachmentsCollectionSchema);

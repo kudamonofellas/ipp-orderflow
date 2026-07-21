@@ -31,9 +31,12 @@ export function IntakeModal({ open, channel, onClose, onParsed }: IntakeModalPro
   useEffect(() => {
     if (!open) {
       // reset when closed
-      setText('');
-      setAttachments([]);
-      setError(null);
+      function reset() {
+        setText('');
+        setAttachments([]);
+        setError(null);
+      }
+      reset();
     }
   }, [open]);
 

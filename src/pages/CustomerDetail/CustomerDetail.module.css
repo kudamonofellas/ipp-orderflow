@@ -4,6 +4,7 @@
   gap: var(--space-xl);
   max-width: 720px;
   margin: 0 auto;
+  align-self: flex-start;
 }
 
 .header {
@@ -13,11 +14,6 @@
   flex-wrap: wrap;
 }
 
-.titleSection {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
-}
 
 .titleRow {
   display: flex;
@@ -35,13 +31,13 @@
 .card {
   display: flex;
   flex-direction: column;
-  gap: var(--space-md);
+  gap: var(--space-xl);
 }
 
 .profileRow {
   display: flex;
   align-items: center;
-  gap: var(--space-md);
+  gap: var(--space-xl);
 }
 
 .avatar {
@@ -57,8 +53,8 @@
   font-weight: 600;
 }
 
-.customerInfo h3 {
-  font: var(--text-h3);
+.customerInfo h1 {
+  font: var(--text-h1);
   color: var(--text-primary);
   margin: 0 0 4px;
 }
@@ -73,7 +69,7 @@
 .form {
   display: flex;
   flex-direction: column;
-  gap: var(--space-md);
+  gap: var(--space-xl);
 }
 
 .field {

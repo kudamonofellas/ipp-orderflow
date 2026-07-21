@@ -38,5 +38,11 @@ export function useCurrentUserName(): string {
   return full || user.email;
 }
 
+/** Convenience hook: the signed-in user's id (for created_by / order_history.who). */
+export function useCurrentUserId(): string | null {
+  const { user } = useAuth();
+  return user?.id ?? null;
+}
+
 /** Re-export for components that need to check a capability inline. */
 export type { Capability, Role };

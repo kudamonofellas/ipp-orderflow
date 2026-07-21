@@ -138,6 +138,7 @@
   font: var(--text-label);
   color: var(--text-muted);
   white-space: nowrap;
+  font-weight: 600;
 }
 
 .th.right {
