@@ -40,8 +40,12 @@ export const ICONS = {
   play: 'hugeicons:play',
   cancel: 'hugeicons:cancel-circle',
   edit: 'hugeicons:pencil-edit-02',
-  paperclip: 'hugeicons:document-attachment'
-
+  paperclip: 'hugeicons:document-attachment',
+  camera: 'hugeicons:camera-01',
+  scissors: 'hugeicons:scissors-01',
+  scale: 'hugeicons:weight-scale',
+  document: 'hugeicons:file-01',
+  save: 'hugeicons:floppy-disk'
 } as const;
 
 export type IconName = keyof typeof ICONS;

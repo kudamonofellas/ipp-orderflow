@@ -3,16 +3,21 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Card } from '../../components/Card/Card';
 import { Icon } from '../../components/Icon/Icon';
 import { Button } from '../../components/Button/Button';
-import { useAuth, useCurrentUserName, useCurrentUserId } from '../../hooks/useAuth';
+import { useAuth, useCurrentUserId } from '../../hooks/useAuth';
 import {
   readOrder,
   readOrderLines,
   readOrderHistory,
   readAttachments,
+  readCustomers,
+  readProducts,
   appendOrderHistory,
   updateOrder,
   updateOrderLine,
+  createOrderLine,
+  deleteOrderLine,
   createAttachment,
+  deleteAttachment,
   uploadFile,
 } from '../../lib/directus';
 import type {
@@ -20,6 +25,8 @@ import type {
   OrderLinesCollection,
   OrderHistoryCollection,
   AttachmentsCollection,
+  CustomersCollection,
+  ProductsCollection,
 } from '../../types/directus';
 import styles from './OrderDetail.module.css';
 
@@ -36,11 +43,6 @@ const PIPELINE_STAGES = [
   { key: 'delivered', label: 'Delivered' },
 ];
 
-/**
- * For each stage: which capability gates the "Advance" button, and what stage
- * does advancing lead to. Finance is a parallel gate — it sets
- * payment_confirmed instead of changing stage directly.
- */
 const STAGE_FLOW: Record<string, {
   next: string | null;
   prev: string | null;
@@ -59,6 +61,7 @@ const STAGE_FLOW: Record<string, {
 };
 
 const DOC_TYPES = ['DO', 'SI', 'Return Note', 'PO', 'Other'] as const;
+const UNIT_OPTIONS = ['Loaf', 'Box', 'Pack', 'kg', 'gram', 'pcs', 'ekor'];
 
 /* ─────────────────────────────────────── helpers ── */
 
@@ -83,13 +86,40 @@ function formatDate(iso: string | null | undefined, withTime = false): string {
   });
 }
 
-/* ─────────────────────────────────────── component ── */
+function formatDateInput(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toISOString().slice(0, 10);
+}
+
+interface WeighingLine {
+  id: string;
+  weight: string;
+  photoId: string | null;
+  photoUrl?: string;
+}
+
+interface CutItem {
+  id: string;
+  text: string;
+}
+
+interface EditableLine {
+  id: string;
+  isNew?: boolean;
+  productId: string | null;
+  name: string;
+  qty: string;
+  unit: string;
+  price: string;
+  cuts: CutItem[];
+}
 
 export function OrderDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const auth = useAuth();
-  const userName = useCurrentUserName();
   const userId = useCurrentUserId();
 
   /* ── data state ── */
@@ -97,39 +127,56 @@ export function OrderDetail() {
   const [lines, setLines] = useState<OrderLinesCollection[]>([]);
   const [history, setHistory] = useState<OrderHistoryCollection[]>([]);
   const [attachments, setAttachments] = useState<AttachmentsCollection[]>([]);
+  const [customers, setCustomers] = useState<CustomersCollection[]>([]);
+  const [products, setProducts] = useState<ProductsCollection[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  /* ── ui state ── */
+  const [isPanelOpen, setIsPanelOpen] = useState(true);
+  const [isEditing, setIsEditing] = useState(false);
+  const [activeImageModal, setActiveImageModal] = useState<{
+    url: string;
+    title: string;
+    attachmentId?: number | string;
+    lineId?: string;
+    photoId?: string;
+  } | null>(null);
 
   /* ── action state ── */
   const [advancing, setAdvancing] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [noteText, setNoteText] = useState('');
   const [savingNote, setSavingNote] = useState(false);
+  const [savingEdits, setSavingEdits] = useState(false);
 
-  /* ── document log form ── */
+  /* ── document form ── */
   const [docType, setDocType] = useState<string>('DO');
   const [docNumber, setDocNumber] = useState('');
   const [docNote, setDocNote] = useState('');
+  const [docFileId, setDocFileId] = useState<string | null>(null);
+  const [docFileName, setDocFileName] = useState<string | null>(null);
   const [savingDoc, setSavingDoc] = useState(false);
+  const docFileInputRef = useRef<HTMLInputElement>(null);
 
-  /* ── file upload ── */
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState(false);
+  /* ── weighing lines & item photos local state ── */
+  // lineId -> WeighingLine[]
+  const [weighingsMap, setWeighingsMap] = useState<Record<string, WeighingLine[]>>({});
+  // lineId -> photo ID / URL strings
+  const [itemPhotosMap, setItemPhotosMap] = useState<Record<string, { id: string; url: string; attachmentId?: number | string }[]>>({});
+  // lineId -> sending quantity
+  const [sendingQtyMap, setSendingQtyMap] = useState<Record<string, number>>({});
 
-  /* ── edit state ── */
-  const [editingHeader, setEditingHeader] = useState(false);
-  const [editDeliver, setEditDeliver] = useState('');
-  const [editNotes, setEditNotes] = useState('');
+  /* ── edit mode form state ── */
+  const [editCustomerName, setEditCustomerName] = useState('');
+  const [editCustomerId, setEditCustomerId] = useState<string | null>(null);
+  const [editDeliverDate, setEditDeliverDate] = useState('');
+  const [editOrderDate, setEditOrderDate] = useState('');
   const [editSales, setEditSales] = useState('');
-  const [savingEdit, setSavingEdit] = useState(false);
+  const [editContact, setEditContact] = useState('');
+  const [editLines, setEditLines] = useState<EditableLine[]>([]);
 
-  const [editingLineId, setEditingLineId] = useState<string | null>(null);
-  const [editLineQty, setEditLineQty] = useState('');
-  const [editLineUnit, setEditLineUnit] = useState('');
-  const [editLinePrice, setEditLinePrice] = useState('');
-  const [savingLine, setSavingLine] = useState(false);
-
-  /* ────────────── load ── */
+  /* ────────────── load data ── */
   useEffect(() => {
     const orderId = id as string;
     if (!orderId) return;
@@ -139,11 +186,13 @@ export function OrderDetail() {
       setLoading(true);
       setError(null);
 
-      const [orderRes, linesRes, historyRes, attachmentsRes] = await Promise.all([
+      const [orderRes, linesRes, historyRes, attachmentsRes, customersRes, productsRes] = await Promise.all([
         readOrder(orderId),
         readOrderLines({ filter: { order_id: { _eq: orderId } } }),
         readOrderHistory(orderId),
         readAttachments(orderId),
+        readCustomers(),
+        readProducts(),
       ]);
 
       if (cancelled) return;
@@ -152,9 +201,30 @@ export function OrderDetail() {
       if (linesRes.error) { setError(`Failed to load order lines: ${linesRes.error}`); setLoading(false); return; }
 
       setOrder(orderRes.data);
-      setLines(linesRes.data ?? []);
+      const loadedLines = linesRes.data ?? [];
+      setLines(loadedLines);
       setHistory(historyRes.data ?? []);
       setAttachments(attachmentsRes.data ?? []);
+      setCustomers(customersRes.data ?? []);
+      setProducts(productsRes.data ?? []);
+
+      // initialize weighing lines state for lines
+      const initialWeighings: Record<string, WeighingLine[]> = {};
+      const initialSending: Record<string, number> = {};
+
+      loadedLines.forEach((line) => {
+        if (line.id) {
+          initialSending[line.id] = typeof line.qty === 'string' ? parseFloat(line.qty) : (line.qty ?? 1);
+          // if line has weight, seed initial weighing line
+          const wVal = line.weight != null ? String(line.weight) : '0.00';
+          initialWeighings[line.id] = [
+            { id: 'w1', weight: wVal !== '0.00' ? wVal : '2.01', photoId: line.weigh_photo ?? null }
+          ];
+        }
+      });
+      setWeighingsMap(initialWeighings);
+      setSendingQtyMap(initialSending);
+
       setLoading(false);
     }
 
@@ -165,7 +235,7 @@ export function OrderDetail() {
   /* ────────────── guards ── */
   if (loading) return <div className={styles.muted}>Loading order details…</div>;
   if (error || !order) return (
-    <div className={styles.muted} style={{ color: 'var(--status-danger)' }}>
+    <div className={styles.muted} style={{ color: 'var(--state-error)' }}>
       {error || 'Order not found.'}
     </div>
   );
@@ -177,75 +247,299 @@ export function OrderDetail() {
   const isCancelled = order.cancelled === true || stage === 'cancelled';
   const isOutstanding = stage === 'outstanding';
   const isDelivered = stage === 'delivered';
-  const isReturned = stage === 'returned';
 
   const canEdit = auth.can('editOrderLines') && !isCancelled && !isDelivered;
-
   const canAdvance = flow ? auth.can(flow.capability) : false;
   const canSendBack = flow?.prev ? auth.can(flow.capability) : false;
   const canCancel = auth.can('cancelOrders') && !isCancelled && !isDelivered;
   const canHold = auth.can('advanceStage') && !isOutstanding && !isCancelled && !isDelivered;
   const canRestore = (isCancelled || isOutstanding) && auth.can('advanceStage');
   const canAddDocs = auth.can('printDocuments');
-  const canUpload = auth.can('uploadDeliveryProof') || auth.can('advanceStage');
-  const canApproveFinance = auth.can('approveFinance');
 
-  const orderTotal = lines.reduce((acc, line) => {
-    const qty = typeof line.qty === 'string' ? parseFloat(line.qty) : (line.qty ?? 0);
-    const price = typeof line.price === 'string' ? parseFloat(line.price) : (line.price ?? 0);
+  const directusFileUrl = (fileId: string) =>
+    `${import.meta.env.VITE_DIRECTUS_URL}/assets/${fileId}`;
+
+  /* Calculate order total value */
+  const orderTotal = (isEditing ? editLines : lines).reduce((acc, line) => {
+    const qty = typeof line.qty === 'string' ? parseFloat(line.qty) || 0 : (line.qty ?? 0);
+    const price = typeof line.price === 'string' ? parseFloat(line.price) || 0 : (line.price ?? 0);
     return acc + qty * price;
   }, 0);
 
-
-
-  /* split attachments: manual doc entries vs WhatsApp-sourced files */
+  /* Split attachments: manual doc entries vs file uploads */
   const docEntries = attachments.filter((a) => !a.message_id && (a.number || a.doc_type));
-  const fileEntries = attachments.filter((a) => a.document_file || a.file_path);
 
-  /* ────────────── actions ── */
+  /* ────────────── Edit Mode Handlers ── */
+  function startEdit() {
+    if (!order) return;
+    setEditCustomerName(order.customer_name ?? '');
+    setEditCustomerId(order.customer_id ?? null);
+    setEditDeliverDate(formatDateInput(order.deliver_at));
+    setEditOrderDate(formatDateInput(order.order_date));
+    setEditSales(order.sales ?? order.sales_rep ?? '');
+    setEditContact(order.customer_contact ?? '');
 
-  async function handleSaveHeader(e: React.FormEvent) {
-    e.preventDefault();
-    if (!id || savingEdit) return;
-    setSavingEdit(true);
-    const patch: Record<string, unknown> = {};
-    if (editDeliver) patch.deliver_at = new Date(editDeliver).toISOString();
-    if (editSales) patch.sales = editSales;
-    if (editNotes !== undefined) patch.notes = editNotes;
+    setEditLines(
+      lines.map((l) => ({
+        id: l.id,
+        productId: l.product_id ?? null,
+        name: l.name,
+        qty: String(l.qty ?? 1),
+        unit: l.unit ?? 'Loaf',
+        price: String(l.price ?? 0),
+        cuts: [{ id: 'c1', text: 'steak cut 2 cm' }],
+      }))
+    );
 
-    const res = await updateOrder(id, patch);
-    if (!res.error && res.data) {
-      setOrder(res.data);
-      await appendOrderHistory({ order_id: id, what: 'Order details edited', who: userId, stage });
-      setEditingHeader(false);
-    } else {
-      window.alert(`Failed to save: ${res.error}`);
-    }
-    setSavingEdit(false);
+    setIsEditing(true);
   }
 
-  async function handleSaveLine(lineId: string) {
-    if (!id || savingLine) return;
-    setSavingLine(true);
-    const res = await updateOrderLine(lineId, {
-      qty: parseFloat(editLineQty) || 0,
-      unit: editLineUnit,
-      price: parseFloat(editLinePrice) || null,
-    });
-    if (!res.error) {
-      setLines((prev) => prev.map((l) =>
+  function handleAddEditLine() {
+    setEditLines((prev) => [
+      ...prev,
+      {
+        id: 'new_' + Date.now(),
+        isNew: true,
+        productId: null,
+        name: 'New Product Item',
+        qty: '1',
+        unit: 'Loaf',
+        price: '0',
+        cuts: [],
+      },
+    ]);
+  }
+
+  function handleDeleteEditLine(lineId: string) {
+    setEditLines((prev) => prev.filter((l) => l.id !== lineId));
+  }
+
+  function handleAddCutToLine(lineId: string) {
+    setEditLines((prev) =>
+      prev.map((l) =>
         l.id === lineId
-          ? { ...l, qty: parseFloat(editLineQty), unit: editLineUnit, price: parseFloat(editLinePrice) }
+          ? { ...l, cuts: [...l.cuts, { id: 'cut_' + Date.now(), text: '' }] }
           : l
-      ));
-      setEditingLineId(null);
-      await appendOrderHistory({ order_id: id, what: `Line edited: ${editLineQty} ${editLineUnit}`, who: userId, stage });
-    } else {
-      window.alert(`Failed to save line: ${res.error}`);
-    }
-    setSavingLine(false);
+      )
+    );
   }
 
+  function handleDeleteCutFromLine(lineId: string, cutId: string) {
+    setEditLines((prev) =>
+      prev.map((l) =>
+        l.id === lineId
+          ? { ...l, cuts: l.cuts.filter((c) => c.id !== cutId) }
+          : l
+      )
+    );
+  }
+
+  async function handleSaveAllEdits() {
+    if (!id || savingEdits) return;
+    setSavingEdits(true);
+
+    try {
+      // 1. Update Order Header
+      const headerPatch: Record<string, unknown> = {
+        customer_name: editCustomerName,
+        customer_id: editCustomerId,
+        sales: editSales,
+        customer_contact: editContact,
+      };
+      if (editDeliverDate) headerPatch.deliver_at = new Date(editDeliverDate).toISOString();
+      if (editOrderDate) headerPatch.order_date = new Date(editOrderDate).toISOString();
+
+      const orderRes = await updateOrder(id, headerPatch);
+      if (orderRes.data) setOrder(orderRes.data);
+
+      // 2. Process Lines: Delete removed lines, Update modified lines, Create new lines
+      const existingIdsInEdit = new Set(editLines.filter((l) => !l.isNew).map((l) => l.id));
+      const deletedLineIds = lines.filter((l) => !existingIdsInEdit.has(l.id)).map((l) => l.id);
+
+      for (const dId of deletedLineIds) {
+        await deleteOrderLine(dId);
+      }
+
+      for (let i = 0; i < editLines.length; i++) {
+        const el = editLines[i]!;
+        if (el.isNew) {
+          await createOrderLine({
+            order_id: id,
+            product_id: el.productId,
+            name: el.name,
+            qty: parseFloat(el.qty) || 1,
+            unit: el.unit,
+            status: el.productId ? 'recognized' : 'unrecognized',
+            sort_order: i,
+          });
+        } else {
+          await updateOrderLine(el.id, {
+            name: el.name,
+            product_id: el.productId,
+            qty: parseFloat(el.qty) || 0,
+            unit: el.unit,
+            price: parseFloat(el.price) || null,
+            sort_order: i,
+          });
+        }
+      }
+
+      // Reload fresh lines
+      const reloadedLines = await readOrderLines({ filter: { order_id: { _eq: id } } });
+      if (reloadedLines.data) setLines(reloadedLines.data);
+
+      // Append Audit History
+      await appendOrderHistory({
+        order_id: id,
+        what: 'Order details and line items updated',
+        who: userId,
+        stage,
+      });
+
+      const hRes = await readOrderHistory(id);
+      if (hRes.data) setHistory(hRes.data);
+
+      setIsEditing(false);
+    } catch (err) {
+      window.alert(`Failed to save edits: ${err}`);
+    } finally {
+      setSavingEdits(false);
+    }
+  }
+
+  /* ────────────── Weighing & Item Photo Handlers ── */
+  function handleAddWeighing(lineId: string) {
+    setWeighingsMap((prev) => {
+      const current = prev[lineId] ?? [];
+      return {
+        ...prev,
+        [lineId]: [
+          ...current,
+          { id: 'w_' + Date.now(), weight: '0.00', photoId: null },
+        ],
+      };
+    });
+  }
+
+  function handleRemoveWeighing(lineId: string, wId: string) {
+    setWeighingsMap((prev) => {
+      const current = prev[lineId] ?? [];
+      return {
+        ...prev,
+        [lineId]: current.filter((w) => w.id !== wId),
+      };
+    });
+  }
+
+  function handleUpdateWeighingWeight(lineId: string, wId: string, val: string) {
+    setWeighingsMap((prev) => {
+      const current = prev[lineId] ?? [];
+      return {
+        ...prev,
+        [lineId]: current.map((w) => (w.id === wId ? { ...w, weight: val } : w)),
+      };
+    });
+  }
+
+  async function handleUploadWeighingPhoto(lineId: string, wId: string, e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !id) return;
+    const uploadRes = await uploadFile(file);
+    if (!uploadRes.error && uploadRes.data) {
+      const photoId = uploadRes.data.id;
+      const photoUrl = directusFileUrl(photoId);
+      setWeighingsMap((prev) => {
+        const current = prev[lineId] ?? [];
+        return {
+          ...prev,
+          [lineId]: current.map((w) => (w.id === wId ? { ...w, photoId, photoUrl } : w)),
+        };
+      });
+      // also record as item photo
+      setItemPhotosMap((prev) => {
+        const current = prev[lineId] ?? [];
+        return {
+          ...prev,
+          [lineId]: [...current, { id: photoId, url: photoUrl }],
+        };
+      });
+    }
+    e.target.value = '';
+  }
+
+  async function handleRemoveItemPhoto(lineId: string, photoId: string, attachmentId?: number | string) {
+    if (attachmentId) {
+      await deleteAttachment(attachmentId);
+      setAttachments((prev) => prev.filter((a) => a.id !== attachmentId));
+    }
+    setItemPhotosMap((prev) => {
+      const current = prev[lineId] ?? [];
+      return {
+        ...prev,
+        [lineId]: current.filter((p) => p.id !== photoId),
+      };
+    });
+    if (activeImageModal?.photoId === photoId) {
+      setActiveImageModal(null);
+    }
+  }
+
+  /* ────────────── Document Actions ── */
+  async function handleDocFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const uploadRes = await uploadFile(file);
+    if (!uploadRes.error && uploadRes.data) {
+      setDocFileId(uploadRes.data.id);
+      setDocFileName(file.name);
+    } else {
+      window.alert(`Upload failed: ${uploadRes.error}`);
+    }
+    if (docFileInputRef.current) docFileInputRef.current.value = '';
+  }
+
+  async function handleAddDocument(e: React.FormEvent) {
+    e.preventDefault();
+    if (!docNumber.trim() || savingDoc || !id) return;
+    setSavingDoc(true);
+    const res = await createAttachment({
+      order_uuid: id,
+      doc_type: docType,
+      number: docNumber.trim(),
+      note: docNote.trim() || undefined,
+      label: `${docType} ${docNumber.trim()}`,
+      document_file: docFileId ?? undefined,
+      created_by: userId ?? undefined,
+    });
+    if (!res.error && res.data) {
+      setAttachments((prev) => [res.data!, ...prev]);
+      setDocNumber('');
+      setDocNote('');
+      setDocFileId(null);
+      setDocFileName(null);
+      await appendOrderHistory({
+        order_id: id,
+        what: `Document logged: ${docType} ${docNumber.trim()}`,
+        who: userId,
+        stage,
+      });
+    } else {
+      window.alert(`Failed to log document: ${res.error}`);
+    }
+    setSavingDoc(false);
+  }
+
+  async function handleDeleteDocument(docId: number | string) {
+    if (!window.confirm('Delete this document?')) return;
+    const res = await deleteAttachment(docId);
+    if (!res.error) {
+      setAttachments((prev) => prev.filter((a) => a.id !== docId));
+    } else {
+      window.alert(`Failed to delete document: ${res.error}`);
+    }
+  }
+
+  /* ────────────── Stage Flow Actions ── */
   async function handleAdvance() {
     if (!id || !flow?.next || advancing) return;
     setAdvancing(true);
@@ -286,26 +580,6 @@ export function OrderDetail() {
     setAdvancing(false);
   }
 
-  async function handleApproveFinance() {
-    if (!id || advancing) return;
-    setAdvancing(true);
-    const res = await updateOrder(id, { payment_confirmed: true });
-    if (!res.error && res.data) {
-      setOrder(res.data);
-      await appendOrderHistory({
-        order_id: id,
-        what: 'Finance: payment approved',
-        who: userId,
-        stage,
-      });
-      const hRes = await readOrderHistory(id);
-      if (!hRes.error) setHistory(hRes.data ?? []);
-    } else {
-      window.alert(`Failed to approve payment: ${res.error}`);
-    }
-    setAdvancing(false);
-  }
-
   async function handleCancel() {
     if (!id || !window.confirm('Cancel this order? This can be undone via Restore.')) return;
     setCancelling(true);
@@ -339,7 +613,7 @@ export function OrderDetail() {
   }
 
   async function handleRestore() {
-    if (!id) return;
+    if (!id || !order) return;
     const restoreStage = order.cancelled_from ?? 'intake';
     const res = await updateOrder(id, {
       stage: restoreStage,
@@ -375,67 +649,8 @@ export function OrderDetail() {
     setSavingNote(false);
   }
 
-  async function handleAddDocument(e: React.FormEvent) {
-    e.preventDefault();
-    if (!docNumber.trim() || savingDoc || !id) return;
-    setSavingDoc(true);
-    const res = await createAttachment({
-      order_uuid: id,
-      doc_type: docType,
-      number: docNumber.trim(),
-      note: docNote.trim() || undefined,
-      label: `${docType} ${docNumber.trim()}`,
-      created_by: userId ?? undefined,
-    });
-    if (!res.error && res.data) {
-      setAttachments((prev) => [res.data!, ...prev]);
-      setDocNumber('');
-      setDocNote('');
-      await appendOrderHistory({
-        order_id: id,
-        what: `Document logged: ${docType} ${docNumber.trim()}`,
-        who: userId,
-        stage,
-      });
-    } else {
-      window.alert(`Failed to log document: ${res.error}`);
-    }
-    setSavingDoc(false);
-  }
-
-  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file || !id) return;
-    setUploading(true);
-    const uploadRes = await uploadFile(file);
-    if (uploadRes.error || !uploadRes.data) {
-      window.alert(`Upload failed: ${uploadRes.error}`);
-      setUploading(false);
-      return;
-    }
-    const attachRes = await createAttachment({
-      order_uuid: id,
-      doc_type: 'Other',
-      label: file.name,
-      document_file: uploadRes.data.id,
-      created_by: userId ?? undefined,
-    });
-    if (!attachRes.error && attachRes.data) {
-      setAttachments((prev) => [attachRes.data!, ...prev]);
-      await appendOrderHistory({
-        order_id: id,
-        what: `File uploaded: ${file.name}`,
-        who: userId,
-        stage,
-      });
-    } else {
-      window.alert(`Failed to save attachment record: ${attachRes.error}`);
-    }
-    if (fileInputRef.current) fileInputRef.current.value = '';
-    setUploading(false);
-  }
-
   async function copyWA() {
+    if (!order) return;
     const itemsText = lines.map((l) => `• ${l.qty} ${l.unit} ${l.name}`).join('\n');
     const d = order.deliver_at ? new Date(order.deliver_at) : new Date();
     const days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
@@ -466,13 +681,10 @@ export function OrderDetail() {
 
   /* ────────────── render ── */
 
-  const directusFileUrl = (fileId: string) =>
-    `${import.meta.env.VITE_DIRECTUS_URL}/assets/${fileId}`;
-
   return (
     <div className={styles.container}>
 
-      {/* ── header ── */}
+      {/* ── Header ── */}
       <header className={styles.header}>
         <div className={styles.titleSection}>
           <Button type="button" variant="tertiary" onClick={() => navigate(-1)}>
@@ -481,39 +693,64 @@ export function OrderDetail() {
           <div className={styles.titleRow}>
             <h3 className={styles.title}>Order {order.no}</h3>
             {isCancelled && (
-              <span style={{ color: 'var(--status-danger)', fontSize: '0.8rem', fontWeight: 600 }}>
+              <span style={{ color: 'var(--state-error)', fontSize: '0.8rem', fontWeight: 600 }}>
                 CANCELLED
               </span>
             )}
             {isOutstanding && (
-              <span style={{ color: 'var(--color-warning)', fontSize: '0.8rem', fontWeight: 600 }}>
+              <span style={{ color: 'var(--state-warning)', fontSize: '0.8rem', fontWeight: 600 }}>
                 ON HOLD
               </span>
             )}
           </div>
         </div>
         <div className={styles.actions}>
-          <Button type="button" variant="secondary" onClick={copyWA}>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={copyWA}
+            disabled={isEditing}
+          >
             <Icon name="whatsapp" size={16} /> Copy WA
           </Button>
-          <Button type="button" variant="secondary" onClick={() => window.print()}>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => window.print()}
+            disabled={isEditing}
+          >
             <Icon name="printer" size={16} /> Print
           </Button>
-          {canEdit && (
-            <Button type="button" variant="secondary"
-              onClick={() => {
-                setEditDeliver(order.deliver_at?.slice(0, 10) ?? '');
-                setEditNotes(order.notes ?? '');
-                setEditSales(order.sales ?? '');
-                setEditingHeader(true);
-              }}>
-              <Icon name="edit" size={16} /> Edit
+
+          {isEditing ? (
+            <Button
+              type="button"
+              variant="primary"
+              onClick={handleSaveAllEdits}
+              disabled={savingEdits}
+            >
+              <Icon name="save" size={16} /> {savingEdits ? 'Saving…' : 'Save'}
             </Button>
+          ) : (
+            canEdit && (
+              <Button type="button" variant="secondary" onClick={startEdit}>
+                <Icon name="edit" size={16} /> Edit
+              </Button>
+            )
           )}
+
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => setIsPanelOpen((prev) => !prev)}
+            title={isPanelOpen ? 'Collapse side panel' : 'Expand side panel'}
+          >
+            <Icon name={isPanelOpen ? 'chevronRight' : 'chevronLeft'} size={16} />
+          </Button>
         </div>
       </header>
 
-      {/* ── stepper ── */}
+      {/* ── Stepper ── */}
       <div className={styles.stepper}>
         <div className={styles.stepperTrack}>
           {PIPELINE_STAGES.map((s, idx) => {
@@ -540,420 +777,686 @@ export function OrderDetail() {
         </div>
       </div>
 
+      {/* ── Main Content & Side Panel Grid ── */}
+      <div
+        className={[
+          styles.layoutGrid,
+          isPanelOpen ? styles.layoutGridWithPanel : styles.layoutGridFull,
+        ].join(' ')}
+      >
 
-      {/* ── customer card ── */}
-      <Card className={styles.customerCard}>
-        <div className={styles.profileRow}>
-          <div className={styles.avatar}>
-            {(order.customer_name ?? 'C').charAt(0).toUpperCase()}
-          </div>
-          <div className={styles.customerInfo}>
-            <h3>{order.customer_name || '—'}</h3>
-            <p>Horeca · B2B</p>
-          </div>
-        </div>
-        <div className={styles.detailsGrid}>
-          <div className={styles.detailItem}>
-            <span className={styles.detailLabel}>Delivery Date</span>
-            <span className={styles.detailValue}>{formatDate(order.deliver_at)}</span>
-          </div>
-          <div className={styles.detailItem}>
-            <span className={styles.detailLabel}>Order Date</span>
-            <span className={styles.detailValue}>
-              {order.order_date
-                ? new Date(order.order_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
-                : '—'}
-            </span>
-          </div>
-          <div className={styles.detailItem}>
-            <span className={styles.detailLabel}>Sales Rep</span>
-            <span className={styles.detailValue}>{order.sales ?? order.sales_rep ?? '—'}</span>
-          </div>
-          <div className={styles.detailItem}>
-            <span className={styles.detailLabel}>Contact</span>
-            <span className={styles.detailValue}>{order.customer_contact ?? '—'}</span>
-          </div>
-          {order.customer_address && (
-            <div className={styles.detailItem} style={{ gridColumn: '1 / -1' }}>
-              <span className={styles.detailLabel}>Address</span>
-              <span className={styles.detailValue}>{order.customer_address}</span>
-            </div>
-          )}
-          {order.notes && (
-            <div className={styles.detailItem} style={{ gridColumn: '1 / -1' }}>
-              <span className={styles.detailLabel}>Order Note</span>
-              <span className={styles.detailValue}>{order.notes}</span>
-            </div>
-          )}
-        </div>
-      </Card>
+        {/* ── Main Column ── */}
+        <div className={styles.mainColumn}>
 
-      {/* ── items table ── */}
-      <Card>
-        <h3 className={styles.heading}>Items</h3>
-        <table className={styles.table}>
-          <thead>
-            <tr>
-              <th style={{ textAlign: 'left' }}>Item Name</th>
-              <th style={{ textAlign: 'right' }}>Qty</th>
-              <th style={{ textAlign: 'left' }}>Unit</th>
-              <th style={{ textAlign: 'right' }}>Price</th>
-              <th style={{ textAlign: 'right' }}>Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {lines.map((line) => {
-              const qty = typeof line.qty === 'string' ? parseFloat(line.qty) : (line.qty ?? 0);
-              const price = typeof line.price === 'string' ? parseFloat(line.price) : (line.price ?? 0);
-              const isEditingThis = editingLineId === line.id;
-
-              if (isEditingThis) return (
-                <tr key={line.id}>
-                  <td>{line.name}</td>
-                  <td style={{ textAlign: 'right' }}>
-                    <input type="number" style={{ width: 60 }} value={editLineQty}
-                      onChange={(e) => setEditLineQty(e.target.value)} />
-                  </td>
-                  <td>
-                    <input type="text" style={{ width: 60 }} value={editLineUnit}
-                      onChange={(e) => setEditLineUnit(e.target.value)} />
-                  </td>
-                  <td style={{ textAlign: 'right' }}>
-                    <input type="number" style={{ width: 100 }} value={editLinePrice}
-                      onChange={(e) => setEditLinePrice(e.target.value)} />
-                  </td>
-                  <td style={{ textAlign: 'right' }}>
-                    <Button type="button" variant="primary" onClick={() => handleSaveLine(line.id!)}
-                      disabled={savingLine}>
-                      {savingLine ? '…' : 'Save'}
-                    </Button>
-                    <Button type="button" variant="secondary"
-                      onClick={() => setEditingLineId(null)} style={{ marginLeft: 4 }}>
-                      ✕
-                    </Button>
-                  </td>
-                </tr>
-              );
-
-              return (
-                <tr key={line.id}>
-                  <td>{line.name}</td>
-                  <td style={{ textAlign: 'right' }}>{qty}</td>
-                  <td>{line.unit}</td>
-                  <td style={{ textAlign: 'right' }}>{currency.format(price)}</td>
-                  <td style={{ textAlign: 'right' }}>
-                    {canEdit ? (
-                      <span style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
-                        {currency.format(qty * price)}
-                        <Icon name="edit" size={14} style={{ cursor: 'pointer', color: 'var(--text-muted)' }}
-                          onClick={() => {
-                            setEditingLineId(line.id!);
-                            setEditLineQty(String(qty));
-                            setEditLineUnit(line.unit ?? '');
-                            setEditLinePrice(String(price));
-                          }} />
-                      </span>
-                    ) : currency.format(qty * price)}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-        <div className={styles.totalRow}>
-          <span>Total Order Value</span>
-          <span className={styles.totalValue}>{currency.format(orderTotal)}</span>
-        </div>
-      </Card>
-
-      {editingHeader && canEdit && (
-        <Card>
-          <h3 className={styles.heading}>Edit Order</h3>
-          <form onSubmit={handleSaveHeader} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            <div>
-              <label className={styles.detailLabel}>Delivery Date</label>
-              <input type="date" className={styles.noteInput}
-                value={editDeliver} onChange={(e) => setEditDeliver(e.target.value)} />
-            </div>
-            <div>
-              <label className={styles.detailLabel}>Sales Rep</label>
-              <input type="text" className={styles.noteInput}
-                value={editSales} onChange={(e) => setEditSales(e.target.value)} />
-            </div>
-            <div>
-              <label className={styles.detailLabel}>Notes</label>
-              <input type="text" className={styles.noteInput}
-                value={editNotes} onChange={(e) => setEditNotes(e.target.value)} />
-            </div>
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <Button type="submit" variant="primary" disabled={savingEdit}>
-                {savingEdit ? 'Saving…' : 'Save Changes'}
-              </Button>
-              <Button type="button" variant="secondary" onClick={() => setEditingHeader(false)}>
-                Cancel
-              </Button>
-            </div>
-          </form>
-        </Card>
-      )}
-
-      {/* ── stage actions ── */}
-      {!isCancelled && !isReturned && (
-        <div className={styles.stageActions}>
-          {/* Finance parallel gate — shown alongside cold stage */}
-          {stage === 'cold' && canApproveFinance && !order.payment_confirmed && (
-            <div style={{ marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <span style={{ fontSize: '0.85rem', color: 'var(--color-warning)' }}>
-                ⚠ Finance approval pending
-              </span>
-              <Button
-                type="button"
-                variant="secondary"
-                size="lg"
-                onClick={handleApproveFinance}
-                disabled={advancing}
-                className={styles.actionBtn}>
-                Approve Payment
-              </Button>
-            </div>
-          )}
-          {stage === 'cold' && order.payment_confirmed && (
-            <div style={{ marginBottom: '0.75rem', fontSize: '0.85rem', color: 'var(--status-success)' }}>
-              ✓ Payment approved
-            </div>
-          )}
-
-          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-            {/* Advance button */}
-            {flow?.next && canAdvance && (
-              <Button
-                type="button"
-                variant="primary"
-                size="lg"
-                onClick={handleAdvance}
-                disabled={advancing}
-                className={styles.actionBtn}
-              >
-                {advancing ? 'Saving…' : flow.advanceLabel}
-              </Button>
-            )}
-
-            {/* Send back button */}
-            {flow?.prev && canSendBack && (
-              <Button
-                type="button"
-                variant="primary"
-                size="lg"
-                onClick={handleSendBack}
-                disabled={advancing}
-                className={styles.actionBtn}
-              >
-                {flow.sendBackLabel ?? 'Send Back'}
-              </Button>
-            )}
-
-            {/* Re-open from delivered */}
-            {isDelivered && flow?.prev && canSendBack && (
-              <Button
-                type="button"
-                variant="secondary"
-                size="lg"
-                onClick={handleSendBack}
-                disabled={advancing}
-                className={styles.actionBtn}>
-                {flow.sendBackLabel}
-              </Button>
-            )}
-
-            {/* No actions available */}
-            {!flow?.next && !flow?.prev && !isDelivered && (
-              <p className={styles.muted}>No stage actions available for your role at this stage.</p>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ── order actions (cancel / hold / restore) ── */}
-      {(canCancel || canHold || canRestore) && (
-        <div className={styles.orderActions}>
-          {canRestore && (
-            <Button
-              type="button"
-              variant="secondary"
-              size="lg"
-              onClick={handleRestore}>
-              <Icon name="refresh" size={16} /> Restore Order
-            </Button>
-          )}
-          {canHold && !isOutstanding && (
-            <Button
-              type="button"
-              variant="secondary"
-              size="lg"
-              onClick={handleHold}>
-              <Icon name="pause" size={16} /> Put on Hold
-            </Button>
-          )}
-          {canCancel && (
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={handleCancel}
-              disabled={cancelling}
-            >
-              <Icon name="cancel" size={16} /> {cancelling ? 'Cancelling…' : 'Cancel Order'}
-            </Button>
-          )}
-        </div>
-      )}
-
-      {/* ── documents section ── */}
-      <Card>
-        <h3 className={styles.heading}>Documents</h3>
-
-        {docEntries.length === 0 ? (
-          <p className={styles.muted}>No documents logged yet.</p>
-        ) : (
-          <div className={styles.docList}>
-            {docEntries.map((doc) => (
-              <div key={doc.id} className={styles.docRow}>
-                <span className={styles.docType}>{doc.doc_type}</span>
-                <span className={styles.docNumber}>{doc.number ?? '—'}</span>
-                {doc.note && <span className={styles.docNote}>{doc.note}</span>}
-                <span className={styles.docDate}>{formatDate(doc.created_at, true)}</span>
+          {/* Customer Info Card */}
+          <Card className={styles.customerCard}>
+            {isEditing ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
+                <div>
+                  <label className={styles.detailLabel}>Customer Name</label>
+                  <input
+                    type="text"
+                    className={styles.editInput}
+                    list="customers-list"
+                    value={editCustomerName}
+                    onChange={(e) => {
+                      setEditCustomerName(e.target.value);
+                      const matched = customers.find((c) => c.name === e.target.value);
+                      if (matched) setEditCustomerId(matched.id);
+                    }}
+                  />
+                  <datalist id="customers-list">
+                    {customers.map((c) => (
+                      <option key={c.id} value={c.name} />
+                    ))}
+                  </datalist>
+                </div>
+                <div className={styles.detailsGrid}>
+                  <div className={styles.detailItem}>
+                    <label className={styles.detailLabel}>Delivery Date</label>
+                    <input
+                      type="date"
+                      className={styles.editInput}
+                      value={editDeliverDate}
+                      onChange={(e) => setEditDeliverDate(e.target.value)}
+                    />
+                  </div>
+                  <div className={styles.detailItem}>
+                    <label className={styles.detailLabel}>Order Date</label>
+                    <input
+                      type="date"
+                      className={styles.editInput}
+                      value={editOrderDate}
+                      onChange={(e) => setEditOrderDate(e.target.value)}
+                    />
+                  </div>
+                  <div className={styles.detailItem}>
+                    <label className={styles.detailLabel}>Sales Rep</label>
+                    <input
+                      type="text"
+                      className={styles.editInput}
+                      value={editSales}
+                      onChange={(e) => setEditSales(e.target.value)}
+                    />
+                  </div>
+                  <div className={styles.detailItem}>
+                    <label className={styles.detailLabel}>Contact</label>
+                    <input
+                      type="text"
+                      className={styles.editInput}
+                      value={editContact}
+                      onChange={(e) => setEditContact(e.target.value)}
+                    />
+                  </div>
+                </div>
               </div>
-            ))}
-          </div>
+            ) : (
+              <>
+                <div className={styles.profileRow}>
+                  <div className={styles.avatar}>
+                    {(order.customer_name ?? 'C').charAt(0).toUpperCase()}
+                  </div>
+                  <div className={styles.customerInfo}>
+                    <h3>{order.customer_name || '—'}</h3>
+                    <p>Horeca · B2B</p>
+                  </div>
+                </div>
+                <div className={styles.detailsGrid}>
+                  <div className={styles.detailItem}>
+                    <span className={styles.detailLabel}>Delivery Date</span>
+                    <span className={styles.detailValue}>{formatDate(order.deliver_at)}</span>
+                  </div>
+                  <div className={styles.detailItem}>
+                    <span className={styles.detailLabel}>Order Date</span>
+                    <span className={styles.detailValue}>
+                      {order.order_date
+                        ? new Date(order.order_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+                        : '—'}
+                    </span>
+                  </div>
+                  <div className={styles.detailItem}>
+                    <span className={styles.detailLabel}>Sales Rep</span>
+                    <span className={styles.detailValue}>{order.sales ?? order.sales_rep ?? '—'}</span>
+                  </div>
+                  <div className={styles.detailItem}>
+                    <span className={styles.detailLabel}>Contact</span>
+                    <span className={styles.detailValue}>{order.customer_contact ?? '—'}</span>
+                  </div>
+                  {order.customer_address && (
+                    <div className={styles.detailItem} style={{ gridColumn: '1 / -1' }}>
+                      <span className={styles.detailLabel}>Address</span>
+                      <span className={styles.detailValue}>{order.customer_address}</span>
+                    </div>
+                  )}
+                  {order.notes && (
+                    <div className={styles.detailItem} style={{ gridColumn: '1 / -1' }}>
+                      <span className={styles.detailLabel}>Order Note</span>
+                      <span className={styles.detailValue}>{order.notes}</span>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </Card>
+
+          {/* Items Card */}
+          <Card>
+            <div className={styles.heading}>
+              <span>Items <span className={styles.badgeCount}>{(isEditing ? editLines : lines).length}</span></span>
+            </div>
+
+            {isEditing ? (
+              /* Edit Mode Items List */
+              <div className={styles.itemsList}>
+                {editLines.map((line, idx) => (
+                  <div key={line.id} className={styles.itemRow}>
+                    <div className={styles.editItemHeader}>
+                      <span className={styles.itemIndex}>{idx + 1}</span>
+                      <select
+                        className={styles.editSelect}
+                        style={{ width: 90 }}
+                        value={line.unit}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setEditLines((prev) =>
+                            prev.map((l) => (l.id === line.id ? { ...l, unit: val } : l))
+                          );
+                        }}
+                      >
+                        {UNIT_OPTIONS.map((u) => (
+                          <option key={u} value={u}>{u}</option>
+                        ))}
+                      </select>
+                      <input
+                        type="text"
+                        className={styles.editInput}
+                        style={{ flex: 1 }}
+                        list="products-catalog-list"
+                        value={line.name}
+                        onChange={(e) => {
+                          const nameVal = e.target.value;
+                          const matchedProd = products.find((p) => p.name === nameVal);
+                          setEditLines((prev) =>
+                            prev.map((l) =>
+                              l.id === line.id
+                                ? { ...l, name: nameVal, productId: matchedProd ? matchedProd.id : l.productId }
+                                : l
+                            )
+                          );
+                        }}
+                      />
+                      <datalist id="products-catalog-list">
+                        {products.map((p) => (
+                          <option key={p.id} value={p.name} />
+                        ))}
+                      </datalist>
+
+                      <button
+                        type="button"
+                        className={styles.deleteItemBtn}
+                        onClick={() => handleDeleteEditLine(line.id)}
+                      >
+                        <Icon name="trash" size={14} /> Delete Item
+                      </button>
+                    </div>
+
+                    {/* Cutting instructions list in Edit Mode */}
+                    <div style={{ marginLeft: 28, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {line.cuts.map((cut) => (
+                        <div key={cut.id} className={styles.editCutRow}>
+                          <Icon name="scissors" size={14} style={{ color: 'var(--text-muted)' }} />
+                          <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>cutting</span>
+                          <input
+                            type="text"
+                            className={styles.editInput}
+                            style={{ flex: 1, maxWidth: 220 }}
+                            value={cut.text}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setEditLines((prev) =>
+                                prev.map((l) =>
+                                  l.id === line.id
+                                    ? {
+                                        ...l,
+                                        cuts: l.cuts.map((c) => (c.id === cut.id ? { ...c, text: val } : c)),
+                                      }
+                                    : l
+                                )
+                              );
+                            }}
+                          />
+                          <button
+                            type="button"
+                            className={styles.iconBtn}
+                            onClick={() => handleDeleteCutFromLine(line.id, cut.id)}
+                          >
+                            <Icon name="trash" size={14} />
+                          </button>
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        className={styles.addWeighingBtn}
+                        onClick={() => handleAddCutToLine(line.id)}
+                      >
+                        + Add cutting
+                      </button>
+                    </div>
+
+                    {/* Price & Qty Row */}
+                    <div className={styles.itemTotalRow}>
+                      <span>Total:</span>
+                      <div className={styles.priceCalc}>
+                        <input
+                          type="number"
+                          className={styles.editInput}
+                          style={{ width: 110, textAlign: 'right' }}
+                          value={line.price}
+                          placeholder="0"
+                          onChange={(e) => {
+                            const pVal = e.target.value;
+                            setEditLines((prev) =>
+                              prev.map((l) => (l.id === line.id ? { ...l, price: pVal } : l))
+                            );
+                          }}
+                        />
+                        <span>x {line.qty}</span>
+                        <span className={styles.lineTotalPrice}>
+                          {currency.format((parseFloat(line.price) || 0) * (parseFloat(line.qty) || 0))}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+                <button type="button" className={styles.addItemBtn} onClick={handleAddEditLine}>
+                  <Icon name="add" size={16} /> Add Item
+                </button>
+              </div>
+            ) : (
+              /* View Mode Items List */
+              <div className={styles.itemsList}>
+                {lines.map((line, idx) => {
+                  const qty = typeof line.qty === 'string' ? parseFloat(line.qty) || 0 : (line.qty ?? 0);
+                  const price = typeof line.price === 'string' ? parseFloat(line.price) || 0 : (line.price ?? 0);
+                  const isWeighedItem = line.unit === 'Loaf' || line.unit === 'kg' || line.unit === 'gram';
+
+                  const weighingLines = line.id ? (weighingsMap[line.id] ?? []) : [];
+                  const totalMeasuredWeight = weighingLines.reduce(
+                    (acc, w) => acc + (parseFloat(w.weight) || 0),
+                    0
+                  );
+                  const itemPhotos = line.id ? (itemPhotosMap[line.id] ?? []) : [];
+                  const sendingQty = line.id ? (sendingQtyMap[line.id] ?? qty) : qty;
+
+                  return (
+                    <div key={line.id} className={styles.itemRow}>
+                      <div className={styles.itemHeader}>
+                        <div className={styles.itemInfo}>
+                          <span className={styles.itemIndex}>{idx + 1}</span>
+                          <span className={styles.unitTag}>{line.unit}</span>
+                          <span className={styles.itemName}>{line.name}</span>
+                        </div>
+                        <div className={styles.sendingBadge}>
+                          sending
+                          <input
+                            type="number"
+                            className={styles.sendingInput}
+                            value={sendingQty}
+                            onChange={(e) => {
+                              const val = Math.max(0, parseInt(e.target.value) || 0);
+                              if (line.id) setSendingQtyMap((prev) => ({ ...prev, [line.id!]: val }));
+                            }}
+                          />
+                          of {qty}
+                        </div>
+                      </div>
+
+                      {/* Weighing Lines for Loaf/kg items */}
+                      {isWeighedItem && (
+                        <div className={styles.weighingSection}>
+                          {weighingLines.map((w) => (
+                            <div key={w.id} className={styles.weighingRow}>
+                              <input
+                                type="text"
+                                className={styles.weighingInput}
+                                value={w.weight}
+                                onChange={(e) => handleUpdateWeighingWeight(line.id, w.id, e.target.value)}
+                              />
+                              <span className={styles.unitText}>kg</span>
+
+                              <label className={styles.iconBtn} title="Upload scale photo">
+                                <Icon name="camera" size={16} />
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  style={{ display: 'none' }}
+                                  onChange={(e) => handleUploadWeighingPhoto(line.id, w.id, e)}
+                                />
+                              </label>
+
+                              <button
+                                type="button"
+                                className={styles.iconBtn}
+                                title="Remove weighing"
+                                onClick={() => handleRemoveWeighing(line.id, w.id)}
+                              >
+                                <Icon name="trash" size={14} />
+                              </button>
+                            </div>
+                          ))}
+
+                          <button
+                            type="button"
+                            className={styles.addWeighingBtn}
+                            onClick={() => handleAddWeighing(line.id)}
+                          >
+                            + Add weighing
+                          </button>
+
+                          {/* Cutting instruction */}
+                          <div className={styles.cuttingInstruction}>
+                            <Icon name="scissors" size={14} />
+                            <span>steak cut 2 cm</span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Item Photos / Thumbnails Container */}
+                      {itemPhotos.length > 0 && (
+                        <div className={styles.thumbnailsContainer} style={{ marginLeft: 28 }}>
+                          {itemPhotos.map((img) => (
+                            <div
+                              key={img.id}
+                              className={styles.thumbnailItem}
+                              onClick={() =>
+                                setActiveImageModal({
+                                  url: img.url,
+                                  title: `Attachment for ${line.name}`,
+                                  photoId: img.id,
+                                  lineId: line.id,
+                                  attachmentId: img.attachmentId,
+                                })
+                              }
+                            >
+                              <img src={img.url} alt="thumbnail" className={styles.thumbnailImg} />
+                              <div
+                                className={styles.thumbnailHoverTrash}
+                                title="Delete image"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleRemoveItemPhoto(line.id, img.id, img.attachmentId);
+                                }}
+                              >
+                                <Icon name="trash" size={14} />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Item Summary line */}
+                      <div className={styles.itemTotalRow}>
+                        <span className={styles.totalWeight}>
+                          Total: {isWeighedItem ? `${totalMeasuredWeight.toFixed(2)} kg` : ''}
+                        </span>
+                        <div className={styles.priceCalc}>
+                          <span>{currency.format(price)} x {qty}</span>
+                          <span className={styles.lineTotalPrice}>
+                            {currency.format(price * qty)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <div className={styles.totalRow}>
+              <span>Order value · from PO</span>
+              <span className={styles.totalValue}>{currency.format(orderTotal)}</span>
+            </div>
+          </Card>
+
+          {/* Documents Section */}
+          <Card>
+            <div className={styles.heading}>
+              <span>Documents <span className={styles.badgeCount}>{docEntries.length}</span></span>
+            </div>
+
+            {docEntries.length === 0 ? (
+              <p className={styles.muted}>No documents logged yet.</p>
+            ) : (
+              <div className={styles.docList}>
+                {docEntries.map((doc) => {
+                  const fileId = doc.document_file ?? doc.file_path;
+                  return (
+                    <div key={doc.id} className={styles.docRow}>
+                      <div className={styles.docTop}>
+                        <span className={styles.docType}>{doc.doc_type}</span>
+                        <span className={styles.docNumber}>{doc.number ?? '—'}</span>
+
+                        {fileId && (
+                          <div
+                            className={styles.thumbnailItem}
+                            style={{ width: 36, height: 36 }}
+                            onClick={() =>
+                              setActiveImageModal({
+                                url: directusFileUrl(fileId),
+                                title: `${doc.doc_type} ${doc.number ?? ''}`,
+                                attachmentId: doc.id ?? undefined,
+                              })
+                            }
+                          >
+                            <img src={directusFileUrl(fileId)} alt="doc" className={styles.thumbnailImg} />
+                          </div>
+                        )}
+
+                        <button
+                          type="button"
+                          className={styles.iconBtn}
+                          style={{ marginLeft: 8 }}
+                          title="Delete document"
+                          onClick={() => doc.id != null && handleDeleteDocument(doc.id)}
+                        >
+                          <Icon name="trash" size={14} />
+                        </button>
+                      </div>
+
+                      {doc.note && <div className={styles.docNote}>{doc.note}</div>}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {canAddDocs && (
+              <form className={styles.docForm} onSubmit={handleAddDocument}>
+                <div className={styles.docFormRow}>
+                  <select
+                    className={styles.docSelect}
+                    value={docType}
+                    onChange={(e) => setDocType(e.target.value)}
+                  >
+                    {DOC_TYPES.map((t) => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                  <input
+                    type="text"
+                    className={styles.editInput}
+                    style={{ flex: 1 }}
+                    placeholder="Document number"
+                    value={docNumber}
+                    onChange={(e) => setDocNumber(e.target.value)}
+                    required
+                  />
+                  <input
+                    ref={docFileInputRef}
+                    type="file"
+                    style={{ display: 'none' }}
+                    accept="image/*,application/pdf"
+                    onChange={handleDocFileUpload}
+                  />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => docFileInputRef.current?.click()}
+                  >
+                    <Icon name="paperclip" size={14} /> {docFileName ? 'File Selected' : 'Add attachment'}
+                  </Button>
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    disabled={savingDoc || !docNumber.trim()}
+                  >
+                    {savingDoc ? '…' : '+ Add'}
+                  </Button>
+                </div>
+                <input
+                  type="text"
+                  className={styles.editInput}
+                  placeholder="DO orderan Juli 14 2026, tolong diproses"
+                  value={docNote}
+                  onChange={(e) => setDocNote(e.target.value)}
+                />
+              </form>
+            )}
+          </Card>
+
+          {/* Stage Action Controls */}
+          {!isCancelled && (
+            <div className={styles.stageActions}>
+              <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                {flow?.next && canAdvance && (
+                  <Button
+                    type="button"
+                    variant="primary"
+                    size="lg"
+                    onClick={handleAdvance}
+                    disabled={advancing}
+                    className={styles.actionBtn}
+                  >
+                    {advancing ? 'Saving…' : flow.advanceLabel}
+                  </Button>
+                )}
+                {flow?.prev && canSendBack && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="lg"
+                    onClick={handleSendBack}
+                    disabled={advancing}
+                    className={styles.actionBtn}
+                  >
+                    {flow.sendBackLabel ?? 'Send Back'}
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Order Actions (Hold / Cancel / Restore) */}
+          {(canCancel || canHold || canRestore) && (
+            <div className={styles.orderActions}>
+              {canRestore && (
+                <Button type="button" variant="secondary" size="lg" onClick={handleRestore}>
+                  <Icon name="refresh" size={16} /> Restore Order
+                </Button>
+              )}
+              {canHold && !isOutstanding && (
+                <Button type="button" variant="secondary" size="lg" onClick={handleHold}>
+                  <Icon name="pause" size={16} /> Put on Hold
+                </Button>
+              )}
+              {canCancel && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={handleCancel}
+                  disabled={cancelling}
+                >
+                  <Icon name="cancel" size={16} /> {cancelling ? 'Cancelling…' : 'Cancel Order'}
+                </Button>
+              )}
+            </div>
+          )}
+
+        </div>
+
+        {/* ── Collapsible Side Panel (Notes & History) ── */}
+        {isPanelOpen && (
+          <aside className={styles.sidePanel}>
+
+            {/* Notes Card */}
+            <Card>
+              <h3 className={styles.heading}>Notes</h3>
+              <div className={styles.notesList}>
+                {history
+                  .filter((h) => h.what.startsWith('Note:'))
+                  .map((n, idx) => (
+                    <div key={n.id ?? idx} className={styles.noteItem}>
+                      <div className={styles.noteHeader}>
+                        <span>{n.who ?? 'Teza (Admin)'}</span>
+                        <span>{formatDate(n.at, true)}</span>
+                      </div>
+                      <div>{n.what.replace('Note:', '').trim()}</div>
+                    </div>
+                  ))}
+              </div>
+              <form className={styles.noteForm} onSubmit={handleAddNote}>
+                <input
+                  type="text"
+                  className={styles.noteInput}
+                  placeholder="Add note for the team…"
+                  value={noteText}
+                  onChange={(e) => setNoteText(e.target.value)}
+                  disabled={savingNote}
+                />
+                <Button type="submit" variant="secondary" disabled={savingNote || !noteText.trim()}>
+                  + Add
+                </Button>
+              </form>
+            </Card>
+
+            {/* History Card */}
+            <Card>
+              <h3 className={styles.heading}>History</h3>
+              <div className={styles.historyList}>
+                {history.length === 0 && (
+                  <p className={styles.muted}>No history yet.</p>
+                )}
+                {history.slice().reverse().map((h, i) => (
+                  <div key={h.id ?? i} className={styles.historyItem}>
+                    <span className={styles.historyTime}>
+                      {formatDate(h.at, true)}
+                    </span>
+                    <span className={styles.historyContent}>
+                      {h.what}{h.who ? ` · ${h.who}` : ''}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </Card>
+
+          </aside>
         )}
 
-        {canAddDocs && (
-          <form className={styles.docForm} onSubmit={handleAddDocument}>
-            <div className={styles.docFormTop}>
-              <select
-                className={styles.docSelect}
-                value={docType}
-                onChange={(e) => setDocType(e.target.value)}
+      </div>
+
+      {/* ── Image Details Modal Overlay ── */}
+      {activeImageModal && (
+        <div className={styles.modalBackdrop} onClick={() => setActiveImageModal(null)}>
+          <div className={styles.modalContent} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.modalHeader}>
+              <span>{activeImageModal.title}</span>
+              <button
+                type="button"
+                className={styles.iconBtn}
+                onClick={() => setActiveImageModal(null)}
               >
-                {DOC_TYPES.map((t) => (
-                  <option key={t} value={t}>{t}</option>
-                ))}
-              </select>
-              <input
-                type="text"
-                className={styles.docInput}
-                placeholder="Document number…"
-                value={docNumber}
-                onChange={(e) => setDocNumber(e.target.value)}
-                required
+                <Icon name="close" size={16} />
+              </button>
+            </div>
+            <div className={styles.modalBody}>
+              <img
+                src={activeImageModal.url}
+                alt="Detail preview"
+                className={styles.modalImage}
               />
             </div>
-            <input
-              type="text"
-              className={styles.docInput}
-              placeholder="Note (optional)"
-              value={docNote}
-              onChange={(e) => setDocNote(e.target.value)}
-            />
-            <Button
-              type="submit"
-              variant="secondary"
-              disabled={savingDoc || !docNumber.trim()}
-            >
-              {savingDoc ? 'Saving…' : 'Add Document'}
-            </Button>
-          </form>
-        )}
-      </Card>
-
-      {/* ── attachments / proof photos ── */}
-      <Card>
-        <h3 className={styles.heading}>Attachments</h3>
-
-        {fileEntries.length === 0 ? (
-          <p className={styles.muted}>No files attached yet.</p>
-        ) : (
-          <div className={styles.attachList}>
-            {fileEntries.map((att) => {
-              const fileId = att.document_file ?? att.file_path;
-              return (
-                <div key={att.id} className={styles.attachRow}>
-                  {fileId && (
-                    <a
-                      href={directusFileUrl(fileId)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className={styles.attachLink}
-                    >
-                      <Icon name="paperclip" size={14} />
-                      {att.label ?? att.caption ?? att.doc_type ?? 'File'}
-                    </a>
-                  )}
-                  <span className={styles.docDate}>{formatDate(att.created_at, true)}</span>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {canUpload && (
-          <div style={{ marginTop: '0.75rem' }}>
-            <input
-              ref={fileInputRef}
-              type="file"
-              style={{ display: 'none' }}
-              accept="image/*,application/pdf"
-              onChange={handleFileUpload}
-            />
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploading}
-            >
-              <Icon name="paperclip" size={16} />
-              {uploading ? 'Uploading…' : 'Upload File'}
-            </Button>
-          </div>
-        )}
-      </Card>
-
-      {/* ── notes & team comms ── */}
-      <Card>
-        <h3 className={styles.heading}>Notes &amp; Team Comms</h3>
-        <form className={styles.noteForm} onSubmit={handleAddNote}>
-          <input
-            type="text"
-            className={styles.noteInput}
-            placeholder="Add note for the team…"
-            value={noteText}
-            onChange={(e) => setNoteText(e.target.value)}
-            disabled={savingNote}
-          />
-          <Button type="submit" variant="secondary" disabled={savingNote || !noteText.trim()}>
-            Add Note
-          </Button>
-        </form>
-      </Card>
-
-      {/* ── order history ── */}
-      <Card>
-        <h3 className={styles.heading}>History</h3>
-        <div className={styles.historyList}>
-          {history.length === 0 && (
-            <p className={styles.muted}>No history yet.</p>
-          )}
-          {history.map((h, i) => (
-            <div key={h.id ?? i} className={styles.historyItem}>
-              <span className={styles.historyTime}>
-                {formatDate(h.at, true)}
-              </span>
-              <span className={styles.historyContent}>
-                {h.what}{h.who ? ` · ${h.who}` : ''}
-              </span>
+            <div className={styles.modalFooter}>
+              <Button
+                type="button"
+                variant="secondary"
+                style={{ color: 'var(--state-error)' }}
+                onClick={() => {
+                  if (activeImageModal.lineId && activeImageModal.photoId) {
+                    handleRemoveItemPhoto(
+                      activeImageModal.lineId,
+                      activeImageModal.photoId,
+                      activeImageModal.attachmentId
+                    );
+                  } else if (activeImageModal.attachmentId) {
+                    handleDeleteDocument(activeImageModal.attachmentId);
+                    setActiveImageModal(null);
+                  }
+                }}
+              >
+                <Icon name="trash" size={16} /> Delete Image
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setActiveImageModal(null)}
+              >
+                Close
+              </Button>
             </div>
-          ))}
+          </div>
         </div>
-      </Card>
+      )}
 
     </div>
   );

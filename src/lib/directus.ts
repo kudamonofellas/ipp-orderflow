@@ -605,6 +605,15 @@ export async function createAttachment(
   }
 }
 
+export async function deleteAttachment(id: number | string): Promise<DirectusResult<void>> {
+  try {
+    await getClient().request(deleteItem('attachments', id));
+    return { data: undefined, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
 /**
  * Upload a file to Directus Files and return its uuid.
  * Pass the returned id as `document_file` in createAttachment().
@@ -656,6 +665,30 @@ export async function updateOrderLine(
       return { data: null, error: `Invalid order_line response: ${parsed.error.message}` };
     }
     return { data: parsed.data, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+export async function createOrderLine(
+  input: CreateOrderLineInput,
+): Promise<DirectusResult<OrderLinesCollection>> {
+  try {
+    const raw = await getClient().request(createItem('order_lines', input as never));
+    const parsed = OrderLinesCollectionArraySchema.element.safeParse(raw);
+    if (!parsed.success) {
+      return { data: null, error: `Invalid order_line response: ${parsed.error.message}` };
+    }
+    return { data: parsed.data, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+export async function deleteOrderLine(id: string): Promise<DirectusResult<void>> {
+  try {
+    await getClient().request(deleteItem('order_lines', id));
+    return { data: undefined, error: null };
   } catch (err) {
     return { data: null, error: errMsg(err) };
   }

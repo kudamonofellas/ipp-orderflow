@@ -16,17 +16,19 @@ interface IconProps {
   /** Pixel size (width + height). Defaults to 20. */
   size?: number;
   className?: string;
+  style?: React.CSSProperties;
   /** Accessible label. When omitted the icon is decorative (aria-hidden). */
   label?: string;
 }
 
-export function Icon({ name, size = 20, className, label }: IconProps) {
+export function Icon({ name, size = 20, className, style, label }: IconProps) {
   return (
     <Iconify
       icon={ICONS[name]}
       width={size}
       height={size}
       className={className}
+      style={style}
       aria-hidden={label ? undefined : true}
       aria-label={label}
       role={label ? 'img' : undefined}
