@@ -1,14 +1,14 @@
 .container {
   display: flex;
   flex-direction: column;
-  gap: var(--space-lg);
+  gap: var(--space-md);
   max-width: 1280px;
   margin: 0 auto;
 }
 
 .header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: var(--space-md);
 }
@@ -69,7 +69,7 @@
 /* 2-column vs 1-column layout grid */
 .layoutGrid {
   display: grid;
-  gap: var(--space-lg);
+  gap: var(--space-md);
   align-items: start;
   transition: grid-template-columns 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -79,7 +79,7 @@
 }
 
 .layoutGridFull {
-  grid-template-columns: 1fr 0px;
+  grid-template-columns: 1fr 44px;
 }
 
 .mainColumn {
@@ -92,38 +92,40 @@
 /* Side Panel Column & Scrollable Fixed Layout */
 .sidePanelColumn {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  align-items: flex-start;
   gap: var(--space-md);
   overflow: visible;
-  transition: opacity 0.25s ease, transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  opacity: 1;
-  transform: translateX(0);
-  width: 340px;
+  width: 100%;
   position: sticky;
-  top: 80px;
-  height: calc(100vh - 100px);
+  top: var(--space-md);
+  height: calc(100vh - (var(--space-md)));
 }
 
-.sidePanelCollapsed {
-  opacity: 0;
-  transform: translateX(20px);
-  pointer-events: none;
-  width: 0;
-}
-
-.sidePanelHeader {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  height: 40px;
+.panelToggleBtn {
+  flex-shrink: 0;
 }
 
 .sidePanelStickyContent {
+  flex: 1;
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
   height: 100%;
   min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  transition: opacity 0.25s ease, transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  opacity: 1;
+  transform: translateX(0);
+  width: 296px;
+}
+
+.sidePanelStickyContentCollapsed {
+  opacity: 0;
+  transform: translateX(20px);
+  pointer-events: none;
+  width: 0;
 }
 
 .notesCard {
@@ -204,19 +206,15 @@
 
 .profileRowClickable {
   cursor: pointer;
-  border-radius: var(--radius-md);
-  padding: 4px 6px;
-  margin: -4px -6px;
-  transition: background-color 0.15s ease;
+  transition: opacity 0.2s ease-in-out;
 }
 
 .profileRowClickable:hover {
-  background-color: var(--bg-surface-hover, rgba(0, 0, 0, 0.04));
+  opacity: 85%;
 }
 
 .profileRowClickable:hover .customerInfo h3 {
   color: var(--accent-primary);
-  text-decoration: underline;
 }
 
 .avatar {
@@ -236,13 +234,11 @@
 .customerInfo h3 {
   font: var(--text-h3);
   color: var(--text-primary);
-  margin: 0 0 4px;
 }
 
 .customerInfo p {
   font: var(--text-caption);
   color: var(--text-muted);
-  margin: 0;
 }
 
 .detailsGrid {
@@ -590,7 +586,7 @@
   font: var(--text-body);
   color: var(--text-primary);
   width: 100%;
-  height: var(--input-height, 38px);
+  height: 40px;
   box-sizing: border-box;
 }
 
@@ -806,15 +802,20 @@
   }
 
   .sidePanelColumn {
+    flex-direction: column;
+    width: 100% !important;
+    height: auto;
+    position: static;
+  }
+
+  .sidePanelStickyContent,
+  .sidePanelStickyContentCollapsed {
     opacity: 1 !important;
     transform: none !important;
     pointer-events: auto !important;
     width: 100% !important;
-  }
-
-  .sidePanelStickyContent {
-    position: static;
-    height: auto;
+    height: 100vh;
+    overflow: visible;
   }
 
   .panelToggleBtn {

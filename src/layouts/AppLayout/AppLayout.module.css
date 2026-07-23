@@ -9,5 +9,5 @@
 .content {
   flex: 1 1 0%;
   min-width: 0;
-  padding: var(--space-xl) var(--space-xl) var(--space-3xl);
+  padding: var(--space-xl) var(--space-xl) var(--space-xl);
 }

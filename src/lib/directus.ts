@@ -113,12 +113,21 @@ const localAuthStorage = {
  * Two client shapes:
  * - `authClient` — has `authentication('json')` + `rest()`. Used for login,
  *   logout, refresh, and all authenticated reads/writes. Tokens are persisted
- *   in sessionStorage so reloads within the same tab keep the user signed in.
+ *   in localStorage so reloads within the same tab keep the user signed in.
+ *
+ *   `autoRefresh: false` — we deliberately disable the SDK's background
+ *   auto-refresh. When auto-refresh is enabled and the refresh token is
+ *   invalid/expired, the SDK calls `p()` (clear all tokens) before throwing,
+ *   wiping the valid access token from storage. Subsequent requests then go
+ *   out without auth and Directus returns 500 for write operations.
+ *   RoleContext handles rehydration on mount; the save pre-flight readMe()
+ *   check catches expired sessions before any writes are attempted.
+ *
  * - `tokenClient` — `staticToken()` + `rest()`. Used only when the app is
  *   configured with a long-lived static token (early read-only wiring).
  */
 const authClient = createDirectus(url)
-  .with(authentication('json', { storage: localAuthStorage }))
+  .with(authentication('json', { storage: localAuthStorage, autoRefresh: false }))
   .with(rest());
 
 const tokenClient = staticTokenValue

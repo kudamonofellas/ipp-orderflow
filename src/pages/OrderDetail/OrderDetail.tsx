@@ -11,6 +11,7 @@ import {
   readAttachments,
   readCustomers,
   readProducts,
+  readMe,
   appendOrderHistory,
   updateOrder,
   updateOrderLine,
@@ -347,6 +348,24 @@ export function OrderDetail() {
     setSavingEdits(true);
 
     try {
+      // 0. Pre-flight: verify the session is still alive before any writes.
+      //    Do NOT call refreshToken() here — the SDK's authentication('json')
+      //    composable auto-manages token refresh. Manually calling refresh()
+      //    with an invalid/expired refresh token causes the SDK to wipe its
+      //    internal access token, which breaks all subsequent requests (500s).
+      //    A simple readMe() probe is sufficient: if it succeeds, the access
+      //    token is valid; if it fails, we surface the re-login message.
+      const authCheck = await readMe();
+      if (authCheck.error !== null) {
+        window.alert(
+          'Your session has expired. Please log in again to save changes.'
+        );
+        setSavingEdits(false);
+        return;
+      }
+
+      const errors: string[] = [];
+
       // 1. Update Order Header
       const headerPatch: Record<string, unknown> = {
         customer_name: editCustomerName,
@@ -358,20 +377,25 @@ export function OrderDetail() {
       if (editOrderDate) headerPatch.order_date = new Date(editOrderDate).toISOString();
 
       const orderRes = await updateOrder(id, headerPatch);
-      if (orderRes.data) setOrder(orderRes.data);
+      if (orderRes.error) {
+        errors.push(`Order header: ${orderRes.error}`);
+      } else if (orderRes.data) {
+        setOrder(orderRes.data);
+      }
 
       // 2. Process Lines: Delete removed lines, Update modified lines, Create new lines
       const existingIdsInEdit = new Set(editLines.filter((l) => !l.isNew).map((l) => l.id));
       const deletedLineIds = lines.filter((l) => !existingIdsInEdit.has(l.id)).map((l) => l.id);
 
       for (const dId of deletedLineIds) {
-        await deleteOrderLine(dId);
+        const delRes = await deleteOrderLine(dId);
+        if (delRes.error) errors.push(`Delete line ${dId}: ${delRes.error}`);
       }
 
       for (let i = 0; i < editLines.length; i++) {
         const el = editLines[i]!;
         if (el.isNew) {
-          await createOrderLine({
+          const createRes = await createOrderLine({
             order_id: id,
             product_id: el.productId,
             name: el.name,
@@ -380,8 +404,9 @@ export function OrderDetail() {
             status: el.productId ? 'recognized' : 'unrecognized',
             sort_order: i,
           });
+          if (createRes.error) errors.push(`Create line "${el.name}": ${createRes.error}`);
         } else {
-          await updateOrderLine(el.id, {
+          const updateRes = await updateOrderLine(el.id, {
             name: el.name,
             product_id: el.productId,
             qty: parseFloat(el.qty) || 0,
@@ -389,25 +414,39 @@ export function OrderDetail() {
             price: parseFloat(el.price) || null,
             sort_order: i,
           });
+          if (updateRes.error) errors.push(`Update line "${el.name}": ${updateRes.error}`);
         }
       }
 
-      // Reload fresh lines
+      // Surface any write errors before continuing
+      if (errors.length > 0) {
+        window.alert(
+          `Some changes could not be saved:\n\n${errors.join('\n')}`
+        );
+        // Still reload so any partial saves are reflected
+      }
+
+      // 3. Reload fresh lines to reflect what's actually in the DB
       const reloadedLines = await readOrderLines({ filter: { order_id: { _eq: id } } });
       if (reloadedLines.data) setLines(reloadedLines.data);
 
-      // Append Audit History
-      await appendOrderHistory({
-        order_id: id,
-        what: 'Order details and line items updated',
-        who: userId,
-        stage,
-      });
+      // 4. Append Audit History (only if at least the header or some lines saved)
+      if (errors.length === 0) {
+        await appendOrderHistory({
+          order_id: id,
+          what: 'Order details and line items updated',
+          who: userId,
+          stage,
+        });
+      }
 
       const hRes = await readOrderHistory(id);
       if (hRes.data) setHistory(hRes.data);
 
-      setIsEditing(false);
+      // Only exit edit mode if everything saved cleanly
+      if (errors.length === 0) {
+        setIsEditing(false);
+      }
     } catch (err) {
       window.alert(`Failed to save edits: ${err}`);
     } finally {
@@ -691,7 +730,19 @@ export function OrderDetail() {
   return (
     <div className={styles.container}>
 
-      {/* ── Top Header ── */}
+
+
+      {/* ── Main Content & Side Panel Grid ── */}
+      <div
+        className={[
+          styles.layoutGrid,
+          isPanelOpen ? styles.layoutGridWithPanel : styles.layoutGridFull,
+        ].join(' ')}
+      >
+
+        {/* ── Main Column ── */}
+        <div className={styles.mainColumn}>
+                {/* ── Top Header ── */}
       <header className={styles.header}>
         <div className={styles.titleSection}>
           {isEditing ? (
@@ -761,30 +812,8 @@ export function OrderDetail() {
               </Button>
             )
           )}
-
-          <Button
-            type="button"
-            variant="secondary"
-            iconOnly
-            className={styles.panelToggleBtn}
-            onClick={() => setIsPanelOpen((prev) => !prev)}
-            title={isPanelOpen ? 'Collapse side panel' : 'Expand side panel'}
-          >
-            <Icon name={isPanelOpen ? 'chevronRight' : 'chevronLeft'} size={16} />
-          </Button>
         </div>
       </header>
-
-      {/* ── Main Content & Side Panel Grid ── */}
-      <div
-        className={[
-          styles.layoutGrid,
-          isPanelOpen ? styles.layoutGridWithPanel : styles.layoutGridFull,
-        ].join(' ')}
-      >
-
-        {/* ── Main Column ── */}
-        <div className={styles.mainColumn}>
 
           {/* Stepper (hidden in Edit mode) */}
 
@@ -1389,8 +1418,7 @@ export function OrderDetail() {
                   <input
                     type="text"
                     className={styles.editInput}
-                    style={{ flex: 1 }}
-                    placeholder="DO orderan Juli 14 2026, tolong diproses"
+                    placeholder="Put notes here..."
                     value={docNote}
                     onChange={(e) => setDocNote(e.target.value)}
                   />
@@ -1460,14 +1488,25 @@ export function OrderDetail() {
         </div>
 
         {/* ── Collapsible Side Panel (Notes & History) ── */}
-        <aside
-          className={[
-            styles.sidePanelColumn,
-            !isPanelOpen ? styles.sidePanelCollapsed : '',
-          ].join(' ')}
-        >
-          <div className={styles.sidePanelStickyContent}>
+        <aside className={styles.sidePanelColumn}>
+          <Button
+            type="button"
+            variant="secondary"
+            iconOnly
+            className={styles.panelToggleBtn}
+            isActive={isPanelOpen}
+            onClick={() => setIsPanelOpen((prev) => !prev)}
+            title={isPanelOpen ? 'Collapse side panel' : 'Expand side panel'}
+          >
+            <Icon name={isPanelOpen ? 'chevronRight' : 'chevronLeft'} size={16} />
+          </Button>
 
+          <div
+            className={[
+              styles.sidePanelStickyContent,
+              !isPanelOpen ? styles.sidePanelStickyContentCollapsed : '',
+            ].join(' ')}
+          >
             {/* Notes Card */}
             <Card className={styles.notesCard}>
               <h3 className={styles.heading}>Notes</h3>

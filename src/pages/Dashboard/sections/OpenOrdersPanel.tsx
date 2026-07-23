@@ -6,6 +6,7 @@ import { useCan } from '../../../hooks/useAuth';
 import type { OpenOrder } from '../../../types/dashboard';
 import styles from './OpenOrdersPanel.module.css';
 
+
 interface OpenOrdersPanelProps {
   orders: OpenOrder[];
   loading?: boolean;
@@ -143,7 +144,7 @@ export function OpenOrdersPanel({
                   <th style={{ textAlign: 'left' }}>Delivery Date</th>
                   <th style={{ textAlign: 'left' }}>Sales Rep</th>
                   <th style={{ textAlign: 'left' }}>Customer</th>
-                  <th style={{ textAlign: 'right' }}>Items</th>
+                  <th style={{ textAlign: 'left' }}>Items</th>
                 </tr>
               </thead>
               <tbody>

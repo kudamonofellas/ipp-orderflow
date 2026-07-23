@@ -129,7 +129,7 @@
 /* Table */
 .table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
 }
 
 .th {
@@ -150,6 +150,16 @@
   color: var(--text-primary);
   padding: var(--space-md);
   border-top: 1px solid var(--border-subtle);
+}
+
+.orderRow td:first-child {
+  border-top-left-radius: var(--radius-md);
+  border-bottom-left-radius: var(--radius-md);
+}
+
+.orderRow td:last-child {
+  border-top-right-radius: var(--radius-md);
+  border-bottom-right-radius: var(--radius-md);
 }
 
 .clickable {

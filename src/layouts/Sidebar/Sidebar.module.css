@@ -4,7 +4,7 @@
   align-self: flex-start;
   height: 100vh;
   width: var(--sidebar-width-expanded);
-  background: var(--bg-muted);
+  background: var(--bg-surface-hover);
   border-right: 1px solid var(--border-default);
   display: flex;
   flex-direction: column;
