@@ -51,7 +51,8 @@
   --bg-base: #ffffff;
   --bg-surface: #ffffff;
   --bg-surface-hover: #f0f5f5;
-  --bg-muted: #f0f5f5;
+  --bg-surface-hover-dark: #e8f6f8;
+  --bg-muted: #e0e4e4;
 
   --text-primary: #1a1d1f;
   --text-secondary: #7c7c7c;

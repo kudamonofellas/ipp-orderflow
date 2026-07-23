@@ -160,11 +160,8 @@ export function OrderDetail() {
   const docFileInputRef = useRef<HTMLInputElement>(null);
 
   /* ── weighing lines & item photos local state ── */
-  // lineId -> WeighingLine[]
   const [weighingsMap, setWeighingsMap] = useState<Record<string, WeighingLine[]>>({});
-  // lineId -> photo ID / URL strings
   const [itemPhotosMap, setItemPhotosMap] = useState<Record<string, { id: string; url: string; attachmentId?: number | string }[]>>({});
-  // lineId -> sending quantity
   const [sendingQtyMap, setSendingQtyMap] = useState<Record<string, number>>({});
 
   /* ── edit mode form state ── */
@@ -215,7 +212,6 @@ export function OrderDetail() {
       loadedLines.forEach((line) => {
         if (line.id) {
           initialSending[line.id] = typeof line.qty === 'string' ? parseFloat(line.qty) : (line.qty ?? 1);
-          // if line has weight, seed initial weighing line
           const wVal = line.weight != null ? String(line.weight) : '0.00';
           initialWeighings[line.id] = [
             { id: 'w1', weight: wVal !== '0.00' ? wVal : '2.01', photoId: line.weigh_photo ?? null }
@@ -244,6 +240,12 @@ export function OrderDetail() {
   const stage = order.stage ?? 'intake';
   const flow = STAGE_FLOW[stage];
   const currentStageIndex = PIPELINE_STAGES.findIndex((s) => s.key === stage);
+
+  /* ────────────── stepper ── */
+  const completedPct = currentStageIndex === -1
+    ? '0%'
+    : `${(currentStageIndex / (PIPELINE_STAGES.length - 1)) * 100}%`;
+
   const isCancelled = order.cancelled === true || stage === 'cancelled';
   const isOutstanding = stage === 'outstanding';
   const isDelivered = stage === 'delivered';
@@ -258,6 +260,12 @@ export function OrderDetail() {
 
   const directusFileUrl = (fileId: string) =>
     `${import.meta.env.VITE_DIRECTUS_URL}/assets/${fileId}`;
+
+  const matchedCustomer = customers.find(
+    (c) => (order.customer_id && c.id === order.customer_id) ||
+           (order.customer_name && c.name?.toLowerCase() === order.customer_name.toLowerCase())
+  );
+  const customerId = order.customer_id || matchedCustomer?.id;
 
   /* Calculate order total value */
   const orderTotal = (isEditing ? editLines : lines).reduce((acc, line) => {
@@ -284,9 +292,9 @@ export function OrderDetail() {
         id: l.id,
         productId: l.product_id ?? null,
         name: l.name,
-        qty: String(l.qty ?? 1),
+        qty: String(parseFloat(String(l.qty ?? 1)) || 1),
         unit: l.unit ?? 'Loaf',
-        price: String(l.price ?? 0),
+        price: String(parseFloat(String(l.price ?? 0)) || 0),
         cuts: [{ id: 'c1', text: 'steak cut 2 cm' }],
       }))
     );
@@ -455,7 +463,6 @@ export function OrderDetail() {
           [lineId]: current.map((w) => (w.id === wId ? { ...w, photoId, photoUrl } : w)),
         };
       });
-      // also record as item photo
       setItemPhotosMap((prev) => {
         const current = prev[lineId] ?? [];
         return {
@@ -684,12 +691,27 @@ export function OrderDetail() {
   return (
     <div className={styles.container}>
 
-      {/* ── Header ── */}
+      {/* ── Top Header ── */}
       <header className={styles.header}>
         <div className={styles.titleSection}>
-          <Button type="button" variant="tertiary" onClick={() => navigate(-1)}>
-            <Icon name="chevronLeft" size={16} /> Back
-          </Button>
+          {isEditing ? (
+            <Button
+              type="button"
+              variant="tertiary"
+              onClick={() => setIsEditing(false)}
+            >
+              <Icon name="close" size={16} /> Cancel
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              variant="tertiary"
+              onClick={() => navigate(-1)}
+            >
+              <Icon name="chevronLeft" size={16} /> Back
+            </Button>
+          )}
+
           <div className={styles.titleRow}>
             <h3 className={styles.title}>Order {order.no}</h3>
             {isCancelled && (
@@ -704,6 +726,7 @@ export function OrderDetail() {
             )}
           </div>
         </div>
+
         <div className={styles.actions}>
           <Button
             type="button"
@@ -742,6 +765,8 @@ export function OrderDetail() {
           <Button
             type="button"
             variant="secondary"
+            iconOnly
+            className={styles.panelToggleBtn}
             onClick={() => setIsPanelOpen((prev) => !prev)}
             title={isPanelOpen ? 'Collapse side panel' : 'Expand side panel'}
           >
@@ -749,33 +774,6 @@ export function OrderDetail() {
           </Button>
         </div>
       </header>
-
-      {/* ── Stepper ── */}
-      <div className={styles.stepper}>
-        <div className={styles.stepperTrack}>
-          {PIPELINE_STAGES.map((s, idx) => {
-            const isActive = stage === s.key;
-            const isCompleted = currentStageIndex > idx;
-            return (
-              <div
-                key={s.key}
-                className={[
-                  styles.step,
-                  isActive ? styles.stepActive : '',
-                  isCompleted ? styles.stepCompleted : '',
-                ].filter(Boolean).join(' ')}
-              >
-                <div className={styles.stepDot} />
-              </div>
-            );
-          })}
-        </div>
-        <div className={styles.stepperLabels}>
-          {PIPELINE_STAGES.map((s) => (
-            <span key={s.key} className={styles.stepLabel}>{s.label}</span>
-          ))}
-        </div>
-      </div>
 
       {/* ── Main Content & Side Panel Grid ── */}
       <div
@@ -787,6 +785,60 @@ export function OrderDetail() {
 
         {/* ── Main Column ── */}
         <div className={styles.mainColumn}>
+
+          {/* Stepper (hidden in Edit mode) */}
+
+          {!isEditing && (
+            <div
+              className={styles.stepperContainer}
+              style={{ '--completed-pct': completedPct } as React.CSSProperties}>
+              <div className={styles.stepperTrack}>
+                {PIPELINE_STAGES.map((s, idx) => {
+                  const isActive = stage === s.key;
+                  const isCompleted = currentStageIndex > idx;
+
+                  const hasLineAfter = idx < PIPELINE_STAGES.length - 1;
+
+                  return (
+                    <div key={s.key} className={styles.stepColumn}>
+                      <div className={styles.stepHeaderRow}>
+                        <div
+                          className={[
+                            styles.stepLine,
+                            idx === 0 ? styles.stepLineInvisible : '',
+                            currentStageIndex >= idx ? styles.stepLineCompleted : '',
+                          ].join(' ')}
+                        />
+                        <div
+                          className={[
+                            styles.stepDot,
+                            isActive ? styles.stepDotActive : '',
+                            isCompleted ? styles.stepDotCompleted : '',
+                          ].join(' ')}
+                        />
+                        <div
+                          className={[
+                            styles.stepLine,
+                            idx === PIPELINE_STAGES.length - 1 ? styles.stepLineInvisible : '',
+                            currentStageIndex > idx ? styles.stepLineCompleted : '',
+                          ].join(' ')}
+                        />
+                      </div>
+                      <span
+                        className={[
+                          styles.stepLabel,
+                          isActive ? styles.stepLabelActive : '',
+                          isCompleted ? styles.stepLabelCompleted : '',
+                        ].join(' ')}
+                      >
+                        {s.label}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Customer Info Card */}
           <Card className={styles.customerCard}>
@@ -852,13 +904,22 @@ export function OrderDetail() {
               </div>
             ) : (
               <>
-                <div className={styles.profileRow}>
+                <div
+                  className={[
+                    styles.profileRow,
+                    customerId ? styles.profileRowClickable : '',
+                  ].join(' ')}
+                  onClick={() => {
+                    if (customerId) navigate(`/customers/${customerId}`);
+                  }}
+                  title={customerId ? 'View customer details' : undefined}
+                >
                   <div className={styles.avatar}>
                     {(order.customer_name ?? 'C').charAt(0).toUpperCase()}
                   </div>
                   <div className={styles.customerInfo}>
                     <h3>{order.customer_name || '—'}</h3>
-                    <p>Horeca · B2B</p>
+                    <p>{matchedCustomer?.channel || 'Horeca · B2B'}</p>
                   </div>
                 </div>
                 <div className={styles.detailsGrid}>
@@ -902,7 +963,7 @@ export function OrderDetail() {
           {/* Items Card */}
           <Card>
             <div className={styles.heading}>
-              <span>Items <span className={styles.badgeCount}>{(isEditing ? editLines : lines).length}</span></span>
+              Items <span className={styles.count}>{(isEditing ? editLines : lines).length}</span>
             </div>
 
             {isEditing ? (
@@ -911,10 +972,27 @@ export function OrderDetail() {
                 {editLines.map((line, idx) => (
                   <div key={line.id} className={styles.itemRow}>
                     <div className={styles.editItemHeader}>
-                      <span className={styles.itemIndex}>{idx + 1}</span>
+                      <input
+                        type="number"
+                        className={styles.editInput}
+                        style={{
+                          width: 80,
+                          textAlign: 'right'
+                        }}
+                        value={line.qty}
+                        min="1"
+                        onChange={(e) => {
+                          const qVal = e.target.value;
+                          setEditLines((prev) =>
+                            prev.map((l) => (l.id === line.id ? { ...l, qty: qVal } : l))
+                          );
+                        }}
+                      />
                       <select
                         className={styles.editSelect}
-                        style={{ width: 90 }}
+                        style={{
+                          width: 90,
+                        }}
                         value={line.unit}
                         onChange={(e) => {
                           const val = e.target.value;
@@ -951,21 +1029,22 @@ export function OrderDetail() {
                         ))}
                       </datalist>
 
-                      <button
+                      <Button
                         type="button"
-                        className={styles.deleteItemBtn}
+                        variant="tertiary"
+                        size="md"
                         onClick={() => handleDeleteEditLine(line.id)}
                       >
-                        <Icon name="trash" size={14} /> Delete Item
-                      </button>
+                        <Icon name="trash" size={14} /> Delete item
+                      </Button>
                     </div>
 
                     {/* Cutting instructions list in Edit Mode */}
                     <div style={{ marginLeft: 28, display: 'flex', flexDirection: 'column', gap: 6 }}>
                       {line.cuts.map((cut) => (
                         <div key={cut.id} className={styles.editCutRow}>
-                          <Icon name="scissors" size={14} style={{ color: 'var(--text-muted)' }} />
-                          <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>cutting</span>
+                          <Icon name="knife" size={14} style={{ color: 'var(--text-muted)' }} />
+                          <span style={{ fontSize: 'var(--text-label)', color: 'var(--text-secondary)' }}>cutting</span>
                           <input
                             type="text"
                             className={styles.editInput}
@@ -977,30 +1056,34 @@ export function OrderDetail() {
                                 prev.map((l) =>
                                   l.id === line.id
                                     ? {
-                                        ...l,
-                                        cuts: l.cuts.map((c) => (c.id === cut.id ? { ...c, text: val } : c)),
-                                      }
+                                      ...l,
+                                      cuts: l.cuts.map((c) => (c.id === cut.id ? { ...c, text: val } : c)),
+                                    }
                                     : l
                                 )
                               );
                             }}
                           />
-                          <button
+                          <Button
                             type="button"
-                            className={styles.iconBtn}
+                            variant="ghost"
+                            size="sm"
+                            iconOnly
                             onClick={() => handleDeleteCutFromLine(line.id, cut.id)}
                           >
                             <Icon name="trash" size={14} />
-                          </button>
+                          </Button>
                         </div>
                       ))}
-                      <button
+                      <Button
                         type="button"
-                        className={styles.addWeighingBtn}
+                        variant="tertiary"
+                        size="sm"
+                        style={{ alignSelf: 'flex-start' }}
                         onClick={() => handleAddCutToLine(line.id)}
                       >
-                        + Add cutting
-                      </button>
+                        <Icon name="add" size={14} />Add cutting
+                      </Button>
                     </div>
 
                     {/* Price & Qty Row */}
@@ -1008,7 +1091,6 @@ export function OrderDetail() {
                       <span>Total:</span>
                       <div className={styles.priceCalc}>
                         <input
-                          type="number"
                           className={styles.editInput}
                           style={{ width: 110, textAlign: 'right' }}
                           value={line.price}
@@ -1020,7 +1102,10 @@ export function OrderDetail() {
                             );
                           }}
                         />
-                        <span>x {line.qty}</span>
+                        <span style={{
+                          textAlign: 'left',
+                          width: 'auto',
+                        }}>x {line.qty}</span>
                         <span className={styles.lineTotalPrice}>
                           {currency.format((parseFloat(line.price) || 0) * (parseFloat(line.qty) || 0))}
                         </span>
@@ -1029,9 +1114,15 @@ export function OrderDetail() {
                   </div>
                 ))}
 
-                <button type="button" className={styles.addItemBtn} onClick={handleAddEditLine}>
+                <Button
+                  type="button"
+                  variant="primary"
+                  buttonStyle="fullWidth"
+                  onClick={handleAddEditLine}
+                  style={{ marginTop: 'var(--space-md)' }}
+                >
                   <Icon name="add" size={16} /> Add Item
-                </button>
+                </Button>
               </div>
             ) : (
               /* View Mode Items List */
@@ -1053,7 +1144,7 @@ export function OrderDetail() {
                     <div key={line.id} className={styles.itemRow}>
                       <div className={styles.itemHeader}>
                         <div className={styles.itemInfo}>
-                          <span className={styles.itemIndex}>{idx + 1}</span>
+                          <span className={styles.itemIndex}>{qty}</span>
                           <span className={styles.unitTag}>{line.unit}</span>
                           <span className={styles.itemName}>{line.name}</span>
                         </div>
@@ -1085,8 +1176,20 @@ export function OrderDetail() {
                               />
                               <span className={styles.unitText}>kg</span>
 
-                              <label className={styles.iconBtn} title="Upload scale photo">
-                                <Icon name="camera" size={16} />
+                              <label style={{ display: 'inline-flex', cursor: 'pointer' }}>
+                                <Button
+                                  type="button"
+                                  variant="secondary"
+                                  size="sm"
+                                  iconOnly
+                                  title="Upload scale photo"
+                                  onClick={(e) => {
+                                    const inputElem = (e.currentTarget as HTMLElement).nextElementSibling as HTMLInputElement;
+                                    inputElem?.click();
+                                  }}
+                                >
+                                  <Icon name="camera" size={16} />
+                                </Button>
                                 <input
                                   type="file"
                                   accept="image/*"
@@ -1095,28 +1198,32 @@ export function OrderDetail() {
                                 />
                               </label>
 
-                              <button
+                              <Button
                                 type="button"
-                                className={styles.iconBtn}
+                                variant="secondary"
+                                size="sm"
+                                iconOnly
                                 title="Remove weighing"
                                 onClick={() => handleRemoveWeighing(line.id, w.id)}
                               >
                                 <Icon name="trash" size={14} />
-                              </button>
+                              </Button>
                             </div>
                           ))}
 
-                          <button
+                          <Button
                             type="button"
-                            className={styles.addWeighingBtn}
+                            variant="tertiary"
+                            size="sm"
+                            style={{ alignSelf: 'flex-start' }}
                             onClick={() => handleAddWeighing(line.id)}
                           >
-                            + Add weighing
-                          </button>
+                            <Icon name="add" size={14} />Add weighing
+                          </Button>
 
                           {/* Cutting instruction */}
                           <div className={styles.cuttingInstruction}>
-                            <Icon name="scissors" size={14} />
+                            <Icon name="knife" size={14} />
                             <span>steak cut 2 cm</span>
                           </div>
                         </div>
@@ -1179,114 +1286,121 @@ export function OrderDetail() {
             </div>
           </Card>
 
-          {/* Documents Section */}
-          <Card>
-            <div className={styles.heading}>
-              <span>Documents <span className={styles.badgeCount}>{docEntries.length}</span></span>
-            </div>
-
-            {docEntries.length === 0 ? (
-              <p className={styles.muted}>No documents logged yet.</p>
-            ) : (
-              <div className={styles.docList}>
-                {docEntries.map((doc) => {
-                  const fileId = doc.document_file ?? doc.file_path;
-                  return (
-                    <div key={doc.id} className={styles.docRow}>
-                      <div className={styles.docTop}>
-                        <span className={styles.docType}>{doc.doc_type}</span>
-                        <span className={styles.docNumber}>{doc.number ?? '—'}</span>
-
-                        {fileId && (
-                          <div
-                            className={styles.thumbnailItem}
-                            style={{ width: 36, height: 36 }}
-                            onClick={() =>
-                              setActiveImageModal({
-                                url: directusFileUrl(fileId),
-                                title: `${doc.doc_type} ${doc.number ?? ''}`,
-                                attachmentId: doc.id ?? undefined,
-                              })
-                            }
-                          >
-                            <img src={directusFileUrl(fileId)} alt="doc" className={styles.thumbnailImg} />
-                          </div>
-                        )}
-
-                        <button
-                          type="button"
-                          className={styles.iconBtn}
-                          style={{ marginLeft: 8 }}
-                          title="Delete document"
-                          onClick={() => doc.id != null && handleDeleteDocument(doc.id)}
-                        >
-                          <Icon name="trash" size={14} />
-                        </button>
-                      </div>
-
-                      {doc.note && <div className={styles.docNote}>{doc.note}</div>}
-                    </div>
-                  );
-                })}
+          {/* Documents Section (hidden in Edit mode) */}
+          {!isEditing && (
+            <Card>
+              <div className={styles.heading}>
+                Documents <span className={styles.count}>{docEntries.length}</span>
               </div>
-            )}
 
-            {canAddDocs && (
-              <form className={styles.docForm} onSubmit={handleAddDocument}>
-                <div className={styles.docFormRow}>
-                  <select
-                    className={styles.docSelect}
-                    value={docType}
-                    onChange={(e) => setDocType(e.target.value)}
-                  >
-                    {DOC_TYPES.map((t) => (
-                      <option key={t} value={t}>{t}</option>
-                    ))}
-                  </select>
+              {docEntries.length === 0 ? (
+                <p className={styles.muted}>No documents logged yet.</p>
+              ) : (
+                <div className={styles.docList}>
+                  {docEntries.map((doc) => {
+                    const fileId = doc.document_file ?? doc.file_path;
+                    return (
+                      <div key={doc.id} className={styles.docRow}>
+                        <div className={styles.docTop}>
+                          <span className={styles.docType}>{doc.doc_type}</span>
+                          <span className={styles.docNumber}>{doc.number ?? '—'}</span>
+
+                          {fileId && (
+                            <div
+                              className={styles.thumbnailItem}
+                              style={{ width: 36, height: 36 }}
+                              onClick={() =>
+                                setActiveImageModal({
+                                  url: directusFileUrl(fileId),
+                                  title: `${doc.doc_type} ${doc.number ?? ''}`,
+                                  attachmentId: doc.id ?? undefined,
+                                })
+                              }
+                            >
+                              <img src={directusFileUrl(fileId)} alt="doc" className={styles.thumbnailImg} />
+                            </div>
+                          )}
+
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            iconOnly
+                            title="Delete document"
+                            onClick={() => doc.id != null && handleDeleteDocument(doc.id)}
+                          >
+                            <Icon name="trash" size={14} />
+                          </Button>
+                        </div>
+
+                        {doc.note && <div className={styles.docNote}>{doc.note}</div>}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {canAddDocs && (
+                <form className={styles.docForm} onSubmit={handleAddDocument}>
+                  <div className={styles.docFormRow}>
+                    <select
+                      className={styles.editInput}
+                      style={{ maxWidth: '100px' }}
+                      value={docType}
+                      onChange={(e) => setDocType(e.target.value)}
+                    >
+                      {DOC_TYPES.map((t) => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+                    <input
+                      type="text"
+                      className={styles.editInput}
+                      style={{ flex: 1 }}
+                      placeholder="Document number"
+                      value={docNumber}
+                      onChange={(e) => setDocNumber(e.target.value)}
+                      required
+                    />
+                    <input
+                      ref={docFileInputRef}
+                      type="file"
+                      style={{ display: 'none' }}
+                      accept="image/*,application/pdf"
+                      onChange={handleDocFileUpload}
+                    />
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="md"
+                      isActive={!!docFileName}
+                      onClick={() => docFileInputRef.current?.click()}
+                    >
+                      <Icon name={docFileName ? 'paperclip' : 'add'} size={16} />
+                    </Button>
+                    <Button
+                      type="submit"
+                      variant="primary"
+                      disabled={savingDoc || !docNumber.trim()}
+                    >
+                      {savingDoc ? '…' : '+ Add'}
+                    </Button>
+                  </div>
                   <input
                     type="text"
                     className={styles.editInput}
                     style={{ flex: 1 }}
-                    placeholder="Document number"
-                    value={docNumber}
-                    onChange={(e) => setDocNumber(e.target.value)}
-                    required
+                    placeholder="DO orderan Juli 14 2026, tolong diproses"
+                    value={docNote}
+                    onChange={(e) => setDocNote(e.target.value)}
                   />
-                  <input
-                    ref={docFileInputRef}
-                    type="file"
-                    style={{ display: 'none' }}
-                    accept="image/*,application/pdf"
-                    onChange={handleDocFileUpload}
-                  />
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={() => docFileInputRef.current?.click()}
-                  >
-                    <Icon name="paperclip" size={14} /> {docFileName ? 'File Selected' : 'Add attachment'}
-                  </Button>
-                  <Button
-                    type="submit"
-                    variant="primary"
-                    disabled={savingDoc || !docNumber.trim()}
-                  >
-                    {savingDoc ? '…' : '+ Add'}
-                  </Button>
-                </div>
-                <input
-                  type="text"
-                  className={styles.editInput}
-                  placeholder="DO orderan Juli 14 2026, tolong diproses"
-                  value={docNote}
-                  onChange={(e) => setDocNote(e.target.value)}
-                />
-              </form>
-            )}
-          </Card>
+                </form>
+              )}
+            </Card>
+          )}
 
-          {/* Stage Action Controls */}
-          {!isCancelled && (
+          {/* Stage Action Controls (hidden in Edit mode) */}
+          {!isEditing && !isCancelled && (
             <div className={styles.stageActions}>
               <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
                 {flow?.next && canAdvance && (
@@ -1317,8 +1431,8 @@ export function OrderDetail() {
             </div>
           )}
 
-          {/* Order Actions (Hold / Cancel / Restore) */}
-          {(canCancel || canHold || canRestore) && (
+          {/* Order Actions (Hold / Cancel / Restore - hidden in Edit mode) */}
+          {!isEditing && (canCancel || canHold || canRestore) && (
             <div className={styles.orderActions}>
               {canRestore && (
                 <Button type="button" variant="secondary" size="lg" onClick={handleRestore}>
@@ -1346,13 +1460,18 @@ export function OrderDetail() {
         </div>
 
         {/* ── Collapsible Side Panel (Notes & History) ── */}
-        {isPanelOpen && (
-          <aside className={styles.sidePanel}>
+        <aside
+          className={[
+            styles.sidePanelColumn,
+            !isPanelOpen ? styles.sidePanelCollapsed : '',
+          ].join(' ')}
+        >
+          <div className={styles.sidePanelStickyContent}>
 
             {/* Notes Card */}
-            <Card>
+            <Card className={styles.notesCard}>
               <h3 className={styles.heading}>Notes</h3>
-              <div className={styles.notesList}>
+              <div className={styles.notesListScroll}>
                 {history
                   .filter((h) => h.what.startsWith('Note:'))
                   .map((n, idx) => (
@@ -1365,7 +1484,7 @@ export function OrderDetail() {
                     </div>
                   ))}
               </div>
-              <form className={styles.noteForm} onSubmit={handleAddNote}>
+              <form className={styles.noteFormFixed} onSubmit={handleAddNote}>
                 <input
                   type="text"
                   className={styles.noteInput}
@@ -1374,16 +1493,19 @@ export function OrderDetail() {
                   onChange={(e) => setNoteText(e.target.value)}
                   disabled={savingNote}
                 />
-                <Button type="submit" variant="secondary" disabled={savingNote || !noteText.trim()}>
-                  + Add
+                <Button
+                  type="submit"
+                  variant="primary"
+                  disabled={savingNote || !noteText.trim()}>
+                  <Icon name="add" size={16} />Add
                 </Button>
               </form>
             </Card>
 
             {/* History Card */}
-            <Card>
+            <Card className={styles.historyCard}>
               <h3 className={styles.heading}>History</h3>
-              <div className={styles.historyList}>
+              <div className={styles.historyListScroll}>
                 {history.length === 0 && (
                   <p className={styles.muted}>No history yet.</p>
                 )}
@@ -1400,8 +1522,8 @@ export function OrderDetail() {
               </div>
             </Card>
 
-          </aside>
-        )}
+          </div>
+        </aside>
 
       </div>
 
@@ -1411,13 +1533,15 @@ export function OrderDetail() {
           <div className={styles.modalContent} onClick={(e) => e.stopPropagation()}>
             <div className={styles.modalHeader}>
               <span>{activeImageModal.title}</span>
-              <button
+              <Button
                 type="button"
-                className={styles.iconBtn}
+                variant="ghost"
+                size="sm"
+                iconOnly
                 onClick={() => setActiveImageModal(null)}
               >
                 <Icon name="close" size={16} />
-              </button>
+              </Button>
             </div>
             <div className={styles.modalBody}>
               <img

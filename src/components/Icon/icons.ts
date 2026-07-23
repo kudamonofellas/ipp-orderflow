@@ -42,7 +42,7 @@ export const ICONS = {
   edit: 'hugeicons:pencil-edit-02',
   paperclip: 'hugeicons:document-attachment',
   camera: 'hugeicons:camera-01',
-  scissors: 'hugeicons:scissors-01',
+  knife: 'hugeicons:knife-02',
   scale: 'hugeicons:weight-scale',
   document: 'hugeicons:file-01',
   save: 'hugeicons:floppy-disk'

@@ -5,7 +5,9 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   children: ReactNode;
   variant?: 'primary' | 'secondary' | 'tertiary' | 'ghost';
   size?: 'sm' | 'md' | 'lg';
-  buttonStyle?: 'default' | 'fullWidth'; // <-- Renamed from 'style' to avoid conflicts
+  buttonStyle?: 'default' | 'fullWidth';
+  iconOnly?: boolean;
+  isActive?: boolean;
 }
 
 /** Shared button. Matches the Button baseline in ui-registry.md. */
@@ -15,7 +17,9 @@ export function Button({
   size = 'md',
   className,
   type = 'button',
-  buttonStyle = 'default', // <-- Renamed here as well
+  buttonStyle = 'default',
+  iconOnly = false,
+  isActive = false,
   ...rest
 }: ButtonProps) {
   // Map 'fullWidth' prop to CSS module class safely
@@ -26,7 +30,9 @@ export function Button({
     styles[variant],
     styles[size],
     styleClass,
-    className
+    iconOnly && styles.iconOnly,
+    className,
+    isActive ? styles.active : '',
   ]
     .filter(Boolean)
     .join(' ');
