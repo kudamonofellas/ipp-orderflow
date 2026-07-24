@@ -11,6 +11,13 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--space-md);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--bg-surface);
+  padding-top: var(--space-md);
+  padding-bottom: var(--space-md);
+  margin-top: calc(var(--space-md) * -1);
 }
 
 .heading {
@@ -75,7 +82,7 @@
 }
 
 .layoutGridWithPanel {
-  grid-template-columns: 1fr 340px;
+  grid-template-columns: 1fr 480px;
 }
 
 .layoutGridFull {
@@ -95,11 +102,12 @@
   flex-direction: row;
   align-items: flex-start;
   gap: var(--space-md);
-  overflow: visible;
+  overflow: clip;
   width: 100%;
   position: sticky;
   top: var(--space-md);
-  height: calc(100vh - (var(--space-md)));
+  bottom: var(--space-md);
+  height: calc(100vh - var(--space-md) * 2);
 }
 
 .panelToggleBtn {
@@ -134,6 +142,7 @@
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
+  max-height: 540x;
 }
 
 .notesListScroll {
@@ -159,6 +168,7 @@
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
+  max-height: 540px;
 }
 
 .historyListScroll {
@@ -167,7 +177,6 @@
   padding-right: 4px;
   display: flex;
   flex-direction: column;
-  gap: var(--space-sm);
 }
 
 .stageActions {
@@ -530,6 +539,12 @@
   align-self: flex-start;
 }
 
+.cuttingInstructions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+
 .itemTotalRow {
   display: flex;
   align-items: center;
@@ -733,25 +748,93 @@
 .modalFooter {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
+  gap: var(--space-md);
   padding: var(--space-md) var(--space-lg);
   border-top: 1px solid var(--border-subtle);
+}
+
+/* Add Item Modal */
+.addItemModalCard {
+  background: var(--bg-surface);
+  border-radius: var(--radius-xl);
+  max-width: 560px;
+  width: 100%;
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-xl);
+  gap: var(--space-md);
+}
+
+.addItemTextarea {
+  width: 100%;
+  min-height: 90px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
+  font: var(--text-body);
+  color: var(--text-primary);
+  background: var(--bg-surface-hover);
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.addItemTextarea:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  background: var(--bg-surface);
+}
+
+.matchDivider {
+  border: 0;
+  border-top: 1px solid var(--border-subtle);
+  margin: var(--space-sm) 0;
+}
+
+.matchedResultRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  background: var(--bg-surface-hover);
+  padding: var(--space-md);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+}
+
+.modalActionsRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  margin-top: var(--space-sm);
+}
+
+.modalActionsRow > * {
+  flex: 1;
 }
 
 /* History logs */
 .historyItem {
   display: flex;
-  gap: var(--space-sm);
-  font-size: 0.85rem;
-  color: var(--text-secondary);
+  flex-direction: column;
+  font: var(--text-body);
+  color: var(--text-primary);
+  padding: var(--space-md);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.historyItem:last-child {
+  border-bottom: none;
 }
 
 .historyTime {
   color: var(--text-muted);
-  width: 110px;
+  width: 100%;
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
-  font-size: 0.8rem;
+  font: var(--text-caption);
+  display: flex;
+  gap: var(--space-sm);
 }
 
 .historyContent {
@@ -763,7 +846,7 @@
   background: var(--bg-surface-hover);
   border-radius: var(--radius-md);
   padding: var(--space-sm) var(--space-md);
-  font-size: 0.85rem;
+  font: var(--text-body);
   color: var(--text-primary);
   border: 1px solid var(--border-subtle);
 }
@@ -771,8 +854,7 @@
 .noteHeader {
   display: flex;
   justify-content: space-between;
-  margin-bottom: 4px;
-  font-size: 0.75rem;
+  font: var(--text-caption);
   color: var(--text-muted);
 }
 
@@ -784,7 +866,7 @@
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   padding: var(--space-sm) var(--space-md);
-  font-size: 0.85rem;
+  font: var(--text-body)
 }
 
 .noteInput:focus {

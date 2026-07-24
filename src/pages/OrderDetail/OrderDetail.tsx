@@ -20,6 +20,11 @@ import {
   createAttachment,
   deleteAttachment,
   uploadFile,
+  readAllUsers,
+  readLineCuts,
+  createLineCut,
+  updateLineCut,
+  deleteLineCut,
 } from '../../lib/directus';
 import type {
   OrdersCollection,
@@ -28,6 +33,8 @@ import type {
   AttachmentsCollection,
   CustomersCollection,
   ProductsCollection,
+  UserBrief,
+  LineCutsCollection
 } from '../../types/directus';
 import styles from './OrderDetail.module.css';
 
@@ -132,6 +139,7 @@ export function OrderDetail() {
   const [products, setProducts] = useState<ProductsCollection[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [lineCutsByLine, setLineCutsByLine] = useState<Record<string, LineCutsCollection[]>>({});
 
   /* ── ui state ── */
   const [isPanelOpen, setIsPanelOpen] = useState(true);
@@ -174,6 +182,19 @@ export function OrderDetail() {
   const [editContact, setEditContact] = useState('');
   const [editLines, setEditLines] = useState<EditableLine[]>([]);
 
+  /* ── user's name state ── */
+  const [users, setUsers] = useState<UserBrief[]>([]);
+
+  /* ── Add Item Modal state ── */
+  const [isAddItemModalOpen, setIsAddItemModalOpen] = useState(false);
+  const [addItemText, setAddItemText] = useState('');
+  const [matchedItem, setMatchedItem] = useState<{
+    qty: string;
+    unit: string;
+    name: string;
+    productId: string | null;
+  } | null>(null);
+
   /* ────────────── load data ── */
   useEffect(() => {
     const orderId = id as string;
@@ -184,13 +205,14 @@ export function OrderDetail() {
       setLoading(true);
       setError(null);
 
-      const [orderRes, linesRes, historyRes, attachmentsRes, customersRes, productsRes] = await Promise.all([
+      const [orderRes, linesRes, historyRes, attachmentsRes, customersRes, productsRes, usersRes] = await Promise.all([
         readOrder(orderId),
         readOrderLines({ filter: { order_id: { _eq: orderId } } }),
         readOrderHistory(orderId),
         readAttachments(orderId),
         readCustomers(),
         readProducts(),
+        readAllUsers(),
       ]);
 
       if (cancelled) return;
@@ -205,10 +227,20 @@ export function OrderDetail() {
       setAttachments(attachmentsRes.data ?? []);
       setCustomers(customersRes.data ?? []);
       setProducts(productsRes.data ?? []);
+      setUsers(usersRes.data ?? []);
+      setLines(loadedLines);
 
       // initialize weighing lines state for lines
       const initialWeighings: Record<string, WeighingLine[]> = {};
       const initialSending: Record<string, number> = {};
+
+      // cut lines state for lines
+      const cutsRes = await readLineCuts(loadedLines.map((l) => l.id));
+      const grouped: Record<string, LineCutsCollection[]> = {};
+      (cutsRes.data ?? []).forEach((c) => {
+        (grouped[c.line_id] ??= []).push(c);
+      });
+      setLineCutsByLine(grouped);
 
       loadedLines.forEach((line) => {
         if (line.id) {
@@ -259,12 +291,23 @@ export function OrderDetail() {
   const canRestore = (isCancelled || isOutstanding) && auth.can('advanceStage');
   const canAddDocs = auth.can('printDocuments');
 
+  const editSummary = isEditing ? buildEditSummary() : 'Order edited (no change)';
+  const hasEditChanges = editSummary !== 'Order edited (no change)';
+
   const directusFileUrl = (fileId: string) =>
     `${import.meta.env.VITE_DIRECTUS_URL}/assets/${fileId}`;
 
+  function displayName(id: string | null | undefined): string {
+    if (!id) return '—';
+    const u = users.find((u) => u.id === id);
+    if (!u) return id; // fallback: still show the UUID rather than nothing
+    const full = `${u.first_name ?? ''} ${u.last_name ?? ''}`.trim();
+    return full || u.email || id;
+  }
+
   const matchedCustomer = customers.find(
     (c) => (order.customer_id && c.id === order.customer_id) ||
-           (order.customer_name && c.name?.toLowerCase() === order.customer_name.toLowerCase())
+      (order.customer_name && c.name?.toLowerCase() === order.customer_name.toLowerCase())
   );
   const customerId = order.customer_id || matchedCustomer?.id;
 
@@ -296,28 +339,14 @@ export function OrderDetail() {
         qty: String(parseFloat(String(l.qty ?? 1)) || 1),
         unit: l.unit ?? 'Loaf',
         price: String(parseFloat(String(l.price ?? 0)) || 0),
-        cuts: [{ id: 'c1', text: 'steak cut 2 cm' }],
+        cuts: (lineCutsByLine[l.id] ?? []).map((c) => ({ id: c.id, text: c.text })),
       }))
     );
 
     setIsEditing(true);
   }
 
-  function handleAddEditLine() {
-    setEditLines((prev) => [
-      ...prev,
-      {
-        id: 'new_' + Date.now(),
-        isNew: true,
-        productId: null,
-        name: 'New Product Item',
-        qty: '1',
-        unit: 'Loaf',
-        price: '0',
-        cuts: [],
-      },
-    ]);
-  }
+
 
   function handleDeleteEditLine(lineId: string) {
     setEditLines((prev) => prev.filter((l) => l.id !== lineId));
@@ -343,8 +372,58 @@ export function OrderDetail() {
     );
   }
 
+  function buildEditSummary(): string {
+    const changes: string[] = [];
+
+    if ((order?.customer_name ?? '').trim() !== editCustomerName.trim()) {
+      changes.push(`Customer ${order?.customer_name || '—'}→${editCustomerName || '—'}`);
+    }
+    if ((order?.sales ?? order?.sales_rep ?? '').trim() !== editSales.trim()) {
+      changes.push(`Sales ${order?.sales ?? order?.sales_rep ?? '—'}→${editSales || '—'}`);
+    }
+    if ((order?.customer_contact ?? '').trim() !== editContact.trim()) {
+      changes.push(`Contact ${order?.customer_contact || '—'}→${editContact || '—'}`);
+    }
+    const beforeDeliver = formatDateInput(order?.deliver_at);
+    if (beforeDeliver !== editDeliverDate) changes.push(`Delivery date ${beforeDeliver || '—'}→${editDeliverDate || '—'}`);
+    const beforeOrderDate = formatDateInput(order?.order_date);
+    if (beforeOrderDate !== editOrderDate) changes.push(`Order date ${beforeOrderDate || '—'}→${editOrderDate || '—'}`);
+
+    const origById = new Map(lines.map((l) => [l.id, l]));
+    const editIds = new Set(editLines.filter((l) => !l.isNew).map((l) => l.id));
+    lines.forEach((l) => {
+      if (!editIds.has(l.id)) changes.push(`Removed ${l.name}`);
+    });
+
+    editLines.forEach((el) => {
+      if (el.isNew) {
+        changes.push(`Added ${el.name} — ${el.qty} ${el.unit}`);
+        return;
+      }
+      const orig = origById.get(el.id);
+      if (!orig) return;
+      const origQty = String(parseFloat(String(orig.qty ?? 1)) || 1);
+      const origPrice = String(parseFloat(String(orig.price ?? 0)) || 0);
+      const origUnit = orig.unit ?? 'Loaf';
+
+      if (orig.name !== el.name) changes.push(`${orig.name} name→${el.name}`);
+      if (origQty !== el.qty) changes.push(`${el.name} qty ${origQty}→${el.qty}`);
+      if (origUnit !== el.unit) changes.push(`${el.name} unit ${origUnit}→${el.unit}`);
+      if (origPrice !== el.price) changes.push(`${el.name} price ${origPrice}→${el.price}`);
+
+      const origCutTexts = (lineCutsByLine[el.id] ?? []).map((c) => c.text).join(', ');
+      const editCutTexts = el.cuts.map((c) => c.text).filter(Boolean).join(', ');
+      if (origCutTexts !== editCutTexts) {
+        changes.push(`${el.name} cutting ${origCutTexts || '—'}→${editCutTexts || '—'}`);
+      }
+    });
+
+    return changes.length === 0 ? 'Order edited (no change)' : `Edited — ${changes.join('; ')}`;
+  }
+
   async function handleSaveAllEdits() {
     if (!id || savingEdits) return;
+    const editSummary = buildEditSummary();
     setSavingEdits(true);
 
     try {
@@ -394,27 +473,66 @@ export function OrderDetail() {
 
       for (let i = 0; i < editLines.length; i++) {
         const el = editLines[i]!;
+        const matchedProd = products.find((p) => p.name === el.name || p.id === el.productId);
+        const isUuidStr = (v: string | null | undefined) => typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+        const resolvedProdId = isUuidStr(el.productId) ? el.productId : (matchedProd && isUuidStr(matchedProd.id) ? matchedProd.id : null);
+        let savedLineId: string | null = null;
+
         if (el.isNew) {
           const createRes = await createOrderLine({
             order_id: id,
-            product_id: el.productId,
+            product_id: resolvedProdId,
             name: el.name,
             qty: parseFloat(el.qty) || 1,
             unit: el.unit,
-            status: el.productId ? 'recognized' : 'unrecognized',
+            status: resolvedProdId ? 'recognized' : 'unrecognized',
             sort_order: i,
           });
-          if (createRes.error) errors.push(`Create line "${el.name}": ${createRes.error}`);
+          if (createRes.error) {
+            errors.push(`Create line "${el.name}": ${createRes.error}`);
+          } else {
+            savedLineId = createRes.data?.id ?? null;
+          }
         } else {
           const updateRes = await updateOrderLine(el.id, {
             name: el.name,
-            product_id: el.productId,
+            product_id: resolvedProdId,
             qty: parseFloat(el.qty) || 0,
             unit: el.unit,
             price: parseFloat(el.price) || null,
             sort_order: i,
           });
-          if (updateRes.error) errors.push(`Update line "${el.name}": ${updateRes.error}`);
+          if (updateRes.error) {
+            errors.push(`Update line "${el.name}": ${updateRes.error}`);
+          } else {
+            savedLineId = el.id;
+          }
+        }
+        if (savedLineId) {
+          const original = el.isNew ? [] : (lineCutsByLine[el.id] ?? []);
+          const existingEditCuts = el.cuts.filter((c) => !c.id.startsWith('cut_'));
+          const newEditCuts = el.cuts.filter((c) => c.id.startsWith('cut_'));
+
+          const deleted = original.filter((oc) => !existingEditCuts.some((ec) => ec.id === oc.id));
+          const updated = existingEditCuts.filter((ec) => {
+            const oc = original.find((o) => o.id === ec.id);
+            return oc && oc.text !== ec.text;
+          });
+
+          for (const d of deleted) {
+            const r = await deleteLineCut(d.id);
+            if (r.error) errors.push(`Delete cut "${d.text}": ${r.error}`);
+          }
+          for (const u of updated) {
+            const r = await updateLineCut(u.id, { text: u.text });
+            if (r.error) errors.push(`Update cut "${u.text}": ${r.error}`);
+          }
+          for (let ci = 0; ci < newEditCuts.length; ci++) {
+            const nc = newEditCuts[ci]!;
+            if (!nc.text.trim()) continue;
+            const r = await createLineCut({ line_id: savedLineId, text: nc.text, sort_order: ci });
+            if (r.error) errors.push(`Add cut "${nc.text}": ${r.error}`);
+          }
         }
       }
 
@@ -428,13 +546,28 @@ export function OrderDetail() {
 
       // 3. Reload fresh lines to reflect what's actually in the DB
       const reloadedLines = await readOrderLines({ filter: { order_id: { _eq: id } } });
-      if (reloadedLines.data) setLines(reloadedLines.data);
+      if (reloadedLines.data) {
+        setLines(reloadedLines.data);
+        const cutsRes = await readLineCuts(reloadedLines.data.map((l) => l.id));
+        const grouped: Record<string, LineCutsCollection[]> = {};
+        (cutsRes.data ?? []).forEach((c) => { (grouped[c.line_id] ??= []).push(c); });
+        setLineCutsByLine(grouped);
+      }
 
       // 4. Append Audit History (only if at least the header or some lines saved)
       if (errors.length === 0) {
         await appendOrderHistory({
           order_id: id,
-          what: 'Order details and line items updated',
+          what: editSummary,
+          who: userId,
+          stage,
+        });
+      }
+
+      if (errors.length === 0 && editSummary !== 'Order edited (no change)') {
+        await appendOrderHistory({
+          order_id: id,
+          what: editSummary,
           who: userId,
           stage,
         });
@@ -452,6 +585,7 @@ export function OrderDetail() {
     } finally {
       setSavingEdits(false);
     }
+
   }
 
   /* ────────────── Weighing & Item Photo Handlers ── */
@@ -488,6 +622,89 @@ export function OrderDetail() {
     });
   }
 
+  function parseFreeTextLine(
+    text: string,
+    productsList: ProductsCollection[]
+  ): { qty: string; unit: string; name: string; productId: string | null } {
+    const trimmed = text.trim();
+    if (!trimmed) return { qty: '1', unit: 'Loaf', name: '', productId: null };
+
+    const match = trimmed.match(/^(\d+(?:\.\d+)?)\s*([a-zA-Z]+)?\s*(.*)$/);
+    let qty = '1';
+    let unit = 'pcs';
+    let searchName = trimmed;
+
+    if (match) {
+      qty = match[1] || '1';
+      const unitCandidate = (match[2] || '').toLowerCase();
+      const rest = (match[3] || '').trim();
+
+      const unitMap: Record<string, string> = {
+        kg: 'kg', kilo: 'kg', kilos: 'kg',
+        gram: 'gram', g: 'gram', gr: 'gram',
+        loaf: 'Loaf', loaves: 'Loaf',
+        box: 'Box', boxes: 'Box',
+        pack: 'Pack', packs: 'Pack',
+        pcs: 'pcs', pc: 'pcs', ekor: 'ekor',
+      };
+
+      if (unitMap[unitCandidate]) {
+        unit = unitMap[unitCandidate];
+        searchName = rest || searchName;
+      } else if (rest) {
+        searchName = `${unitCandidate} ${rest}`.trim();
+      }
+    }
+
+    let matchedProduct: ProductsCollection | undefined;
+    if (searchName) {
+      const sLower = searchName.toLowerCase();
+      matchedProduct = productsList.find((p) => p.name.toLowerCase() === sLower);
+      if (!matchedProduct) {
+        matchedProduct = productsList.find((p) => p.name.toLowerCase().includes(sLower) || sLower.includes(p.name.toLowerCase()));
+      }
+      if (!matchedProduct) {
+        const words = sLower.split(/\s+/).filter(Boolean);
+        matchedProduct = productsList.find((p) => words.every((w) => p.name.toLowerCase().includes(w)));
+      }
+    }
+
+    return {
+      qty,
+      unit,
+      name: matchedProduct ? matchedProduct.name : (searchName || trimmed),
+      productId: matchedProduct ? matchedProduct.id : null,
+    };
+  }
+
+  function handleMatchItem() {
+    if (!addItemText.trim()) return;
+    const res = parseFreeTextLine(addItemText, products);
+    setMatchedItem(res);
+  }
+
+  function handleConfirmAddMatchedItem() {
+    if (!matchedItem) return;
+    const newLine: EditableLine = {
+      id: 'new_' + Date.now(),
+      isNew: true,
+      productId: matchedItem.productId,
+      name: matchedItem.name || 'New Item',
+      qty: matchedItem.qty || '1',
+      unit: matchedItem.unit || 'pcs',
+      price: '0',
+      cuts: [],
+    };
+    setEditLines((prev) => [...prev, newLine]);
+    closeAddItemModal();
+  }
+
+  function closeAddItemModal() {
+    setIsAddItemModalOpen(false);
+    setAddItemText('');
+    setMatchedItem(null);
+  }
+
   async function handleUploadWeighingPhoto(lineId: string, wId: string, e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file || !id) return;
@@ -502,6 +719,24 @@ export function OrderDetail() {
           [lineId]: current.map((w) => (w.id === wId ? { ...w, photoId, photoUrl } : w)),
         };
       });
+      setItemPhotosMap((prev) => {
+        const current = prev[lineId] ?? [];
+        return {
+          ...prev,
+          [lineId]: [...current, { id: photoId, url: photoUrl }],
+        };
+      });
+    }
+    e.target.value = '';
+  }
+
+  async function handleUploadItemPhoto(lineId: string, e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !id) return;
+    const uploadRes = await uploadFile(file);
+    if (!uploadRes.error && uploadRes.data) {
+      const photoId = uploadRes.data.id;
+      const photoUrl = directusFileUrl(photoId);
       setItemPhotosMap((prev) => {
         const current = prev[lineId] ?? [];
         return {
@@ -676,8 +911,7 @@ export function OrderDetail() {
     }
   }
 
-  async function handleAddNote(e: React.FormEvent) {
-    e.preventDefault();
+  async function submitNote() {
     if (!noteText.trim() || savingNote || !id) return;
     setSavingNote(true);
     const res = await appendOrderHistory({
@@ -695,6 +929,10 @@ export function OrderDetail() {
     setSavingNote(false);
   }
 
+  async function handleAddNote(e: React.FormEvent) {
+    e.preventDefault();
+    await submitNote();
+  }
   async function copyWA() {
     if (!order) return;
     const itemsText = lines.map((l) => `• ${l.qty} ${l.unit} ${l.name}`).join('\n');
@@ -742,78 +980,71 @@ export function OrderDetail() {
 
         {/* ── Main Column ── */}
         <div className={styles.mainColumn}>
-                {/* ── Top Header ── */}
-      <header className={styles.header}>
-        <div className={styles.titleSection}>
-          {isEditing ? (
-            <Button
-              type="button"
-              variant="tertiary"
-              onClick={() => setIsEditing(false)}
-            >
-              <Icon name="close" size={16} /> Cancel
-            </Button>
-          ) : (
-            <Button
-              type="button"
-              variant="tertiary"
-              onClick={() => navigate(-1)}
-            >
-              <Icon name="chevronLeft" size={16} /> Back
-            </Button>
-          )}
-
-          <div className={styles.titleRow}>
-            <h3 className={styles.title}>Order {order.no}</h3>
-            {isCancelled && (
-              <span style={{ color: 'var(--state-error)', fontSize: '0.8rem', fontWeight: 600 }}>
-                CANCELLED
-              </span>
-            )}
-            {isOutstanding && (
-              <span style={{ color: 'var(--state-warning)', fontSize: '0.8rem', fontWeight: 600 }}>
-                ON HOLD
-              </span>
-            )}
-          </div>
-        </div>
-
-        <div className={styles.actions}>
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={copyWA}
-            disabled={isEditing}
-          >
-            <Icon name="whatsapp" size={16} /> Copy WA
-          </Button>
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={() => window.print()}
-            disabled={isEditing}
-          >
-            <Icon name="printer" size={16} /> Print
-          </Button>
-
-          {isEditing ? (
-            <Button
-              type="button"
-              variant="primary"
-              onClick={handleSaveAllEdits}
-              disabled={savingEdits}
-            >
-              <Icon name="save" size={16} /> {savingEdits ? 'Saving…' : 'Save'}
-            </Button>
-          ) : (
-            canEdit && (
-              <Button type="button" variant="secondary" onClick={startEdit}>
-                <Icon name="edit" size={16} /> Edit
+          {/* ── Top Header ── */}
+          <header className={styles.header}>
+            <div className={styles.titleSection}>
+              <Button
+                type="button"
+                variant="tertiary"
+                onClick={() => navigate(-1)}
+              >
+                <Icon name="chevronLeft" size={16} /> Back
               </Button>
-            )
-          )}
-        </div>
-      </header>
+
+              <div className={styles.titleRow}>
+                <h3 className={styles.title}>Order {order.no}</h3>
+                {isCancelled && (
+                  <span style={{ color: 'var(--state-error)', fontSize: '0.8rem', fontWeight: 600 }}>
+                    CANCELLED
+                  </span>
+                )}
+                {isOutstanding && (
+                  <span style={{ color: 'var(--state-warning)', fontSize: '0.8rem', fontWeight: 600 }}>
+                    ON HOLD
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className={styles.actions}>
+              {!isEditing && (
+                <>
+                  <Button type="button" variant="secondary" onClick={copyWA}>
+                    <Icon name="whatsapp" size={16} /> Copy WA
+                  </Button>
+                  <Button type="button" variant="secondary" onClick={() => window.print()}>
+                    <Icon name="printer" size={16} /> Print
+                  </Button>
+                </>
+              )}
+
+              {isEditing ? (
+                <>
+                  <Button
+                    type="button"
+                    variant="primary"
+                    onClick={handleSaveAllEdits}
+                    disabled={savingEdits || !hasEditChanges}
+                  >
+                    <Icon name="save" size={16} /> {savingEdits ? 'Saving…' : 'Save'}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => setIsEditing(false)}
+                    disabled={savingEdits}
+                  >
+                    <Icon name="close" size={16} /> Cancel
+                  </Button>
+                </>
+              ) : (
+                canEdit && (
+                  <Button type="button" variant="secondary" onClick={startEdit}>
+                    <Icon name="edit" size={16} /> Edit
+                  </Button>
+                )
+              )}
+            </div>
+          </header>
 
           {/* Stepper (hidden in Edit mode) */}
 
@@ -826,7 +1057,6 @@ export function OrderDetail() {
                   const isActive = stage === s.key;
                   const isCompleted = currentStageIndex > idx;
 
-                  const hasLineAfter = idx < PIPELINE_STAGES.length - 1;
 
                   return (
                     <div key={s.key} className={styles.stepColumn}>
@@ -998,7 +1228,7 @@ export function OrderDetail() {
             {isEditing ? (
               /* Edit Mode Items List */
               <div className={styles.itemsList}>
-                {editLines.map((line, idx) => (
+                {editLines.map((line) => (
                   <div key={line.id} className={styles.itemRow}>
                     <div className={styles.editItemHeader}>
                       <input
@@ -1147,8 +1377,8 @@ export function OrderDetail() {
                   type="button"
                   variant="primary"
                   buttonStyle="fullWidth"
-                  onClick={handleAddEditLine}
-                  style={{ marginTop: 'var(--space-md)' }}
+                  onClick={() => setIsAddItemModalOpen(true)}
+                  style={{ marginTop: 'var(--space-md)', height: 44, fontWeight: 600 }}
                 >
                   <Icon name="add" size={16} /> Add Item
                 </Button>
@@ -1156,7 +1386,7 @@ export function OrderDetail() {
             ) : (
               /* View Mode Items List */
               <div className={styles.itemsList}>
-                {lines.map((line, idx) => {
+                {lines.map((line) => {
                   const qty = typeof line.qty === 'string' ? parseFloat(line.qty) || 0 : (line.qty ?? 0);
                   const price = typeof line.price === 'string' ? parseFloat(line.price) || 0 : (line.price ?? 0);
                   const isWeighedItem = line.unit === 'Loaf' || line.unit === 'kg' || line.unit === 'gram';
@@ -1251,14 +1481,45 @@ export function OrderDetail() {
                           </Button>
 
                           {/* Cutting instruction */}
-                          <div className={styles.cuttingInstruction}>
-                            <Icon name="knife" size={14} />
-                            <span>steak cut 2 cm</span>
-                          </div>
+                          {(lineCutsByLine[line.id] ?? []).length > 0 && (
+                            <div className={styles.cuttingInstructions}>
+                              {(lineCutsByLine[line.id] ?? []).map((c) => (
+                                <div key={c.id} className={styles.cuttingInstruction}>
+                                  <Icon name="knife" size={14} />
+                                  <span>{c.text}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       )}
 
-                      {/* Item Photos / Thumbnails Container */}
+                      {/* For Non-weighed Items (Box, Pack, pcs, etc.) */}
+                      {!isWeighedItem && (
+                        <div style={{ marginTop: 6, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <label style={{ display: 'inline-flex', cursor: 'pointer' }}>
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              size="sm"
+                              iconOnly
+                              title="Upload item photo"
+                              onClick={(e) => {
+                                const inputElem = (e.currentTarget as HTMLElement).nextElementSibling as HTMLInputElement;
+                                inputElem?.click();
+                              }}
+                            >
+                              <Icon name="camera" size={16} />
+                            </Button>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              style={{ display: 'none' }}
+                              onChange={(e) => handleUploadItemPhoto(line.id, e)}
+                            />
+                          </label>
+                        </div>
+                      )}
                       {itemPhotos.length > 0 && (
                         <div className={styles.thumbnailsContainer} style={{ marginLeft: 28 }}>
                           {itemPhotos.map((img) => (
@@ -1513,29 +1774,34 @@ export function OrderDetail() {
               <div className={styles.notesListScroll}>
                 {history
                   .filter((h) => h.what.startsWith('Note:'))
+                  .reverse()
                   .map((n, idx) => (
                     <div key={n.id ?? idx} className={styles.noteItem}>
                       <div className={styles.noteHeader}>
-                        <span>{n.who ?? 'Teza (Admin)'}</span>
+                        <span style={{ fontWeight: '600' }}>{n.who ? `${displayName(n.who)}` : ''}</span>
                         <span>{formatDate(n.at, true)}</span>
                       </div>
-                      <div>{n.what.replace('Note:', '').trim()}</div>
+                      <div style={{ whiteSpace: 'pre-wrap' }}>{n.what.replace('Note:', '').trim()}</div>
                     </div>
                   ))}
               </div>
               <form className={styles.noteFormFixed} onSubmit={handleAddNote}>
-                <input
-                  type="text"
+                <textarea
                   className={styles.noteInput}
-                  placeholder="Add note for the team…"
+                  placeholder="Add note for the team..."
                   value={noteText}
                   onChange={(e) => setNoteText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      submitNote();
+                    }
+                  }}
                   disabled={savingNote}
+                  rows={2}
+                  style={{ resize: 'vertical', fontFamily: 'inherit', minHeight: 38 }}
                 />
-                <Button
-                  type="submit"
-                  variant="primary"
-                  disabled={savingNote || !noteText.trim()}>
+                <Button type="submit" variant="primary" disabled={savingNote || !noteText.trim()}>
                   <Icon name="add" size={16} />Add
                 </Button>
               </form>
@@ -1552,9 +1818,11 @@ export function OrderDetail() {
                   <div key={h.id ?? i} className={styles.historyItem}>
                     <span className={styles.historyTime}>
                       {formatDate(h.at, true)}
+                      <span style={{ fontWeight: '600' }}>{h.who ? ` ${displayName(h.who)}` : ''}
+                      </span>
                     </span>
                     <span className={styles.historyContent}>
-                      {h.what}{h.who ? ` · ${h.who}` : ''}
+                      {h.what}
                     </span>
                   </div>
                 ))}
@@ -1617,6 +1885,143 @@ export function OrderDetail() {
                 Close
               </Button>
             </div>
+          </div>
+        </div>
+      )}
+      {/* ── Add Item Modal ── */}
+      {isAddItemModalOpen && (
+        <div className={styles.modalBackdrop} onClick={(e) => { if (e.target === e.currentTarget) closeAddItemModal(); }}>
+          <div className={styles.addItemModalCard}>
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontWeight: 700, fontSize: '1.1rem', color: 'var(--text-primary)' }}>Add new item</span>
+              <Button type="button" variant="tertiary" iconOnly size="sm" onClick={closeAddItemModal}>
+                <Icon name="close" size={18} />
+              </Button>
+            </div>
+
+            {/* Step 1: Input */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <label style={{ font: 'var(--text-body)', color: 'var(--text-secondary)', fontWeight: 500 }}>
+                Type or paste the item here:
+              </label>
+              <textarea
+                className={styles.addItemTextarea}
+                placeholder={'e.g. "2 kg short rib" or "1 Box Wagyu Striploin"'}
+                value={addItemText}
+                onChange={(e) => {
+                  setAddItemText(e.target.value);
+                  if (matchedItem) setMatchedItem(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey && addItemText.trim()) {
+                    e.preventDefault();
+                    handleMatchItem();
+                  }
+                }}
+                autoFocus
+              />
+              <Button
+                type="button"
+                variant="primary"
+                buttonStyle="fullWidth"
+                disabled={!addItemText.trim()}
+                onClick={handleMatchItem}
+                style={{ height: 42, fontWeight: 600, gap: 6 }}
+              >
+                ✨ Match
+              </Button>
+            </div>
+
+            {/* Step 2: Matched Result */}
+            {matchedItem && (
+              <>
+                <hr className={styles.matchDivider} />
+                <div style={{ font: 'var(--text-body)', color: 'var(--text-secondary)', fontWeight: 500, marginBottom: 4 }}>
+                  Matched result — review and adjust:
+                </div>
+                <div className={styles.matchedResultRow}>
+                  {/* Qty */}
+                  <input
+                    type="number"
+                    className={styles.editInput}
+                    style={{ width: 70, textAlign: 'center', flexShrink: 0 }}
+                    value={matchedItem.qty}
+                    min="0"
+                    step="0.5"
+                    onChange={(e) => setMatchedItem((prev) => prev ? { ...prev, qty: e.target.value } : prev)}
+                  />
+
+                  {/* Unit */}
+                  <select
+                    className={styles.editSelect}
+                    style={{ width: 90, flexShrink: 0 }}
+                    value={matchedItem.unit}
+                    onChange={(e) => setMatchedItem((prev) => prev ? { ...prev, unit: e.target.value } : prev)}
+                  >
+                    {UNIT_OPTIONS.map((u) => (
+                      <option key={u} value={u}>{u}</option>
+                    ))}
+                  </select>
+
+                  {/* Product from catalog */}
+                  <select
+                    className={styles.editSelect}
+                    style={{ flex: 1, minWidth: 0 }}
+                    value={matchedItem.productId ?? '__custom__'}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === '__custom__') {
+                        setMatchedItem((prev) => prev ? { ...prev, productId: null } : prev);
+                      } else {
+                        const prod = products.find((p) => p.id === val);
+                        setMatchedItem((prev) => prev
+                          ? { ...prev, productId: val, name: prod?.name ?? prev.name }
+                          : prev
+                        );
+                      }
+                    }}
+                  >
+                    <option value="__custom__">— No match (custom) —</option>
+                    {products.map((p) => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* If no catalog match, let user set a custom name */}
+                {!matchedItem.productId && (
+                  <input
+                    type="text"
+                    className={styles.editInput}
+                    placeholder="Item name (custom)"
+                    value={matchedItem.name}
+                    onChange={(e) => setMatchedItem((prev) => prev ? { ...prev, name: e.target.value } : prev)}
+                  />
+                )}
+
+                <div className={styles.modalActionsRow}>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    buttonStyle="fullWidth"
+                    onClick={closeAddItemModal}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="primary"
+                    buttonStyle="fullWidth"
+                    onClick={handleConfirmAddMatchedItem}
+                    disabled={!matchedItem.name.trim()}
+                    style={{ fontWeight: 600 }}
+                  >
+                    Add to order
+                  </Button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

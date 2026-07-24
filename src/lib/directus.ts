@@ -30,6 +30,7 @@ import {
   updateItem,
   deleteItem,
   uploadFiles,
+  readUsers,
 } from '@directus/sdk';
 import {
   CustomersCollectionSchema,
@@ -38,6 +39,7 @@ import {
   MessagesCollectionArraySchema,
   OrderHistoryCollectionSchema,
   OrderHistoryCollectionArraySchema,
+  OrderLinesCollectionSchema,
   OrderLinesCollectionArraySchema,
   OrdersCollectionArraySchema,
   OrdersCollectionSchema,
@@ -45,6 +47,9 @@ import {
   ProductsCollectionArraySchema,
   AttachmentsCollectionSchema,
   AttachmentsCollectionArraySchema,
+  UserBriefArraySchema,
+  LineCutsCollectionArraySchema,
+  LineCutsCollectionSchema,
 } from './schemas';
 import type {
   CorrectionsCollection,
@@ -55,6 +60,8 @@ import type {
   OrdersCollection,
   ProductsCollection,
   AttachmentsCollection,
+  UserBrief,
+  LineCutsCollection,
 } from '../types/directus';
 
 const url = import.meta.env.VITE_DIRECTUS_URL;
@@ -496,7 +503,10 @@ export async function createOrderLines(
   lines: CreateOrderLineInput[],
 ): Promise<DirectusResult<OrderLinesCollection[]>> {
   try {
-    const raw = await getClient().request(createItems('order_lines', lines as never));
+    const cleanLines = lines.map((l) =>
+      sanitizeUuidFields(l as unknown as Record<string, unknown>, ['product_id', 'order_id', 'weigh_photo', 'returned_weigh_photo'])
+    );
+    const raw = await getClient().request(createItems('order_lines', cleanLines as never));
     const parsed = OrderLinesCollectionArraySchema.safeParse(raw);
     if (!parsed.success) {
       return { data: null, error: `Invalid order_lines response: ${parsed.error.message}` };
@@ -546,6 +556,21 @@ export async function readOrderHistory(
     const parsed = OrderHistoryCollectionArraySchema.safeParse(raw);
     if (!parsed.success) {
       return { data: null, error: `Invalid order_history response: ${parsed.error.message}` };
+    }
+    return { data: parsed.data, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+export async function readAllUsers(): Promise<DirectusResult<UserBrief[]>> {
+  try {
+    const raw = await getClient().request(
+      readUsers({ fields: ['id', 'first_name', 'last_name', 'email'], limit: -1 } as never),
+    );
+    const parsed = UserBriefArraySchema.safeParse(raw);
+    if (!parsed.success) {
+      return { data: null, error: `Invalid users response: ${parsed.error.message}` };
     }
     return { data: parsed.data, error: null };
   } catch (err) {
@@ -646,13 +671,31 @@ export async function uploadFile(
   }
 }
 
+function isUuid(val: unknown): boolean {
+  return typeof val === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+}
+
+function sanitizeUuidFields<T extends Record<string, unknown>>(obj: T, fields: string[]): T {
+  const copy = { ...obj };
+  for (const f of fields) {
+    if (f in copy) {
+      const v = copy[f];
+      if (v !== null && v !== undefined && !isUuid(v)) {
+        (copy as Record<string, unknown>)[f] = null;
+      }
+    }
+  }
+  return copy;
+}
+
 /** Patch an order (e.g. stage transition). Used by later pipeline units. */
 export async function updateOrder(
   id: string,
   patch: Record<string, unknown>,
 ): Promise<DirectusResult<OrdersCollection>> {
   try {
-    const raw = await getClient().request(updateItem('orders', id, patch as never));
+    const cleanPatch = sanitizeUuidFields(patch, ['customer_id', 'taken_by']);
+    const raw = await getClient().request(updateItem('orders', id, cleanPatch as never));
     const parsed = OrdersCollectionSchema.safeParse(raw);
     if (!parsed.success) {
       return { data: null, error: `Invalid order response: ${parsed.error.message}` };
@@ -668,8 +711,9 @@ export async function updateOrderLine(
   patch: Record<string, unknown>,
 ): Promise<DirectusResult<OrderLinesCollection>> {
   try {
-    const raw = await getClient().request(updateItem('order_lines', id, patch as never));
-    const parsed = OrderLinesCollectionArraySchema.element.safeParse(raw);
+    const cleanPatch = sanitizeUuidFields(patch, ['product_id', 'order_id', 'weigh_photo', 'returned_weigh_photo']);
+    const raw = await getClient().request(updateItem('order_lines', id, cleanPatch as never));
+    const parsed = OrderLinesCollectionSchema.safeParse(raw);
     if (!parsed.success) {
       return { data: null, error: `Invalid order_line response: ${parsed.error.message}` };
     }
@@ -683,8 +727,9 @@ export async function createOrderLine(
   input: CreateOrderLineInput,
 ): Promise<DirectusResult<OrderLinesCollection>> {
   try {
-    const raw = await getClient().request(createItem('order_lines', input as never));
-    const parsed = OrderLinesCollectionArraySchema.element.safeParse(raw);
+    const cleanInput = sanitizeUuidFields(input as unknown as Record<string, unknown>, ['product_id', 'order_id', 'weigh_photo', 'returned_weigh_photo']);
+    const raw = await getClient().request(createItem('order_lines', cleanInput as never));
+    const parsed = OrderLinesCollectionSchema.safeParse(raw);
     if (!parsed.success) {
       return { data: null, error: `Invalid order_line response: ${parsed.error.message}` };
     }
@@ -703,6 +748,69 @@ export async function deleteOrderLine(id: string): Promise<DirectusResult<void>>
   }
 }
 
+/** Read all cuts for a set of order_line ids (one query for the whole order). */
+export async function readLineCuts(
+  lineIds: string[],
+): Promise<DirectusResult<LineCutsCollection[]>> {
+  if (lineIds.length === 0) return { data: [], error: null };
+  try {
+    const raw = await getClient().request(
+      readItems('line_cuts', {
+        filter: { line_id: { _in: lineIds } } as never,
+        sort: ['sort_order'] as never,
+        limit: -1,
+      }),
+    );
+    const parsed = LineCutsCollectionArraySchema.safeParse(raw);
+    if (!parsed.success) {
+      return { data: null, error: `Invalid line_cuts response: ${parsed.error.message}` };
+    }
+    return { data: parsed.data, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+export async function createLineCut(
+  input: { line_id: string; text: string; sort_order?: number },
+): Promise<DirectusResult<LineCutsCollection>> {
+  try {
+    const raw = await getClient().request(createItem('line_cuts', input as never));
+    const parsed = LineCutsCollectionSchema.safeParse(raw);
+    if (!parsed.success) {
+      return { data: null, error: `Invalid line_cuts response: ${parsed.error.message}` };
+    }
+    return { data: parsed.data, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+export async function updateLineCut(
+  id: string,
+  patch: Partial<{ text: string; done: boolean; sort_order: number }>,
+): Promise<DirectusResult<LineCutsCollection>> {
+  try {
+    const raw = await getClient().request(updateItem('line_cuts', id, patch as never));
+    const parsed = LineCutsCollectionSchema.safeParse(raw);
+    if (!parsed.success) {
+      return { data: null, error: `Invalid line_cuts response: ${parsed.error.message}` };
+    }
+    return { data: parsed.data, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+export async function deleteLineCut(id: string): Promise<DirectusResult<void>> {
+  try {
+    await getClient().request(deleteItem('line_cuts', id));
+    return { data: undefined, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
 /** Patch a product (e.g. toggle active/OOS). Roles: Warehouse, Admin, Owner. */
 export async function updateProduct(
   id: string,
@@ -710,7 +818,7 @@ export async function updateProduct(
 ): Promise<DirectusResult<ProductsCollection>> {
   try {
     const raw = await getClient().request(updateItem('products', id, patch as never));
-    const parsed = ProductsCollectionArraySchema.element.safeParse(raw);
+    const parsed = ProductsCollectionSchema.safeParse(raw);
     if (!parsed.success) {
       return { data: null, error: `Invalid product response: ${parsed.error.message}` };
     }

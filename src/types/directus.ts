@@ -19,6 +19,8 @@ import type {
   OrdersCollectionSchema,
   ProductsCollectionSchema,
   AttachmentsCollectionSchema,
+  UserBriefSchema,
+  LineCutsCollectionSchema,
 } from '../lib/schemas';
 
 export type OrdersCollection = z.infer<typeof OrdersCollectionSchema>;
@@ -29,3 +31,5 @@ export type OrderLinesCollection = z.infer<typeof OrderLinesCollectionSchema>;
 export type OrderHistoryCollection = z.infer<typeof OrderHistoryCollectionSchema>;
 export type CorrectionsCollection = z.infer<typeof CorrectionsCollectionSchema>;
 export type AttachmentsCollection = z.infer<typeof AttachmentsCollectionSchema>;
+export type UserBrief = z.infer<typeof UserBriefSchema>;
+export type LineCutsCollection = z.infer<typeof LineCutsCollectionSchema>;

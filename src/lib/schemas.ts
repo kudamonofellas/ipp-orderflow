@@ -63,7 +63,7 @@ export const OrdersCollectionSchema = z.object({
 
 /** Directus `messages` collection row. */
 export const MessagesCollectionSchema = z.object({
-  id: z.number(),
+  id: z.union([z.number(), z.string()]).transform(String),
   message_id: z.string(),
   sender_number: z.string().nullable().optional(),
   content: z.string().nullable().optional(),
@@ -125,7 +125,7 @@ export const ProductsCollectionSchema = z.object({
  * created_by/label instead — added via ALTER TABLE, not yet in snapshot.json.
  */
 export const AttachmentsCollectionSchema = z.object({
-  id: z.number().nullable().optional(),
+  id: z.union([z.number(), z.string()]).transform(String).nullable().optional(),
   message_id: z.string().nullable().optional(),
   order_uuid: z.string().nullable().optional(),
   sender_phone: z.string().nullable().optional(),
@@ -164,13 +164,23 @@ export const OrderLinesCollectionSchema = z.object({
 
 /** Directus `order_history` collection row (append-only). */
 export const OrderHistoryCollectionSchema = z.object({
-  id: z.number().nullable().optional(),
+  id: z.union([z.number(), z.string()]).transform(String).nullable().optional(),
   order_id: z.string().nullable().optional(),
   at: z.string().nullable().optional(),
   what: z.string(),
   who: z.string().nullable().optional(),
   stage: z.string().nullable().optional(),
 });
+
+/** Directus `line_cuts` collection row — cutting instructions per order line. */
+export const LineCutsCollectionSchema = z.object({
+  id: z.string(),
+  line_id: z.string(),
+  text: z.string(),
+  done: z.boolean().nullable().optional(),
+  sort_order: z.number().nullable().optional(),
+});
+export const LineCutsCollectionArraySchema = z.array(LineCutsCollectionSchema);
 
 /** Directus `corrections` collection row (learned product-match corrections). */
 export const CorrectionsCollectionSchema = z.object({
@@ -181,6 +191,16 @@ export const CorrectionsCollectionSchema = z.object({
   date_created: z.string().nullable().optional(),
   times_used: z.number().nullable().optional(),
 });
+
+/** Directus `directus_users` row — only the fields OrderDetail needs to
+ *  resolve order_history.who / created_by UUIDs into display names. */
+export const UserBriefSchema = z.object({
+  id: z.string(),
+  first_name: z.string().nullable().optional(),
+  last_name: z.string().nullable().optional(),
+  email: z.string().nullable().optional(),
+});
+export const UserBriefArraySchema = z.array(UserBriefSchema);
 
 /** Array validators for list responses. */
 export const OrdersCollectionArraySchema = z.array(OrdersCollectionSchema);

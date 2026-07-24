@@ -112,6 +112,22 @@ change.
   - Fixed pre-existing lint errors in `IntakeModal`, `Customers`, `Products` (setState-in-effect pattern).
   - `npm run lint` ✓, `tsc -b` clean, `npm run build` ✓.
 
+- **Order Detail dossier enhancements (2026-07-23 / 2026-07-24):**
+  - **Progress stepper fix**: `completedPct` computed from `currentStageIndex / (PIPELINE_STAGES.length - 1) * 100` and applied to the stepper fill width. First stage = 0%, last = 100%.
+  - **Customer section navigation**: tapping the avatar + name row in the Order Detail header navigates to `/customers/:id` for recorded customers. Implemented `profileRowClickable` hover style in CSS Modules.
+  - **Sticky side panel**: Notes & History column is now `position: sticky; top: 80px; height: calc(100vh - 100px); overflow-y: auto` so it stays in view while the main column scrolls.
+  - **View mode quantity fix**: Items list now shows the item's actual `qty` value (e.g. `2`) not the list index (`1`, `2`, …).
+  - **Directus `order_lines` write fix (HTTP 500)**: Added `isUuid()` + `sanitizeUuidFields()` helpers in `src/lib/directus.ts` that null-out non-UUID string keys (e.g. legacy product slugs) before POSTing to Directus. Prevents `invalid input syntax for type uuid` Postgres 500 errors. Applied to `updateOrderLine()`, `createOrderLine()`, and `createOrderLines()`.
+  - **Schema parse fix in `directus.ts`**: `updateOrderLine()` and `createOrderLine()` now use `OrderLinesCollectionSchema.safeParse(raw)` (was incorrectly calling `.element` on the array schema). `updateProduct()` similarly fixed from `ProductsCollectionArraySchema.element.safeParse` → `ProductsCollectionSchema.safeParse`.
+  - **Photo upload for non-weighed items**: View mode now shows a `📷` camera button for items with non-weighed units (`Box`, `Pack`, `pcs`, `ekor`) — mirrors the existing camera button on weighed (Loaf/kg/gram) items. Uploads to Directus Files and appends thumbnail to the item row. Handler: `handleUploadItemPhoto(lineId, e)`.
+  - **Add Item Modal (Edit Mode)**: Replaced the bare inline "+ Add Item" button with a full-featured `AddItemModal`:
+    - **Step 1**: `<textarea>` free-text input with `✨ Match` button (disabled when empty, also triggers on `Enter`).
+    - **Step 2**: After matching, shows parsed `qty` (number input), `unit` (select from `UNIT_OPTIONS`), and best-matched product from catalog (select dropdown). Falls back to a custom name text input when no catalog match found.
+    - `parseFreeTextLine()` helper parses patterns like `"2 kilo short rib"`, `"1 Box Wagyu Striploin"` into `{ qty, unit, name, productId }`.
+    - `Add to order` button appends the resolved `EditableLine` to `editLines`; `Cancel` / backdrop click closes cleanly.
+    - Modal styled consistent with `NewOrderModal` — uses `modalBackdrop` overlay + `addItemModalCard` panel with `addItemTextarea`, `matchedResultRow`, `matchDivider`, `modalActionsRow` CSS classes.
+  - **Rules of Hooks fix**: The 3 `useState` declarations for `isAddItemModalOpen`, `addItemText`, `matchedItem` were inadvertently placed after `useEffect`. Moved them to the top-level state block (before `useEffect`) to comply with React Rules of Hooks.
+
 ## In Progress
 
 - None

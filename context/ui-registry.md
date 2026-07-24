@@ -5,6 +5,26 @@
 > Token source of truth: `context/ui-context.md` + `context/ui-tokens.md`.
 > CSS implementation: `src/styles/tokens.css`.
 
+## Update — 2026-07-24 Order Detail Enhancements
+
+### AddItemModal (inline free-text + catalog match)
+- **Trigger**: Full-width `variant="primary"` button at bottom of edit-mode Items Card.
+- **Step 1 — Input**: `modalBackdrop` overlay + `addItemModalCard` panel (max-width 560px, `--radius-xl`, `--shadow-lg`, `--space-xl` padding, flex-column gap). Header row (bold title + close icon button). Label + `addItemTextarea` (`min-height: 90px`, `--bg-surface-hover` fill, focus outline `--accent-primary`). `✨ Match` full-width primary button (disabled when empty; `Enter` key also triggers).
+- **Step 2 — Matched Result**: `matchDivider` (`border-top: 1px solid --border-subtle`) separates steps. `matchedResultRow` (`--bg-surface-hover` background, `--border-subtle` border, `--radius-md`) holds qty `<input>` (70px, center-aligned) + unit `<select>` (90px) + product catalog `<select>` (flex:1). Custom name text input shown only when no catalog product matched.
+- **Actions**: `modalActionsRow` flex row (equal-width children via `> * { flex: 1 }`). Left = secondary Cancel, Right = primary "Add to order" (disabled when name empty).
+- **Close behavior**: click backdrop, click Cancel, or click × icon — all call `closeAddItemModal()` which resets `addItemText`, `matchedItem` state.
+- **State placement rule**: All `useState` for the modal (`isAddItemModalOpen`, `addItemText`, `matchedItem`) must be declared at component top level **before any `useEffect`**, per React Rules of Hooks.
+
+### Item photo upload — non-weighed items
+- Non-weighed items (`!isWeighedItem` — units: Box, Pack, pcs, ekor) show a `variant="secondary" size="sm" iconOnly` camera `<Button>` in view mode, matching the existing camera button on weighed items.
+- Pattern: `<label style={{ display: 'inline-flex', cursor: 'pointer' }}><Button onClick={trigger next sibling click} /><input type="file" accept="image/*" style={{ display: 'none' }} /></label>`.
+- Camera button triggers hidden file input via `(e.currentTarget as HTMLElement).nextElementSibling?.click()`.
+
+### Sticky side panel
+- The Notes & History column uses `position: sticky; top: 80px; height: calc(100vh - 100px); overflow-y: auto` so it remains in the viewport while the main content column scrolls independently.
+
+---
+
 ## Update — 2026-07-14 Range, Sorting & Nav Enhancements
 
 - **Persistent Auth Storage Pattern**: Migration of authentication session storage (`sessionStorage`) to permanent local storage (`localStorage`) to keep the user signed in across browser sessions.
