@@ -23,6 +23,7 @@ export const ICONS = {
   returned: 'hugeicons:delivery-return-01',
   cancelled: 'hugeicons:package-remove',
   alert: 'hugeicons:alert-01',
+  chevronUp: 'hugeicons:arrow-up-01',
   chevronDown: 'hugeicons:arrow-down-01',
   chevronRight: 'hugeicons:arrow-right-01',
   chevronLeft: 'hugeicons:arrow-left-01',

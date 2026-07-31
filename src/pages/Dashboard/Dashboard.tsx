@@ -106,8 +106,8 @@ export function Dashboard() {
                     size="md"
                     onClick={startNewOrder}
                     title="Create a new order"
+                    icon="add"
                   >
-                    <Icon name="add" size={20} />
                     New Order
                   </Button>
                 )}

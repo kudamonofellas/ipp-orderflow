@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Button } from '../Button/Button';
 import { Icon } from '../Icon/Icon';
 import type { IconName } from '../Icon/icons';
 import type { DateRangeVal } from '../../types/dashboard';
@@ -47,41 +48,42 @@ export function MetricCard({ icon, value, label, rangeLabel, onRangeChange }: Me
         </span>
         <div className={styles.rangeContainer} ref={containerRef}>
           {onRangeChange ? (
-            <button
+            <Button
               type="button"
-              className={styles.rangeToggle}
+              variant="secondary"
               aria-expanded={open}
+              icon="chevronDown"
+              iconPosition="right"
               onClick={() => setOpen((prev) => !prev)}
             >
               {rangeLabel}
-              <Icon name="chevronDown" size={16} />
-            </button>
+            </Button>
           ) : (
             <span className={styles.rangeStatic}>{rangeLabel}</span>
           )}
 
           {onRangeChange && open && (
             <div className={styles.dropdown} role="dialog" aria-label="Select Date Range">
-              <button
+              <Button
                 type="button"
-                className={styles.dropdownItem}
+                variant="ghost"
                 onClick={() => {
                   onRangeChange?.({ type: 'today' }, 'Today');
                   setOpen(false);
                 }}
               >
                 Today
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
-                className={styles.dropdownItem}
+                variant="ghost"
                 onClick={() => {
                   onRangeChange?.({ type: 'week' }, 'This Week');
                   setOpen(false);
                 }}
               >
                 This Week
-              </button>
+              </Button>
               <div className={styles.dropdownItemInput}>
                 <span>Select Month</span>
                 <input

@@ -5,7 +5,7 @@
   gap: var(--space-sm);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
-  padding: var(--space-md) var(--space-lg);
+  padding: var(--space-lg) var(--space-lg);
 }
 
 .header {
@@ -76,11 +76,21 @@
   position: relative;
 }
 
+/* Add smooth transition to any icon inside the button */
+.button svg {
+  transition: transform 0.2s ease-in-out;
+}
+
+/* Rotate the icon 180 degrees when aria-expanded is true */
+.button[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+
 .dropdown {
   position: absolute;
   top: 100%;
   right: 0;
-  margin-top: 4px;
+  margin-top: var(--space-sm);
   background: var(--bg-surface);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
@@ -89,25 +99,8 @@
   min-width: 180px;
   display: flex;
   flex-direction: column;
-  padding: var(--space-xs);
+  padding: var(--space-md) var(--space-sm);
   gap: var(--space-xs);
-}
-
-.dropdownItem {
-  background: transparent;
-  border: none;
-  text-align: left;
-  padding: 8px var(--space-sm);
-  font: var(--text-label);
-  color: var(--text-primary);
-  cursor: pointer;
-  border-radius: var(--radius-sm);
-  transition: background var(--duration-fast);
-  white-space: nowrap;
-}
-
-.dropdownItem:hover {
-  background: var(--bg-surface-hover);
 }
 
 .dropdownItemInput {

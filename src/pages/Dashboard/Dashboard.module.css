@@ -71,27 +71,27 @@
 /* ===== 3-column panels grid ===== */
 .panelsGrid {
   display: grid;
-  grid-template-columns: 280px minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(280px, 1fr) minmax(0, 1.5fr) minmax(0, 1.5fr);
   gap: var(--space-lg);
   align-items: stretch;
 }
 
 .panelsGridTwo {
   display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
+  grid-template-columns: minmax(280px, 1fr) minmax(0, 1.5fr);
   gap: var(--space-lg);
   align-items: stretch;
 }
 
 /* First child (ReturnWorkflowsPanel) determines the row height */
-.panelsGrid > :first-child,
-.panelsGridTwo > :first-child {
+.panelsGrid> :first-child,
+.panelsGridTwo> :first-child {
   height: auto;
 }
 
 /* Other panels adjust to ReturnWorkflowsPanel height and scroll internally */
-.panelsGrid > :not(:first-child),
-.panelsGridTwo > :not(:first-child) {
+.panelsGrid> :not(:first-child),
+.panelsGridTwo> :not(:first-child) {
   height: 0;
   min-height: 100%;
   max-height: 100%;

@@ -103,7 +103,6 @@
 }
 
 .chevronOpen {
-  composes: chevron;
   transform: rotate(90deg);
 }
 
