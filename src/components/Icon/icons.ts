@@ -45,7 +45,8 @@ export const ICONS = {
   knife: 'hugeicons:knife-02',
   scale: 'hugeicons:weight-scale',
   document: 'hugeicons:file-01',
-  save: 'hugeicons:floppy-disk'
+  save: 'hugeicons:floppy-disk',
+  ai: 'hugeicons:ai-magic',
 } as const;
 
 export type IconName = keyof typeof ICONS;

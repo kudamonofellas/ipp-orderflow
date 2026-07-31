@@ -21,6 +21,9 @@ import type {
   AttachmentsCollectionSchema,
   UserBriefSchema,
   LineCutsCollectionSchema,
+  LineWeighingsCollectionSchema,
+  LinePhotosCollectionSchema,
+  LineWeighingPhotosCollectionSchema
 } from '../lib/schemas';
 
 export type OrdersCollection = z.infer<typeof OrdersCollectionSchema>;
@@ -33,3 +36,6 @@ export type CorrectionsCollection = z.infer<typeof CorrectionsCollectionSchema>;
 export type AttachmentsCollection = z.infer<typeof AttachmentsCollectionSchema>;
 export type UserBrief = z.infer<typeof UserBriefSchema>;
 export type LineCutsCollection = z.infer<typeof LineCutsCollectionSchema>;
+export type LineWeighingsCollection = z.infer<typeof LineWeighingsCollectionSchema>;
+export type LinePhotosCollection = z.infer<typeof LinePhotosCollectionSchema>;
+export type LineWeighingPhotosCollection = z.infer<typeof LineWeighingPhotosCollectionSchema>;

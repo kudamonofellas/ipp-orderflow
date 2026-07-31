@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Icon } from '../Icon/Icon';
+import { Button } from '../Button/Button';
 import { parseOrderText, type ParsedOrderDraft } from '../../lib/directus';
 import styles from './IntakeModal.module.css';
 
@@ -7,8 +8,10 @@ interface IntakeModalProps {
   open: boolean;
   channel: 'horeca';
   onClose: () => void;
-  /** Called after a successful parse — hands off the draft to the next step. */
-  onParsed: (draft: ParsedOrderDraft, rawText: string) => void;
+  /** Called after a successful parse — hands off the draft to the next step.
+     *  `attachments` are any files the admin attached here (e.g. a photographed PO) —
+     *  the caller is responsible for actually uploading/persisting them. */
+  onParsed: (draft: ParsedOrderDraft, rawText: string, attachments: File[]) => void;
 }
 
 /**
@@ -65,18 +68,21 @@ export function IntakeModal({ open, channel, onClose, onParsed }: IntakeModalPro
       setError(`Parse failed: ${res.error ?? 'empty response'}`);
       return;
     }
-    onParsed(res.data, trimmed);
+    onParsed(res.data, trimmed, attachments);
   }
 
   function handleSkip() {
-    // Open NewOrderModal blank (no prefill) — pass empty draft
+    // Open NewOrderModal blank (no prefill) — pass empty draft. Attachments still
+    // carry over: the admin may have attached a PO photo without pasting any text.
     onParsed(
       {
         customerTyped: null,
         customerId: null,
         customerMatch: null,
+        company: null,
         deliver: null,
         dateGuessed: false,
+        multiCustomer: false,
         paymentMethod: null,
         address: null,
         phone: null,
@@ -85,6 +91,7 @@ export function IntakeModal({ open, channel, onClose, onParsed }: IntakeModalPro
         lines: [],
       },
       '',
+      attachments,
     );
   }
 
@@ -119,15 +126,17 @@ export function IntakeModal({ open, channel, onClose, onParsed }: IntakeModalPro
               Paste the customer's WhatsApp order message to auto-fill the order form.
             </p>
           </div>
-          <button
-            id="intake-close"
-            className={styles.closeBtn}
-            onClick={onClose}
+          <Button
+            type="button"
+            variant="tertiary"
+            iconOnly
+            size="sm"
             disabled={parsing}
             aria-label="Close"
-          >
+            onClick={onClose}>
             <Icon name="close" size={18} />
-          </button>
+          </Button>
+
         </div>
 
         <div className={styles.body}>
@@ -155,16 +164,17 @@ export function IntakeModal({ open, channel, onClose, onParsed }: IntakeModalPro
           <div>
             <span className={styles.label}>Attachments (optional)</span>
             <div className={styles.attachRow}>
-              <button
+              <Button
+                variant="secondary"
                 id="intake-attach"
                 type="button"
-                className={styles.attachBtn}
+                isActive={!!attachments.length}
                 onClick={() => fileInputRef.current?.click()}
                 disabled={parsing}
               >
                 <Icon name="attach" size={16} />
                 Add file
-              </button>
+              </Button>
               {attachments.length > 0 && (
                 <div className={styles.attachList}>
                   {attachments.map((f, i) => (
@@ -196,7 +206,8 @@ export function IntakeModal({ open, channel, onClose, onParsed }: IntakeModalPro
         </div>
 
         <div className={styles.footer}>
-          <button
+          <Button
+            variant="secondary"
             id="intake-skip"
             type="button"
             className={styles.cancelBtn}
@@ -204,11 +215,11 @@ export function IntakeModal({ open, channel, onClose, onParsed }: IntakeModalPro
             disabled={parsing}
           >
             Skip — enter manually
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="primary"
             id="intake-parse"
             type="button"
-            className={styles.parseBtn}
             onClick={handleParse}
             disabled={parsing || !text.trim()}
           >
@@ -220,7 +231,7 @@ export function IntakeModal({ open, channel, onClose, onParsed }: IntakeModalPro
                 Parse &amp; Continue
               </>
             )}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

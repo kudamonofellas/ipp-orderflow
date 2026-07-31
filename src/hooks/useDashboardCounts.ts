@@ -13,21 +13,47 @@ const STAGE_ORDER: Stage[] = [
  * Map a raw DB status string to a dashboard stage key.
  * Returns null if the status doesn't map to any stage pill.
  */
+function extractCount(val: unknown): number {
+  if (typeof val === 'number') return Number.isNaN(val) ? 0 : val;
+  if (typeof val === 'string') {
+    const parsed = parseInt(val, 10);
+    return Number.isNaN(parsed) ? 0 : parsed;
+  }
+  if (val && typeof val === 'object') {
+    const obj = val as Record<string, unknown>;
+    const star = obj['*'] ?? Object.values(obj)[0];
+    return extractCount(star);
+  }
+  return 0;
+}
+
+/**
+ * Map a raw DB stage/status string to a dashboard stage key.
+ * Returns null if the value doesn't map to any stage pill.
+ */
 function statusToStage(status: string | null | undefined): Stage | null {
   if (!status) return null;
-  const s = status.toLowerCase();
-  // Direct mappings for the values currently in the DB + the new stage names.
-  if (s === 'open' || s === 'draft' || s === 'intake' || s === 'new orders') return 'intake';
-  if (s === 'cold' || s === 'cold storage' || s === 'cold storage picking') return 'cold';
-  if (s === 'finance' || s === 'finance gate' || s === 'finance review') return 'finance';
-  if (s === 'production' || s === 'cutting' || s === 'processing')
-    return 'production';
+  const s = status.toLowerCase().trim();
+  // Exact stage key matches
+  if (s === 'intake') return 'intake';
+  if (s === 'cold') return 'cold';
+  if (s === 'finance') return 'finance';
+  if (s === 'production') return 'production';
   if (s === 'packing') return 'packing';
-  if (s === 'finalise' || s === 'finalize' || s === 'print do/si' || s === 'print do')
-    return 'finalise';
+  if (s === 'finalise' || s === 'finalize') return 'finalise';
   if (s === 'dispatch') return 'dispatch';
   if (s === 'delivered') return 'delivered';
-  // Return workflow.
+  if (s === 'awaiting_return') return 'awaiting_return';
+  if (s === 'admin_action') return 'admin_action';
+  if (s === 'awaiting_signed_doc') return 'awaiting_signed_doc';
+  if (s === 'replacement_transit') return 'replacement_transit';
+
+  // Direct mappings for legacy status values in DB
+  if (s === 'open' || s === 'draft' || s === 'new orders') return 'intake';
+  if (s === 'cold storage' || s === 'cold storage picking') return 'cold';
+  if (s === 'finance gate' || s === 'finance review') return 'finance';
+  if (s === 'cutting' || s === 'processing') return 'production';
+  if (s === 'print do/si' || s === 'print do') return 'finalise';
   if (s === 'awaiting return') return 'awaiting_return';
   if (s === 'admin action required' || s === 'admin action') return 'admin_action';
   if (s === 'awaiting signed do/si' || s === 'awaiting signed doc') return 'awaiting_signed_doc';
@@ -128,7 +154,7 @@ interface UseDashboardCountsResult {
 /** Empty state used while loading. */
 const EMPTY_METRICS: DashboardMetric[] = [
   { id: 'open', label: 'Open Orders', value: 0, range: 'All' },
-  { id: 'today', label: "Today's Orders", value: 0, range: 'Today' },
+  { id: 'total', label: 'Total Orders', value: 0, range: 'Today' },
   { id: 'delivered', label: 'Delivered Orders', value: 0, range: 'Today' },
   { id: 'cancelled', label: 'Cancelled Orders', value: 0, range: 'Today' },
 ];
@@ -145,6 +171,7 @@ export interface RangeWithLabel {
 }
 
 export function useDashboardCounts(
+  totalRange: RangeWithLabel = { val: { type: 'today' }, label: 'Today' },
   deliveredRange: RangeWithLabel = { val: { type: 'today' }, label: 'Today' },
   cancelledRange: RangeWithLabel = { val: { type: 'today' }, label: 'Today' },
 ): UseDashboardCountsResult {
@@ -163,13 +190,25 @@ export function useDashboardCounts(
       setLoading(true);
       setError(null);
 
-      // 1. Stage counts (unfiltered by date, grouped by status)
+      // 1. Stage counts (unfiltered by date, grouped by stage)
       const stageResultPromise = aggregateOrders({
         aggregate: { count: ['*'] },
-        groupBy: ['status'],
+        groupBy: ['stage'],
       });
 
-      // 2. Metrics (each has its own filter/logic)
+      // Parallel query for Cold-stage unpaid orders that ALSO count toward Finance Review queue (per domain logic)
+      const financeParallelPromise = aggregateOrders({
+        filter: {
+          _and: [
+            { stage: { _eq: 'cold' } },
+            { hold: { _neq: true } },
+            { payment_confirmed: { _neq: true } },
+          ],
+        },
+        aggregate: { count: ['*'] },
+      });
+
+      // 2. Metrics
       // Open Orders: exclude terminal stages ('delivered', 'cancelled', 'returned')
       const openFilter = {
         _and: [
@@ -178,10 +217,10 @@ export function useDashboardCounts(
         ],
       };
 
-      // Today's Orders: filter by creation date = today
-      const todayFilter = getFilterForField({ type: 'today' }, 'created_at');
+      // Total Orders: filter by creation date in range
+      const totalFilter = getFilterForField(totalRange.val, 'created_at');
 
-      // Delivered: stage === 'delivered', period range
+      // Delivered Orders: stage === 'delivered', period range
       const deliveredFilter = {
         _and: [
           { stage: { _eq: 'delivered' } },
@@ -189,18 +228,24 @@ export function useDashboardCounts(
         ],
       };
 
-      // Cancelled: cancelled === true, period range
+      // Cancelled Orders: cancelled === true or stage === 'cancelled', period range
       const cancelledFilter = {
         _and: [
-          { cancelled: { _eq: true } },
+          {
+            _or: [
+              { cancelled: { _eq: true } },
+              { stage: { _eq: 'cancelled' } },
+            ],
+          },
           getFilterForField(cancelledRange.val, 'updated_at'),
         ],
       };
 
-      const [stageRes, openRes, todayRes, deliveredRes, cancelledRes] = await Promise.all([
+      const [stageRes, financeRes, openRes, totalRes, deliveredRes, cancelledRes] = await Promise.all([
         stageResultPromise,
+        financeParallelPromise,
         aggregateOrders({ filter: openFilter, aggregate: { count: ['*'] } }),
-        aggregateOrders({ filter: todayFilter, aggregate: { count: ['*'] } }),
+        aggregateOrders({ filter: totalFilter, aggregate: { count: ['*'] } }),
         aggregateOrders({ filter: deliveredFilter, aggregate: { count: ['*'] } }),
         aggregateOrders({ filter: cancelledFilter, aggregate: { count: ['*'] } }),
       ]);
@@ -214,29 +259,36 @@ export function useDashboardCounts(
       }
       if (
         openRes.error !== null ||
-        todayRes.error !== null ||
+        totalRes.error !== null ||
         deliveredRes.error !== null ||
         cancelledRes.error !== null
       ) {
         setError(
           `Failed to load metrics: ${
-            openRes.error || todayRes.error || deliveredRes.error || cancelledRes.error
+            openRes.error || totalRes.error || deliveredRes.error || cancelledRes.error
           }`,
         );
         setLoading(false);
         return;
       }
 
-      // Build stage counts
+      // Build stage counts directly from stageRes (avoid double-counting)
       const stageMap = new Map<Stage, number>();
-      for (const row of stageRes.data) {
-        const status = (row.status as string | null) ?? 'Draft';
-        const count = Number(row.count ?? 0);
-        const stage = statusToStage(status);
-        if (stage) {
-          stageMap.set(stage, (stageMap.get(stage) ?? 0) + count);
+      for (const row of stageRes.data ?? []) {
+        const val = (row.stage as string | null) ?? (row.status as string | null) ?? 'Draft';
+        const count = extractCount(row.count);
+        const stageKey = statusToStage(val);
+        if (stageKey) {
+          stageMap.set(stageKey, (stageMap.get(stageKey) ?? 0) + count);
         }
       }
+
+      // Add parallel Cold/unpaid orders to Finance Review queue count
+      const financeExtra = financeRes.data ? extractCount(financeRes.data[0]?.count) : 0;
+      if (financeExtra > 0) {
+        stageMap.set('finance', (stageMap.get('finance') ?? 0) + financeExtra);
+      }
+
       setStageCounts(
         STAGE_ORDER.map((stage) => ({
           stage,
@@ -245,15 +297,15 @@ export function useDashboardCounts(
         })),
       );
 
-      // Extract metric values
-      const openVal = Number(openRes.data[0]?.count ?? 0);
-      const todayVal = Number(todayRes.data[0]?.count ?? 0);
-      const deliveredVal = Number(deliveredRes.data[0]?.count ?? 0);
-      const cancelledVal = Number(cancelledRes.data[0]?.count ?? 0);
+      // Extract metric values using extractCount
+      const openVal = openRes.data ? extractCount(openRes.data[0]?.count) : 0;
+      const totalVal = totalRes.data ? extractCount(totalRes.data[0]?.count) : 0;
+      const deliveredVal = deliveredRes.data ? extractCount(deliveredRes.data[0]?.count) : 0;
+      const cancelledVal = cancelledRes.data ? extractCount(cancelledRes.data[0]?.count) : 0;
 
       setMetrics([
         { id: 'open', label: 'Open Orders', value: openVal, range: 'All' },
-        { id: 'today', label: "Today's Orders", value: todayVal, range: 'Today' },
+        { id: 'total', label: 'Total Orders', value: totalVal, range: totalRange.label },
         { id: 'delivered', label: 'Delivered Orders', value: deliveredVal, range: deliveredRange.label },
         { id: 'cancelled', label: 'Cancelled Orders', value: cancelledVal, range: cancelledRange.label },
       ]);
@@ -265,7 +317,7 @@ export function useDashboardCounts(
     return () => {
       cancelled = true;
     };
-  }, [nonce, deliveredRange, cancelledRange]);
+  }, [nonce, totalRange, deliveredRange, cancelledRange]);
 
   return { metrics, stageCounts, loading, error, refetch };
 }

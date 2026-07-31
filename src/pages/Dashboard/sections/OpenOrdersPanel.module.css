@@ -128,7 +128,7 @@
 
 .lineName {
   font: var(--text-body);
-  color: var(--text-secondary);
+  color: var(--text-primary);
 }
 
 .lineQty {

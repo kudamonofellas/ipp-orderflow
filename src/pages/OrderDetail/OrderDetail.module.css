@@ -96,6 +96,21 @@
   min-width: 0;
 }
 
+.layoutGridFull {
+  grid-template-columns: 1fr 44px;
+}
+
+.panelToggleBtn {
+  flex-shrink: 0;
+}
+
+.sidePanelStickyContentCollapsed {
+  opacity: 0;
+  transform: translateX(20px);
+  pointer-events: none;
+  width: 0;
+}
+
 /* Side Panel Column & Scrollable Fixed Layout */
 .sidePanelColumn {
   display: flex;
@@ -108,10 +123,6 @@
   top: var(--space-md);
   bottom: var(--space-md);
   height: calc(100vh - var(--space-md) * 2);
-}
-
-.panelToggleBtn {
-  flex-shrink: 0;
 }
 
 .sidePanelStickyContent {
@@ -261,7 +272,7 @@
 .detailItem {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-xs);
 }
 
 .detailLabel {
@@ -273,6 +284,16 @@
   font: var(--text-body);
   color: var(--text-primary);
   font-weight: 500;
+}
+
+.orderNote {
+  margin-top: var(--space-md);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
 }
 
 /* Stepper / Timeline */
@@ -411,22 +432,23 @@
 }
 
 .itemIndex {
-  font-weight: 600;
   color: var(--text-primary);
-  font-size: 15px;
+  font: var(--text-body);
+  font-weight: 600;
+  text-align: right;
   min-width: 20px;
 }
 
 .unitTag {
+  font: var(--text-body);
   font-weight: 600;
   color: var(--text-primary);
-  font-size: 15px;
 }
 
 .itemName {
+  font: var(--text-body);
   font-weight: 600;
   color: var(--text-primary);
-  font-size: 15px;
 }
 
 .sendingBadge {
@@ -484,11 +506,17 @@
   width: 24px;
 }
 
+.linePhotos {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
 /* Thumbnails list */
 .thumbnailsContainer {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  align-items: flex-end;
+  gap: var(--space-md);
   flex-wrap: wrap;
 }
 
@@ -497,7 +525,6 @@
   width: 56px;
   height: 44px;
   border-radius: var(--radius-sm);
-  overflow: hidden;
   border: 1px solid var(--border-default);
   cursor: pointer;
   background: var(--bg-surface-hover);
@@ -512,18 +539,34 @@
 
 .thumbnailHoverTrash {
   position: absolute;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  top: -4px;
+  right: -4px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.65);
   color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
   opacity: 0;
-  transition: opacity 0.15s ease;
+  transition: opacity 0.15s ease, background-color 0.15s ease;
+  z-index: 1;
+}
+
+.thumbnailHoverTrash:hover {
+  background: var(--state-error, #d13c3c);
 }
 
 .thumbnailItem:hover .thumbnailHoverTrash {
   opacity: 1;
+}
+
+/* Touch devices have no hover state — always show the badge so it's reachable */
+@media (hover: none) {
+  .thumbnailHoverTrash {
+    opacity: 1;
+  }
 }
 
 .cuttingInstruction {
@@ -543,6 +586,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-xs);
+  margin-left: 28px;
 }
 
 .itemTotalRow {
@@ -569,7 +613,7 @@
 .lineTotalPrice {
   font-weight: 600;
   color: var(--text-primary);
-  width: 360px;
+  min-width: 160px;
   text-align: right;
   overflow: hidden;
   white-space: nowrap;
@@ -647,7 +691,7 @@
 .docRow {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-sm);
   padding: var(--space-sm) var(--space-md);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
@@ -658,26 +702,25 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: var(--space-sm);
 }
 
 .docType {
-  font-weight: 700;
-  font-size: 0.85rem;
+  font-size: var(--text-body);
   color: var(--text-primary);
-  width: 48px;
 }
 
 .docNumber {
   font-weight: 600;
-  font-size: 0.95rem;
+  font-size: var(--text-body);
   color: var(--text-primary);
   flex: 1;
 }
 
 .docNote {
-  font-size: 0.85rem;
-  color: var(--text-secondary);
-  background: var(--bg-surface-hover);
+  font: var(--text-body);
+  color: var(--text-primary);
+  border: 1px solid var(--border-subtle);
   padding: 6px 12px;
   border-radius: var(--radius-sm);
 }
@@ -710,14 +753,13 @@
 }
 
 .modalContent {
-  background: var(--bg-surface);
   border-radius: var(--radius-lg);
-  max-width: 600px;
+  max-width: 80vw;
   width: 100%;
-  box-shadow: var(--shadow-lg);
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  background: #000;
 }
 
 .modalHeader {
@@ -725,18 +767,17 @@
   align-items: center;
   justify-content: space-between;
   padding: var(--space-md) var(--space-lg);
-  border-bottom: 1px solid var(--border-subtle);
   font-weight: 600;
+  color: var(--text-on-accent)
 }
 
 .modalBody {
-  padding: var(--space-md);
+  padding: var(--space-3xl);
   display: flex;
   align-items: center;
   justify-content: center;
   max-height: 70vh;
   overflow: auto;
-  background: #000;
 }
 
 .modalImage {
@@ -751,7 +792,6 @@
   justify-content: flex-end;
   gap: var(--space-md);
   padding: var(--space-md) var(--space-lg);
-  border-top: 1px solid var(--border-subtle);
 }
 
 /* Add Item Modal */
@@ -796,10 +836,6 @@
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  background: var(--bg-surface-hover);
-  padding: var(--space-md);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-subtle);
 }
 
 .modalActionsRow {
@@ -809,7 +845,7 @@
   margin-top: var(--space-sm);
 }
 
-.modalActionsRow > * {
+.modalActionsRow>* {
   flex: 1;
 }
 
@@ -843,7 +879,6 @@
 
 /* Notes section */
 .noteItem {
-  background: var(--bg-surface-hover);
   border-radius: var(--radius-md);
   padding: var(--space-sm) var(--space-md);
   font: var(--text-body);

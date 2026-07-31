@@ -9,7 +9,9 @@ import { CustomerDetail } from './pages/CustomerDetail/CustomerDetail';
 import { Dashboard } from './pages/Dashboard/Dashboard';
 import { Login } from './pages/Login/Login';
 import { Orders } from './pages/Orders/Orders';
+import { OrderNew } from './pages/OrderNew/OrderNew';
 import { OrderDetail } from './pages/OrderDetail/OrderDetail';
+import { OrderEdit } from './pages/OrderEdit/OrderEdit';
 import { Products } from './pages/Products/Products';
 import { ProductDetail } from './pages/ProductDetail/ProductDetail';
 import { Placeholder } from './pages/Placeholder/Placeholder';
@@ -54,7 +56,9 @@ export default function App() {
           >
             <Route index element={<Dashboard />} />
             <Route path="orders" element={<Orders />} />
+            <Route path="/orders/new" element={<OrderNew />} />
             <Route path="orders/:id" element={<OrderDetail />} />
+            <Route path="orders/:id/edit" element={<OrderEdit />} />
             <Route path="customers" element={<Customers />} />
             <Route path="customers/:id" element={<CustomerDetail />} />
             <Route path="products" element={<Products />} />

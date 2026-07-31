@@ -20,7 +20,11 @@ export type PipelineStage =
   | 'packing'
   | 'finalise'
   | 'dispatch'
-  | 'delivered';
+  | 'delivered'
+  | 'outstanding'
+  | 'awaiting'
+  | 'cancelled'
+  | 'returned';
 
 /** Return-workflow stage keys (off the main pipeline). */
 export type ReturnStage =
@@ -55,6 +59,10 @@ export const RETURN_STAGES: { key: ReturnStage; label: string }[] = [
 export const STAGE_LABELS: Record<Stage, string> = {
   ...Object.fromEntries(PIPELINE_STAGES.map((s) => [s.key, s.label])),
   ...Object.fromEntries(RETURN_STAGES.map((s) => [s.key, s.label])),
+  outstanding: 'Outstanding',
+  awaiting: 'Awaiting stock',
+  cancelled: 'Cancelled',
+  returned: 'Returned',
 } as Record<Stage, string>;
 
 /**

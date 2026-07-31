@@ -125,8 +125,39 @@ export function useOrders(stageFilter: string = 'all', search: string = '', sort
 
       const filter: Record<string, unknown> = {};
 
-      if (stageFilter !== 'all') {
-        // Try the new `stage` field first; fall back to legacy `status` for old rows.
+      if (stageFilter === 'active') {
+        filter._and = [
+          { cancelled: { _neq: true } },
+          { stage: { _nin: ['delivered', 'cancelled', 'returned'] } },
+        ];
+      } else if (stageFilter === 'pending-docs') {
+        filter._and = [
+          { stage: { _eq: 'delivered' } },
+          { docs_returned: { _neq: true } },
+        ];
+      } else if (stageFilter === 'completed') {
+        filter._and = [
+          { stage: { _eq: 'delivered' } },
+          { docs_returned: { _eq: true } },
+        ];
+      } else if (stageFilter === 'finance') {
+        filter._or = [
+          { stage: { _eq: 'finance' } },
+          {
+            _and: [
+              { stage: { _eq: 'cold' } },
+              { hold: { _neq: true } },
+              { payment_confirmed: { _neq: true } },
+            ],
+          },
+        ];
+      } else if (stageFilter === 'cancelled') {
+        filter._or = [
+          { cancelled: { _eq: true } },
+          { stage: { _eq: 'cancelled' } },
+        ];
+      } else if (stageFilter !== 'all') {
+        // Try the `stage` field first; fall back to legacy `status` for old rows.
         filter._or = [
           { stage: { _eq: stageFilter } },
           { status: { _eq: stageFilter } },

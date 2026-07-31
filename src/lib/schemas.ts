@@ -112,9 +112,9 @@ export const ProductsCollectionSchema = z.object({
   catch_weight: z.boolean().nullable().optional(),
   fixed_pack: z.boolean().nullable().optional(),
   ppn: z.string().nullable().optional(),
-  active: z.boolean().nullable().optional(),
-  created_at: z.string().nullable().optional(),
-  updated_at: z.string().nullable().optional(),
+  oos: z.boolean().nullable().optional(),
+  date_created: z.string().nullable().optional(),
+  date_updated: z.string().nullable().optional(),
 });
 
 /**
@@ -172,6 +172,25 @@ export const OrderHistoryCollectionSchema = z.object({
   stage: z.string().nullable().optional(),
 });
 
+/** Directus `line_weighings` collection row — one row per scale reading on a weighed line. */
+export const LineWeighingsCollectionSchema = z.object({
+  id: z.string(),
+  line_id: z.string(),
+  weight: numeric,
+  photo_id: z.string().nullable().optional(),
+  created_at: z.string().nullable().optional(),
+});
+export const LineWeighingsCollectionArraySchema = z.array(LineWeighingsCollectionSchema);
+
+/** Directus `line_photos` collection row — general item photos on non-weighed lines. */
+export const LinePhotosCollectionSchema = z.object({
+  id: z.string(),
+  line_id: z.string(),
+  photo_id: z.string(),
+  sort_order: z.number().nullable().optional(),
+});
+export const LinePhotosCollectionArraySchema = z.array(LinePhotosCollectionSchema);
+
 /** Directus `line_cuts` collection row — cutting instructions per order line. */
 export const LineCutsCollectionSchema = z.object({
   id: z.string(),
@@ -181,6 +200,14 @@ export const LineCutsCollectionSchema = z.object({
   sort_order: z.number().nullable().optional(),
 });
 export const LineCutsCollectionArraySchema = z.array(LineCutsCollectionSchema);
+
+export const LineWeighingPhotosCollectionSchema = z.object({
+  id: z.string(),
+  weighing_id: z.string(),
+  photo_id: z.string(),
+  sort_order: z.number().nullable().optional(),
+});
+export const LineWeighingPhotosCollectionArraySchema = z.array(LineWeighingPhotosCollectionSchema);
 
 /** Directus `corrections` collection row (learned product-match corrections). */
 export const CorrectionsCollectionSchema = z.object({

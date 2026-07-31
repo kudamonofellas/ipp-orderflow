@@ -1,17 +1,28 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Icon } from '../../components/Icon/Icon';
 import { Card } from '../../components/Card/Card';
+import { Icon } from '../../components/Icon/Icon';
+import { Button } from '../../components/Button/Button';
+import { ChannelSelectModal } from '../../components/ChannelSelectModal/ChannelSelectModal';
+import { IntakeModal } from '../../components/IntakeModal/IntakeModal';
 import { useCan } from '../../hooks/useAuth';
 import { useOrders } from '../../hooks/useOrders';
 import { PIPELINE_STAGES, RETURN_STAGES } from '../../lib/pipeline';
 import type { OpenOrder } from '../../types/dashboard';
+import type { ParsedOrderDraft } from '../../lib/directus';
 import styles from './Orders.module.css';
 
 const STAGE_OPTIONS = [
   { key: 'all', label: 'All stages' },
+  { key: 'active', label: 'In progress' },
+  { key: 'pending-docs', label: 'Signed DO/SI not returned yet' },
+  { key: 'completed', label: 'Completed' },
   ...PIPELINE_STAGES.map((s) => ({ key: s.key, label: s.label })),
+  { key: 'outstanding', label: 'Outstanding' },
+  { key: 'awaiting', label: 'Awaiting stock' },
   ...RETURN_STAGES.map((s) => ({ key: s.key, label: s.label })),
+  { key: 'returned', label: 'Returned' },
+  { key: 'cancelled', label: 'Cancelled' },
 ];
 
 const SORT_OPTIONS = [
@@ -28,38 +39,48 @@ const currency = new Intl.NumberFormat('id-ID', {
 /** Drives the table headline + empty-state copy based on the selected stage filter. */
 const STAGE_COPY: Record<string, { headline: string; empty: string }> = {
   all: { headline: 'All Orders', empty: 'No orders.' },
+  active: { headline: 'In Progress Orders', empty: 'No in progress orders.' },
+  'pending-docs': { headline: 'Signed DO/SI Not Returned Yet', empty: 'No orders awaiting signed DO/SI.' },
+  completed: { headline: 'Completed Orders', empty: 'No completed orders.' },
   intake: { headline: 'New Orders', empty: 'No new orders.' },
-  awaiting: { headline: 'Awaiting Pickup', empty: 'No orders awaiting pickup.' },
   cold: { headline: 'Cold Storage Picking', empty: 'No orders in cold storage picking.' },
   finance: { headline: 'Finance Review', empty: 'No orders on finance review.' },
   production: { headline: 'Processing', empty: 'No orders in processing.' },
   packing: { headline: 'Packing', empty: 'No orders in packing.' },
-  finalise: { headline: 'Finalising', empty: 'No orders finalising.' },
+  finalise: { headline: 'Print DO/SI', empty: 'No orders waiting to print DO/SI.' },
   dispatch: { headline: 'Dispatched', empty: 'No dispatched orders.' },
   delivered: { headline: 'Delivered', empty: 'No delivered orders.' },
   cancelled: { headline: 'Cancelled', empty: 'No cancelled orders.' },
   returned: { headline: 'Returned', empty: 'No returned orders.' },
   outstanding: { headline: 'Outstanding', empty: 'No outstanding orders.' },
+  awaiting: { headline: 'Awaiting Stock', empty: 'No orders awaiting stock.' },
 };
 
 const STATUS_PILL: Record<string, { label: string; color: string }> = {
   intake: { label: 'New Order', color: '#3B82F6' },
-  awaiting: { label: 'Awaiting Pickup', color: '#F97316' },
-  cold: { label: 'Cold Storage Picking', color: '#22C55E' },
-  finance: { label: 'Finance Review', color: '#EAB308' },
-  production: { label: 'Processing', color: '#A855F7' },
-  packing: { label: 'Packing', color: '#A855F7' },
-  finalise: { label: 'Finalising', color: '#6366F1' },
-  dispatch: { label: 'Dispatched', color: '#F97316' },
-  delivered: { label: 'Delivered', color: '#22C55E' },
+  cold: { label: 'Cold Storage', color: '#06B6D4' },
+  finance: { label: 'Finance Review', color: '#8B5CF6' },
+  production: { label: 'Processing', color: '#F59E0B' },
+  packing: { label: 'Packing', color: '#10B981' },
+  finalise: { label: 'Print DO/SI', color: '#6366F1' },
+  dispatch: { label: 'Dispatch', color: '#3B82F6' },
+  delivered: { label: 'Delivered', color: '#10B981' },
+  awaiting_return: { label: 'Awaiting Return', color: '#EF4444' },
+  admin_action: { label: 'Admin Action', color: '#F59E0B' },
+  awaiting_signed_doc: { label: 'Signed DO/SI Out', color: '#6366F1' },
+  replacement_transit: { label: 'Replacement Transit', color: '#3B82F6' },
   cancelled: { label: 'Cancelled', color: '#6B7280' },
   returned: { label: 'Returned', color: '#EF4444' },
   outstanding: { label: 'Outstanding', color: '#EAB308' },
+  awaiting: { label: 'Awaiting Stock', color: '#9CA3AF' },
 };
 
 /** Full Orders page: searchable, stage-filtered list with expandable rows. */
 export function Orders() {
+  const navigate = useNavigate();
   const location = useLocation();
+  const canCreateOrders = useCan()('createOrders');
+
   const [stage, setStage] = useState(location.state?.stage || 'all');
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState('-order_id');
@@ -67,6 +88,24 @@ export function Orders() {
   const [sortOpen, setSortOpen] = useState(false);
   const stageDropdownRef = useRef<HTMLDivElement>(null);
   const sortDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Multi-step "Add New Order" flow: step 0: idle, step 1: channel selection, step 2: intake
+  const [orderStep, setOrderStep] = useState<0 | 1 | 2>(0);
+
+  function startNewOrder() {
+    setOrderStep(1);
+  }
+  function closeAll() {
+    setOrderStep(0);
+  }
+  function handleChannelSelect(_channel: 'horeca') {
+    void _channel;
+    setOrderStep(2);
+  }
+  function handleParsed(draft: ParsedOrderDraft, rawText: string, attachments: File[]) {
+    setOrderStep(0);
+    navigate('/orders/new', { state: { prefill: draft, rawText, attachments } });
+  }
 
   const { orders = [], loading, error, total = 0, page = 1, pageSize = 20, setPage } = useOrders(
     stage,
@@ -181,6 +220,18 @@ export function Orders() {
               aria-label="Search orders"
             />
           </div>
+
+          {canCreateOrders && (
+            <Button
+              variant="primary"
+              size="md"
+              onClick={startNewOrder}
+              title="Create a new order"
+            >
+              <Icon name="add" size={20} />
+              New Order
+            </Button>
+          )}
         </div>
       </div>
 
@@ -281,6 +332,19 @@ export function Orders() {
           </>
         )}
       </Card>
+
+      <ChannelSelectModal
+        open={orderStep === 1}
+        onClose={closeAll}
+        onSelect={handleChannelSelect}
+      />
+
+      <IntakeModal
+        open={orderStep === 2}
+        channel="horeca"
+        onClose={closeAll}
+        onParsed={handleParsed}
+      />
     </div>
   );
 }

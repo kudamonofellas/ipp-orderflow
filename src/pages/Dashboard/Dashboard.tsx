@@ -6,7 +6,6 @@ import { Button } from '../../components/Button/Button';
 import { ChannelSelectModal } from '../../components/ChannelSelectModal/ChannelSelectModal';
 import { IntakeModal } from '../../components/IntakeModal/IntakeModal';
 import { MetricCard } from '../../components/MetricCard/MetricCard';
-import { NewOrderModal } from '../../components/NewOrderModal/NewOrderModal';
 import { NotificationsPopover } from '../../components/NotificationsPopover/NotificationsPopover';
 import { StagePill } from '../../components/StagePill/StagePill';
 import {
@@ -26,7 +25,7 @@ import type { ParsedOrderDraft } from '../../lib/directus';
 
 const METRIC_ICONS: Record<string, IconName> = {
   open: 'total',
-  today: 'store',
+  total: 'store',
   delivered: 'delivered',
   cancelled: 'cancelled',
 };
@@ -35,11 +34,13 @@ const METRIC_ICONS: Record<string, IconName> = {
 export function Dashboard() {
   const navigate = useNavigate();
   const [sortBy, setSortBy] = useState('-order_id');
+  const [totalRange, setTotalRange] = useState<RangeWithLabel>({ val: { type: 'today' }, label: 'Today' });
   const [deliveredRange, setDeliveredRange] = useState<RangeWithLabel>({ val: { type: 'today' }, label: 'Today' });
   const [cancelledRange, setCancelledRange] = useState<RangeWithLabel>({ val: { type: 'today' }, label: 'Today' });
 
   const { orders: openOrders, loading: ordersLoading, error, total, page, pageSize, setPage, refetch: refetchOrders } = useOpenOrders(sortBy);
   const { metrics, stageCounts, loading: countsLoading, refetch: refetchCounts } = useDashboardCounts(
+    totalRange,
     deliveredRange,
     cancelledRange,
   );
@@ -49,12 +50,13 @@ export function Dashboard() {
   const isAdminOrOwner = role === 'Admin' || role === 'Owner';
 
   // Multi-step "Add New Order" flow:
-  // step 0: idle, step 1: channel selection, step 2: intake, step 3: order form
-  const [orderStep, setOrderStep] = useState<0 | 1 | 2 | 3>(0);
-  const [parsedDraft, setParsedDraft] = useState<ParsedOrderDraft | null>(null);
+  // step 0: idle, step 1: channel selection, step 2: intake
+  const [orderStep, setOrderStep] = useState<0 | 1 | 2>(0);
 
   function startNewOrder() { setOrderStep(1); }
-  function closeAll() { setOrderStep(0); setParsedDraft(null); }
+  function closeAll() {
+    setOrderStep(0);
+  }
 
   function handleChannelSelect(_channel: 'horeca') {
     // channel stored for IntakeModal label — currently only horeca
@@ -62,9 +64,9 @@ export function Dashboard() {
     setOrderStep(2);
   }
 
-  function handleParsed(draft: ParsedOrderDraft) {
-    setParsedDraft(draft);
-    setOrderStep(3);
+  function handleParsed(draft: ParsedOrderDraft, rawText: string, attachments: File[]) {
+    setOrderStep(0); // close the intake modal
+    navigate('/orders/new', { state: { prefill: draft, rawText, attachments } });
   }
 
   function handleOrderCreated() {
@@ -122,9 +124,10 @@ export function Dashboard() {
                   label={metric.label}
                   rangeLabel={metric.range}
                   onRangeChange={
-                    (metric.id === 'delivered' || metric.id === 'cancelled')
+                    metric.id !== 'open'
                       ? (val, label) => {
-                        if (metric.id === 'delivered') setDeliveredRange({ val, label });
+                        if (metric.id === 'total') setTotalRange({ val, label });
+                        else if (metric.id === 'delivered') setDeliveredRange({ val, label });
                         else if (metric.id === 'cancelled') setCancelledRange({ val, label });
                       }
                       : undefined
@@ -185,13 +188,6 @@ export function Dashboard() {
         channel="horeca"
         onClose={closeAll}
         onParsed={handleParsed}
-      />
-
-      <NewOrderModal
-        open={orderStep === 3}
-        onClose={closeAll}
-        onCreated={handleOrderCreated}
-        prefill={parsedDraft}
       />
     </div>
   );

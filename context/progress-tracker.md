@@ -128,6 +128,21 @@ change.
     - Modal styled consistent with `NewOrderModal` — uses `modalBackdrop` overlay + `addItemModalCard` panel with `addItemTextarea`, `matchedResultRow`, `matchDivider`, `modalActionsRow` CSS classes.
   - **Rules of Hooks fix**: The 3 `useState` declarations for `isAddItemModalOpen`, `addItemText`, `matchedItem` were inadvertently placed after `useEffect`. Moved them to the top-level state block (before `useEffect`) to comply with React Rules of Hooks.
 
+- **OrderDetail / OrderEdit split & shared modals (2026-07-30):**
+  - Extracted edit mode out of `OrderDetail.tsx` into `/orders/:id/edit` (`OrderEdit.tsx` + `OrderEdit.module.css`). Cleanly separates view mode from edit mode.
+  - Replaced inline Add Item modals with shared `components/AddItemModal/AddItemModal.tsx`.
+  - Extracted image preview overlay into `components/ImageDetailsModal/ImageDetailsModal.tsx`.
+
+- **Dashboard StagePills, MetricCards & Prototype Stage Parity (2026-07-31):**
+  - **Dashboard StagePill Aggregation Fix**: Updated `useDashboardCounts.ts` to aggregate directly by `stage` from Directus, eliminating status double-counting. Added Finance Review parallel queue calculation (`stage === 'finance'` OR (`stage === 'cold'` and unpaid)).
+  - **MetricCard Specifications Rework**: Reworked top 4 metric cards:
+    - Open Orders (`range: 'All'`)
+    - Total Orders (with range selector: Today, Week, Month, Year, Date)
+    - Delivered Orders (with range selector)
+    - Cancelled Orders (with range selector)
+  - **Prototype Stage Parity**: Expanded `PipelineStage`/`Stage` types in `pipeline.ts` and stage filter dropdown in `Orders.tsx` to include `outstanding`, `awaiting`, `cancelled`, and `returned`. Updated `useOrders.ts` to support special filters (`active`, `pending-docs`, `completed`, `finance`, `cancelled`).
+  - **Dashboard 3-column row height constraint**: Bounded `.panelsGrid` and `.panelsGridTwo` row height to `ReturnWorkflowsPanel` wrapping height in `Dashboard.module.css`.
+
 ## In Progress
 
 - None

@@ -50,6 +50,12 @@ import {
   UserBriefArraySchema,
   LineCutsCollectionArraySchema,
   LineCutsCollectionSchema,
+  LineWeighingsCollectionSchema,
+  LineWeighingsCollectionArraySchema,
+  LinePhotosCollectionSchema,
+  LinePhotosCollectionArraySchema,
+  LineWeighingPhotosCollectionSchema,
+  LineWeighingPhotosCollectionArraySchema
 } from './schemas';
 import type {
   CorrectionsCollection,
@@ -62,7 +68,14 @@ import type {
   AttachmentsCollection,
   UserBrief,
   LineCutsCollection,
+  LineWeighingsCollection,
+  LinePhotosCollection,
+  LineWeighingPhotosCollection
 } from '../types/directus';
+import {
+  buildOrderNo,
+  parseOrderNo
+} from './orderNo';
 
 const url = import.meta.env.VITE_DIRECTUS_URL;
 const staticTokenValue = import.meta.env.VITE_DIRECTUS_TOKEN;
@@ -266,6 +279,38 @@ export function clearAuthStorage(): void {
   }
 }
 
+/**
+ * Synchronously read the current access token, for building authenticated
+ * asset URLs (e.g. <img src>). Browsers never attach an Authorization
+ * header to plain <img>/<a> requests, so Directus's `?access_token=`
+ * query-param form is used instead — this keeps files gated behind the
+ * real role's permissions rather than requiring the Public role to have
+ * Read access on the File Library.
+ *
+ * Mirrors hasToken()'s fallback: prefer the SDK's in-memory token if
+ * synchronously available, else read the persisted value directly.
+ */
+export function getAccessTokenSync(): string | null {
+  const t = authClient.getToken() as unknown;
+  if (typeof t === 'string' && t.length > 0) return t;
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as AuthTokens;
+    return parsed.access_token ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Build an authenticated URL for a Directus file/asset. Use this instead
+ *  of hand-building `${VITE_DIRECTUS_URL}/assets/${id}` anywhere in the app. */
+export function getAssetUrl(fileId: string): string {
+  const token = getAccessTokenSync();
+  const base = `${url}/assets/${fileId}`;
+  return token ? `${base}?access_token=${encodeURIComponent(token)}` : base;
+}
+
 /* ============================================================ Reads === */
 
 /** Read orders with a filter, validated through zod at the boundary. */
@@ -428,30 +473,25 @@ export async function aggregateProducts(
  * still rely on the DB UNIQUE constraint to catch a race; on conflict we
  * surface the error to the form.
  */
-export async function getNextOrderNo(): Promise<DirectusResult<string>> {
-  const year = new Date().getFullYear();
-  const prefix = `IPP-${year}-`;
+export async function getNextOrderNo(dateCode: string): Promise<DirectusResult<string>> {
   try {
     const raw = await getClient().request(
       readItems('orders', {
         fields: ['no'],
-        filter: { no: { _starts_with: prefix } },
-        sort: ['-no'],
-        limit: 1,
+        filter: { no: { _starts_with: dateCode } },
+        limit: -1,
       }),
     );
     const rows = (raw as { no: string | null }[]) ?? [];
-    const max = rows.length > 0 ? rows[0]?.no : null;
-    if (!max) {
-      return { data: `${prefix}0001`, error: null };
-    }
-    const seqStr = max.replace(prefix, '');
-    const seq = parseInt(seqStr, 10);
-    if (Number.isNaN(seq)) {
-      return { data: `${prefix}0001`, error: null };
-    }
-    const next = seq + 1;
-    return { data: `${prefix}${String(next).padStart(4, '0')}`, error: null };
+    const used = new Set(
+      rows
+        .map((r) => (r.no ? parseOrderNo(r.no) : null))
+        .filter((p): p is { dateCode: string; seq: number } => !!p && p.dateCode === dateCode)
+        .map((p) => p.seq),
+    );
+    let seq = 1;
+    while (used.has(seq)) seq++;
+    return { data: buildOrderNo(dateCode, seq), error: null };
   } catch (err) {
     return { data: null, error: errMsg(err) };
   }
@@ -462,7 +502,12 @@ export async function getNextOrderNo(): Promise<DirectusResult<string>> {
 /** Shape for creating a new order row (mirrors the target schema). */
 export interface CreateOrderInput {
   no: string;
+  order_id: string;
   customer_id: string;
+  customer_name?: string | null;
+  customer_contact?: string | null;
+  customer_address?: string | null;
+  customer_legal_name?: string | null;
   channel: string;
   stage: string;
   status?: string;
@@ -811,6 +856,146 @@ export async function deleteLineCut(id: string): Promise<DirectusResult<void>> {
   }
 }
 
+export async function readLineWeighings(
+  lineIds: string[],
+): Promise<DirectusResult<LineWeighingsCollection[]>> {
+  if (lineIds.length === 0) return { data: [], error: null };
+  try {
+    const raw = await getClient().request(
+      readItems('line_weighings', {
+        filter: { line_id: { _in: lineIds } } as never,
+        sort: ['created_at'] as never,
+        limit: -1,
+      }),
+    );
+    const parsed = LineWeighingsCollectionArraySchema.safeParse(raw);
+    if (!parsed.success) return { data: null, error: `Invalid line_weighings response: ${parsed.error.message}` };
+    return { data: parsed.data, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+export async function createLineWeighing(
+  input: { line_id: string; weight?: number | null; photo_id?: string | null },
+): Promise<DirectusResult<LineWeighingsCollection>> {
+  try {
+    const raw = await getClient().request(createItem('line_weighings', input as never));
+    const parsed = LineWeighingsCollectionSchema.safeParse(raw);
+    if (!parsed.success) return { data: null, error: `Invalid line_weighings response: ${parsed.error.message}` };
+    return { data: parsed.data, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+export async function updateLineWeighing(
+  id: string,
+  patch: Partial<{ weight: number | null; photo_id: string | null }>,
+): Promise<DirectusResult<LineWeighingsCollection>> {
+  try {
+    const raw = await getClient().request(updateItem('line_weighings', id, patch as never));
+    const parsed = LineWeighingsCollectionSchema.safeParse(raw);
+    if (!parsed.success) return { data: null, error: `Invalid line_weighings response: ${parsed.error.message}` };
+    return { data: parsed.data, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+export async function deleteLineWeighing(id: string): Promise<DirectusResult<void>> {
+  try {
+    await getClient().request(deleteItem('line_weighings', id));
+    return { data: undefined, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+export async function readLinePhotos(
+  lineIds: string[],
+): Promise<DirectusResult<LinePhotosCollection[]>> {
+  if (lineIds.length === 0) return { data: [], error: null };
+  try {
+    const raw = await getClient().request(
+      readItems('line_photos', {
+        filter: { line_id: { _in: lineIds } } as never,
+        sort: ['sort_order'] as never,
+        limit: -1,
+      }),
+    );
+    const parsed = LinePhotosCollectionArraySchema.safeParse(raw);
+    if (!parsed.success) return { data: null, error: `Invalid line_photos response: ${parsed.error.message}` };
+    return { data: parsed.data, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+export async function createLinePhoto(
+  input: { line_id: string; photo_id: string; sort_order?: number },
+): Promise<DirectusResult<LinePhotosCollection>> {
+  try {
+    const raw = await getClient().request(createItem('line_photos', input as never));
+    const parsed = LinePhotosCollectionSchema.safeParse(raw);
+    if (!parsed.success) return { data: null, error: `Invalid line_photos response: ${parsed.error.message}` };
+    return { data: parsed.data, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+export async function deleteLinePhoto(id: string): Promise<DirectusResult<void>> {
+  try {
+    await getClient().request(deleteItem('line_photos', id));
+    return { data: undefined, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+export async function readLineWeighingPhotos(
+  weighingIds: string[],
+): Promise<DirectusResult<LineWeighingPhotosCollection[]>> {
+  if (weighingIds.length === 0) return { data: [], error: null };
+  try {
+    const raw = await getClient().request(
+      readItems('line_weighing_photos', {
+        filter: { weighing_id: { _in: weighingIds } } as never,
+        sort: ['sort_order'] as never,
+        limit: -1,
+      }),
+    );
+    const parsed = LineWeighingPhotosCollectionArraySchema.safeParse(raw);
+    if (!parsed.success) return { data: null, error: `Invalid line_weighing_photos response: ${parsed.error.message}` };
+    return { data: parsed.data, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+export async function createLineWeighingPhoto(
+  input: { weighing_id: string; photo_id: string; sort_order?: number },
+): Promise<DirectusResult<LineWeighingPhotosCollection>> {
+  try {
+    const raw = await getClient().request(createItem('line_weighing_photos', input as never));
+    const parsed = LineWeighingPhotosCollectionSchema.safeParse(raw);
+    if (!parsed.success) return { data: null, error: `Invalid line_weighing_photos response: ${parsed.error.message}` };
+    return { data: parsed.data, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+export async function deleteLineWeighingPhoto(id: string): Promise<DirectusResult<void>> {
+  try {
+    await getClient().request(deleteItem('line_weighing_photos', id));
+    return { data: undefined, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
 /** Patch a product (e.g. toggle active/OOS). Roles: Warehouse, Admin, Owner. */
 export async function updateProduct(
   id: string,
@@ -838,8 +1023,10 @@ export interface ParsedOrderDraft {
   customerTyped: string | null;
   customerId: string | null;
   customerMatch: 'exact' | 'phone' | 'fuzzy' | 'new' | 'none' | null;
+  company: string | null;
   deliver: string | null;
   dateGuessed: boolean;
+  multiCustomer: boolean;
   paymentMethod: string | null;
   address: string | null;
   phone: string | null;
@@ -857,12 +1044,38 @@ export interface ParsedOrderLine {
   status: 'recognized' | 'probable' | 'unrecognized';
   cuts: string[];
   price: string | null;
+  learned: boolean;
 }
 
-/**
- * POST raw WhatsApp text to the shared parsing service and return a structured
- * order draft. Uses the x-internal-token header from VITE_INTERNAL_TOKEN.
- */
+/** Raw shape actually returned by order-api's /parse-order — nested customer/product
+ *  objects, not the flat ids ParsedOrderDraft expects. Normalized below. */
+interface RawParsedOrderLine {
+  raw: string;
+  qty: number;
+  unit: string;
+  product: { id: string; name: string } | null;
+  status: 'recognized' | 'probable' | 'unrecognized';
+  cuts: string[];
+  price: number | string | null;
+  learned: boolean;
+}
+
+interface RawParsedOrderDraft {
+  customer: { id: string | null; name: string } | null;
+  customerTyped: string | null;
+  customerMatch: 'exact' | 'phone' | 'fuzzy' | 'new' | 'none' | null;
+  deliver: string | null;
+  dateGuessed: boolean;
+  multiCustomer: boolean;
+  paymentMethod: string | null;
+  address: string | null;
+  phone: string | null;
+  ref: string | null;
+  sales: string | null;
+  company: string | null;
+  lines: RawParsedOrderLine[];
+}
+
 export async function parseOrderText(
   text: string,
 ): Promise<DirectusResult<ParsedOrderDraft>> {
@@ -882,12 +1095,41 @@ export async function parseOrderText(
       const body = await res.text().catch(() => '');
       return { data: null, error: `Parse API error ${res.status}: ${body}` };
     }
-    const data = (await res.json()) as ParsedOrderDraft;
+    const raw = (await res.json()) as RawParsedOrderDraft;
+
+    const data: ParsedOrderDraft = {
+      customerTyped: raw.customerTyped ?? raw.customer?.name ?? null,
+      customerId: raw.customer?.id ?? null,
+      customerMatch: raw.customerMatch,
+      deliver: raw.deliver,
+      dateGuessed: raw.dateGuessed,
+      multiCustomer: raw.multiCustomer ?? false,
+      paymentMethod: raw.paymentMethod,
+      address: raw.address,
+      phone: raw.phone,
+      ref: raw.ref,
+      sales: raw.sales,
+      company: raw.company ?? null,
+      lines: (raw.lines ?? []).map((l) => ({
+        raw: l.raw,
+        qty: l.qty,
+        unit: l.unit,
+        productId: l.product?.id ?? null,
+        name: l.product?.name ?? l.raw,
+        status: l.status,
+        cuts: l.cuts ?? [],
+        price: l.price != null ? String(l.price) : null,
+        learned: l.learned ?? false,
+      })),
+    };
+
     return { data, error: null };
   } catch (err) {
     return { data: null, error: errMsg(err) };
   }
 }
+
+
 
 /* =========================================================== Corrections === */
 
