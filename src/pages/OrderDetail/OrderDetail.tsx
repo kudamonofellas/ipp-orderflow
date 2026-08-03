@@ -637,13 +637,14 @@ export function OrderDetail() {
               <Button
                 type="button"
                 variant="tertiary"
+                icon="chevronLeft"
                 onClick={() => navigate(-1)}
               >
-                <Icon name="chevronLeft" size={16} /> Back
+                Back
               </Button>
 
               <div className={styles.titleRow}>
-                <h3 className={styles.title}>Order {order.no}</h3>
+                <h3 className={styles.title}>Order {order.order_id}</h3>
                 {isCancelled && (
                   <span style={{ color: 'var(--state-error)', fontSize: '0.8rem', fontWeight: 600 }}>
                     CANCELLED
@@ -657,15 +658,27 @@ export function OrderDetail() {
               </div>
             </div>
             <div className={styles.actions}>
-              <Button type="button" variant="secondary" onClick={copyWA}>
-                <Icon name="whatsapp" size={16} /> Copy WA
+              <Button
+                type="button"
+                variant="secondary"
+                icon="whatsapp"
+                onClick={copyWA}>
+                Copy WA
               </Button>
-              <Button type="button" variant="secondary" onClick={() => window.print()}>
-                <Icon name="printer" size={16} /> Print
+              <Button
+                type="button"
+                variant="secondary"
+                icon="printer"
+                onClick={() => window.print()}>
+                Print
               </Button>
               {canEdit && (
-                <Button type="button" variant="secondary" onClick={() => navigate(`/orders/${order.id}/edit`)}>
-                  <Icon name="edit" size={16} /> Edit
+                <Button
+                  type="button"
+                  variant="secondary"
+                  icon="edit"
+                  onClick={() => navigate(`/orders/${order.id}/edit`)}>
+                  Edit
                 </Button>
               )}
             </div>
@@ -835,21 +848,28 @@ export function OrderDetail() {
                               <Button
                                 type="button"
                                 variant="secondary"
-                                size="sm" iconOnly
+                                size="sm"
+                                icon="camera"
+                                iconOnly
                                 title="Add weighing photo"
                                 onClick={(e) => {
                                   const inputElem = (e.currentTarget as HTMLElement).nextElementSibling as HTMLInputElement;
                                   inputElem?.click();
                                 }}
-                              >
-                                <Icon name="camera" size={16} />
-                              </Button>
+                              />
                               <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => handleUploadWeighingPhoto(line.id, w.id, e)} />
                             </label>
 
-                            <Button type="button" variant="secondary" size="sm" iconOnly title="Remove weighing" onClick={() => handleRemoveWeighing(line.id, w.id)}>
-                              <Icon name="trash" size={14} />
-                            </Button>
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              size="sm"
+                              icon="trash"
+                              iconOnly
+                              title="Remove weighing"
+                              onClick={() => handleRemoveWeighing(line.id, w.id)}
+                            />
+
 
                             {w.photos.length > 0 && (
                               <div className={styles.thumbnailsContainer} style={{ marginLeft: 28 }}>
@@ -889,10 +909,11 @@ export function OrderDetail() {
                           type="button"
                           variant="tertiary"
                           size="sm"
+                          icon="add"
                           style={{ alignSelf: 'flex-start' }}
                           onClick={() => handleAddWeighing(line.id)}
                         >
-                          <Icon name="add" size={14} />Add weighing
+                          Add weighing
                         </Button>
                       </div>
                     )}
@@ -915,16 +936,14 @@ export function OrderDetail() {
                           type="button"
                           variant="secondary"
                           size="sm"
+                          icon="camera"
                           iconOnly
                           title="Upload item photo"
                           onClick={(e) => {
                             const inputElem = (e.currentTarget as HTMLElement).nextElementSibling as HTMLInputElement;
                             inputElem?.click();
                           }}
-                        >
-                          <Icon name="camera" size={16} />
-
-                        </Button>
+                        />
                         <input
                           type="file"
                           accept="image/*"
@@ -1037,11 +1056,11 @@ export function OrderDetail() {
                           type="button"
                           variant="ghost"
                           size="sm"
+                          icon="trash"
                           iconOnly
                           title="Delete document"
                           onClick={() => doc.id != null && handleDeleteDocument(doc.id)}
                         >
-                          <Icon name="trash" size={14} />
                         </Button>
                       </div>
 
@@ -1086,10 +1105,10 @@ export function OrderDetail() {
                     variant="secondary"
                     size="md"
                     isActive={!!docFileName}
+                    icon={docFileName ? 'paperclip' : 'add'}
+                    iconOnly
                     onClick={() => docFileInputRef.current?.click()}
-                  >
-                    <Icon name={docFileName ? 'paperclip' : 'add'} size={16} />
-                  </Button>
+                  />
                   <Button
                     type="submit"
                     variant="primary"
@@ -1145,23 +1164,35 @@ export function OrderDetail() {
           {(canCancel || canHold || canRestore) && (
             <div className={styles.orderActions}>
               {canRestore && (
-                <Button type="button" variant="secondary" size="lg" onClick={handleRestore}>
-                  <Icon name="refresh" size={16} /> Restore Order
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="lg"
+                  icon="refresh"
+                  onClick={handleRestore}>
+                  Restore Order
                 </Button>
               )}
               {canHold && !isOutstanding && (
-                <Button type="button" variant="secondary" size="lg" onClick={handleHold}>
-                  <Icon name="pause" size={16} /> Put on Hold
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="lg"
+                  icon="pause"
+                  onClick={handleHold}>
+                  Put on Hold
                 </Button>
               )}
               {canCancel && (
                 <Button
                   type="button"
                   variant="secondary"
+                  size="lg"
+                  icon="cancel"
                   onClick={handleCancel}
                   disabled={cancelling}
                 >
-                  <Icon name="cancel" size={16} /> {cancelling ? 'Cancelling…' : 'Cancel Order'}
+                  {cancelling ? 'Cancelling…' : 'Cancel Order'}
                 </Button>
               )}
             </div>
@@ -1174,14 +1205,13 @@ export function OrderDetail() {
           <Button
             type="button"
             variant="secondary"
+            icon={isPanelOpen ? 'chevronRight' : 'chevronLeft'}
             iconOnly
             className={styles.panelToggleBtn}
             isActive={isPanelOpen}
             onClick={() => setIsPanelOpen((prev) => !prev)}
             title={isPanelOpen ? 'Collapse side panel' : 'Expand side panel'}
-          >
-            <Icon name={isPanelOpen ? 'chevronRight' : 'chevronLeft'} size={16} />
-          </Button>
+          />
 
           <div
             className={[
@@ -1193,18 +1223,19 @@ export function OrderDetail() {
             <Card className={styles.notesCard}>
               <h3 className={styles.heading}>Notes</h3>
               <div className={styles.notesListScroll}>
-                {history
-                  .filter((h) => h.what.startsWith('Note:'))
-                  .reverse()
-                  .map((n, idx) => (
-                    <div key={n.id ?? idx} className={styles.noteItem}>
-                      <div className={styles.noteHeader}>
-                        <span style={{ fontWeight: '600' }}>{n.who ? `${displayName(n.who)}` : ''}</span>
-                        <span>{formatDate(n.at, true)}</span>
+                {history.filter((h) => h.what.startsWith('Note')).length === 0 ? <p className={styles.muted}>No note</p> :
+                  history
+                    .filter((h) => h.what.startsWith('Note:'))
+                    .reverse()
+                    .map((n, idx) => (
+                      <div key={n.id ?? idx} className={styles.noteItem}>
+                        <div className={styles.noteHeader}>
+                          <span style={{ fontWeight: '600' }}>{n.who ? `${displayName(n.who)}` : ''}</span>
+                          <span>{formatDate(n.at, true)}</span>
+                        </div>
+                        <div style={{ whiteSpace: 'pre-wrap' }}>{n.what.replace('Note:', '').trim()}</div>
                       </div>
-                      <div style={{ whiteSpace: 'pre-wrap' }}>{n.what.replace('Note:', '').trim()}</div>
-                    </div>
-                  ))}
+                    ))}
               </div>
               <form className={styles.noteFormFixed} onSubmit={handleAddNote}>
                 <textarea
@@ -1222,8 +1253,12 @@ export function OrderDetail() {
                   rows={2}
                   style={{ resize: 'vertical', fontFamily: 'inherit', minHeight: 38 }}
                 />
-                <Button type="submit" variant="primary" disabled={savingNote || !noteText.trim()}>
-                  <Icon name="add" size={16} />Add
+                <Button
+                  type="submit"
+                  variant="primary"
+                  icon="add"
+                  disabled={savingNote || !noteText.trim()}>
+                  Add
                 </Button>
               </form>
             </Card>

@@ -4,8 +4,9 @@ import { AppLayout } from './layouts/AppLayout/AppLayout';
 import { SidebarProvider } from './layouts/Sidebar/Sidebar';
 import { AuthProvider } from './hooks/RoleContext';
 import { useAuth } from './hooks/useAuth';
-import { Customers } from './pages/Customers/Customers'
+import { Customers } from './pages/Customers/Customers';
 import { CustomerDetail } from './pages/CustomerDetail/CustomerDetail';
+import { CustomerEdit } from './pages/CustomerEdit/CustomerEdit';
 import { Dashboard } from './pages/Dashboard/Dashboard';
 import { Login } from './pages/Login/Login';
 import { Orders } from './pages/Orders/Orders';
@@ -61,6 +62,7 @@ export default function App() {
             <Route path="orders/:id/edit" element={<OrderEdit />} />
             <Route path="customers" element={<Customers />} />
             <Route path="customers/:id" element={<CustomerDetail />} />
+            <Route path="customers/:id/edit" element={<CustomerEdit />} />
             <Route path="products" element={<Products />} />
             <Route path="products/:id" element={<ProductDetail />} />
             <Route path="reports" element={<Placeholder title="Reports" />} />

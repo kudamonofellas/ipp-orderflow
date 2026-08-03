@@ -4,26 +4,23 @@ import { Icon } from '../Icon/Icon';
 import type { IconName } from '../Icon/icons';
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  children?: ReactNode; // Made optional for cases where only an icon is rendered
+  children?: ReactNode;
   variant?: 'primary' | 'secondary' | 'tertiary' | 'ghost';
   size?: 'sm' | 'md' | 'lg';
   buttonStyle?: 'default' | 'fullWidth';
   iconOnly?: boolean;
   isActive?: boolean;
-  /** Name of the icon from the icon registry */
   icon?: IconName;
-  /** Position of the icon relative to the text label. Defaults to 'left' */
   iconPosition?: 'left' | 'right';
+  iconClassName?: string;
 }
 
-// Optional helper to scale icon size according to button size
 const ICON_SIZES = {
   sm: 16,
   md: 20,
   lg: 24,
 } as const;
 
-/** Shared button. Matches the Button baseline in ui-registry.md. */
 export function Button({
   children,
   variant = 'primary',
@@ -35,9 +32,9 @@ export function Button({
   isActive = false,
   icon,
   iconPosition = 'left',
+  iconClassName,
   ...rest
 }: ButtonProps) {
-  // Map 'fullWidth' prop to CSS module class safely
   const styleClass =
     buttonStyle === 'fullWidth'
       ? styles['full-width'] || styles.fullWidth
@@ -56,7 +53,11 @@ export function Button({
     .join(' ');
 
   const iconElement = icon ? (
-    <Icon name={icon} size={ICON_SIZES[size]} />
+    <Icon
+      name={icon}
+      size={ICON_SIZES[size]}
+      className={`${styles.icon} ${iconClassName || ''}`}
+    />
   ) : null;
 
   return (

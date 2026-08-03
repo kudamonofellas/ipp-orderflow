@@ -72,7 +72,6 @@ export function Login() {
 
           {loginError && (
             <p className={styles.error} role="alert">
-              <Icon name="search" size={16} />
               {loginError}
             </p>
           )}

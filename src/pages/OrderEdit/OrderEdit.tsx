@@ -420,10 +420,14 @@ export function OrderEdit() {
         <div className={styles.mainColumn}>
           <header className={styles.header}>
             <div className={styles.titleSection}>
-              <Button type="button" variant="tertiary" onClick={handleCancel}>
-                <Icon name="chevronLeft" size={16} /> Back to order
+              <Button
+                type="button"
+                variant="tertiary"
+                icon="chevronLeft"
+                onClick={handleCancel}>
+                Back to order
               </Button>
-              <h2 className={styles.title}>Editing Order #{order.no || order.id}</h2>
+              <h2 className={styles.title}>Order {order.order_id}</h2>
             </div>
             <div className={styles.actions}>
               <Button type="button" variant="secondary" onClick={handleCancel} disabled={submitting}>
@@ -433,9 +437,10 @@ export function OrderEdit() {
                 type="button"
                 variant="primary"
                 disabled={!hasEditChanges || submitting || !auth.can('editOrderLines')}
+                icon="save"
                 onClick={handleSaveAllEdits}
               >
-                <Icon name="save" size={16} /> {submitting ? 'Saving…' : 'Save Changes'}
+                {submitting ? 'Saving…' : 'Save Changes'}
               </Button>
             </div>
           </header>
@@ -704,10 +709,12 @@ export function OrderEdit() {
               type="button"
               variant="secondary"
               buttonStyle="fullWidth"
+              size="lg"
+              icon="add"
               onClick={() => setIsAddItemModalOpen(true)}
               style={{ marginTop: 'var(--space-md)', height: 44, fontWeight: 600 }}
             >
-              <Icon name="add" size={16} /> Add Item
+              Add Item
             </Button>
           </Card>
         </div>

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Button } from '../../components/Button/Button';
 import { Icon } from '../../components/Icon/Icon';
 import { Card } from '../../components/Card/Card';
 import { useAuth } from '../../hooks/useAuth';
@@ -109,14 +110,14 @@ export function Customers() {
             />
           </div>
           {canManage && (
-            <button
+            <Button
               type="button"
-              className={styles.addBtn}
+              variant="primary"
+              icon="add"
               onClick={() => navigate('/customers/new')}
             >
-              <Icon name="add" size={16} />
               New Customer
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -190,27 +191,33 @@ export function Customers() {
             Showing {rangeStart}–{rangeEnd} of {total}
           </span>
           <div className={styles.pageControls}>
-            <button
+            <Button
               type="button"
-              className={styles.pageButton}
+              variant="secondary"
+              size="sm"
+              iconOnly
+              icon="chevronLeft"
               onClick={() => setPage?.(currentPage - 1)}
               disabled={currentPage <= 1}
               aria-label="Previous page"
             >
               <Icon name="chevronLeft" size={16} />
-            </button>
+            </Button>
             <span className={styles.pageIndicator}>
               {currentPage} / {totalPages}
             </span>
-            <button
+            <Button
               type="button"
-              className={styles.pageButton}
+              variant="secondary"
+              size="sm"
+              iconOnly
+              icon="chevronRight"
               onClick={() => setPage?.(currentPage + 1)}
               disabled={currentPage >= totalPages}
               aria-label="Next page"
             >
               <Icon name="chevronRight" size={16} />
-            </button>
+            </Button>
           </div>
         </footer>
 

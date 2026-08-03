@@ -10,7 +10,7 @@ interface ReturnWorkflowsPanelProps {
 /** Return Workflows panel: vertical list of horizontal pills (count + label). */
 export function ReturnWorkflowsPanel({ stages, onStageClick }: ReturnWorkflowsPanelProps) {
   return (
-    <Card>
+    <Card style={{ width: '100%' }}>
       <h3 className={styles.heading}>Return Workflows</h3>
       <div className={styles.list}>
         {stages.map((stage) => (

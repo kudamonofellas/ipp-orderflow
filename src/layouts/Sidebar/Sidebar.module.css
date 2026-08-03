@@ -62,7 +62,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-md);
-  padding: var(--space-sm) var(--space-md);
+  padding: var(--space-lg) var(--space-md);
   border-radius: var(--radius-md);
   color: var(--text-secondary);
   font: var(--text-label);

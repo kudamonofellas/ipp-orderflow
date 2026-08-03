@@ -5,6 +5,8 @@ import { Button } from '../../components/Button/Button'
 import { useAuth } from '../../hooks/useAuth';
 import {
   readCustomers,
+  createCustomer,
+  updateCustomer,
   readOrders,
   readOrderLines,
 } from '../../lib/directus';
@@ -12,9 +14,9 @@ import type {
   OrdersCollection,
   OrderLinesCollection,
 } from '../../types/directus';
-import styles from './CustomerDetail.module.css';
+import styles from './CustomerEdit.module.css';
 
-export function CustomerDetail() {
+export function CustomerEdit() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const auth = useAuth();
@@ -25,6 +27,7 @@ export function CustomerDetail() {
 
   const [loading, setLoading] = useState(!isNew);
   const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   // Panel State
   const [isPanelOpen, setIsPanelOpen] = useState(true);
@@ -32,11 +35,13 @@ export function CustomerDetail() {
   // Customer Form State
   const [name, setName] = useState('');
   const [companyName, setCompanyName] = useState('');
+  const [channel, setChannel] = useState('horeca');
   const [contact, setContact] = useState('');
   const [address, setAddress] = useState('');
   const [area, setArea] = useState('');
   const [sales, setSales] = useState('');
   const [payTiming, setPayTiming] = useState('upfront');
+  const [payMethod, setPayMethod] = useState('transfer');
   const [creditLimit, setCreditLimit] = useState('0');
   const [termDays, setTermDays] = useState('0');
 
@@ -67,11 +72,13 @@ export function CustomerDetail() {
       const cust = customerRes.data[0];
       setName(cust.name);
       setCompanyName(cust.company_name ?? '');
+      setChannel(cust.channel ?? 'horeca');
       setContact(cust.contact ?? '');
       setAddress(cust.address ?? '');
       setArea(cust.area ?? '');
       setSales(cust.sales ?? '');
       setPayTiming(cust.pay_timing ?? 'upfront');
+      setPayMethod(cust.pay_method ?? 'transfer');
       setCreditLimit(String(cust.credit_limit ?? 0));
       setTermDays(String(cust.term_days ?? 0));
 
@@ -123,6 +130,47 @@ export function CustomerDetail() {
       .reduce((acc, o) => acc + getOrderValue(o.id), 0);
   };
 
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim() || saving) return;
+
+    setSaving(true);
+    const limitNum = parseInt(creditLimit.replace(/[^\d]/g, ''), 10) || 0;
+    const termNum = parseInt(termDays, 10) || 0;
+
+    const payload = {
+      name: name.trim(),
+      company_name: companyName.trim() || null,
+      channel,
+      contact: contact.trim() || null,
+      address: address.trim() || null,
+      area: area.trim() || null,
+      sales: sales.trim() || null,
+      pay_timing: payTiming,
+      pay_method: payMethod,
+      credit_limit: limitNum,
+      term_days: termNum,
+    };
+
+    let res;
+    if (isNew) {
+      res = await createCustomer({
+        id: 'c-' + Date.now().toString(36),
+        ...payload,
+      });
+    } else if (id) {
+      res = await updateCustomer(id, payload);
+    }
+
+    setSaving(false);
+
+    if (res && res.error) {
+      window.alert(`Failed to save customer: ${res.error}`);
+    } else {
+      navigate('/customers');
+    }
+  };
+
   if (loading) return <div className={styles.container}>Loading customer details…</div>;
   if (error) return <div className={styles.container} style={{ color: 'var(--status-danger)' }}>{error}</div>;
 
@@ -172,53 +220,134 @@ export function CustomerDetail() {
             </div>
           </header>
 
-          <Card className={styles.detailsCard}>
-            <div className={styles.row}>
-              <div className={styles.field}>
-                <span className={styles.detailLabel}>Restaurant / Outlet Name *</span>
-                <span className={styles.detailValue}>{name ?? '—'}</span>
+          {canEdit ? (
+            <Card className={styles.card}>
+              <form className={styles.form} onSubmit={handleSave}>
+                <div className={styles.field}>
+                  <label className={styles.detailLabel}>Restaurant / Outlet Name *</label>
+                  <input
+                    type="text"
+                    className={styles.input}
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    required
+                    autoFocus={isNew}
+                    placeholder="e.g. Toko Makmur"
+                    disabled={saving}
+                  />
+                </div>
+                <div className={styles.field}>
+                  <label className={styles.detailLabel}>Company Name (PT / CV for Invoice)</label>
+                  <input
+                    type="text"
+                    className={styles.input}
+                    value={companyName}
+                    onChange={(e) => setCompanyName(e.target.value)}
+                    placeholder="e.g. PT En Prima Food &amp; Beverages"
+                    disabled={saving}
+                  />
+                </div>
+                <div className={styles.grid2}>
+                  <div className={styles.field}>
+                    <label className={styles.detailLabel}>Phone / Contact</label>
+                    <input
+                      type="text"
+                      className={styles.input}
+                      value={contact}
+                      onChange={(e) => setContact(e.target.value)}
+                      placeholder="e.g. +62 812..."
+                      disabled={saving}
+                    />
+                  </div>
+                  <div className={styles.field}>
+                    <label className={styles.detailLabel}>Area</label>
+                    <input
+                      type="text"
+                      className={styles.input}
+                      value={area}
+                      onChange={(e) => setArea(e.target.value)}
+                      placeholder="e.g. Jakarta Selatan"
+                      disabled={saving}
+                    />
+                  </div>
+                </div>
+                <div className={styles.field}>
+                  <label className={styles.detailLabel}>Delivery Address</label>
+                  <input
+                    type="text"
+                    className={styles.input}
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                    placeholder="e.g. Jl. Kemang Raya No. 10..."
+                    disabled={saving}
+                  />
+                </div>
+                <div className={styles.grid2}>
+                  <div className={styles.field}>
+                    <label className={styles.detailLabel}>Sales Rep</label>
+                    <input
+                      type="text"
+                      className={styles.input}
+                      value={sales}
+                      onChange={(e) => setSales(e.target.value)}
+                      placeholder="e.g. Budi"
+                      disabled={saving}
+                    />
+                  </div>
+                  <div className={styles.field}>
+                    <label className={styles.detailLabel}>Payment Timing</label>
+                    <select
+                      className={styles.select}
+                      value={payTiming}
+                      onChange={(e) => setPayTiming(e.target.value)}
+                      disabled={saving}
+                    >
+                      <option value="upfront">Upfront</option>
+                      <option value="cod">COD</option>
+                      <option value="terms">Terms</option>
+                    </select>
+                  </div>
+                </div>
+                <div className={styles.grid2}>
+                  <div className={styles.field}>
+                    <label className={styles.detailLabel}>Credit Limit (IDR)</label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      className={styles.input}
+                      value={creditLimit}
+                      onChange={(e) => setCreditLimit(e.target.value.replace(/[^\d]/g, ''))}
+                      placeholder="0"
+                      disabled={saving}
+                    />
+                  </div>
+                  <div className={styles.field}>
+                    <label className={styles.detailLabel}>Terms (days)</label>
+                    <input
+                      type="number"
+                      className={styles.input}
+                      value={termDays}
+                      onChange={(e) => setTermDays(e.target.value)}
+                      placeholder="0"
+                      disabled={saving}
+                    />
+                  </div>
+                </div>
+                <Button type="submit" variant="primary" size="md" disabled={saving || !name.trim()}>
+                  {saving ? 'Saving…' : 'Save Customer'}
+                </Button>
+              </form>
+            </Card>
+          ) : (
+            <Card className={styles.profileRow}>
+              <div className={styles.avatar}>{(name || 'C').charAt(0).toUpperCase()}</div>
+              <div className={styles.customerInfo}>
+                <h3>{name}</h3>
+                {companyName && <p>{companyName}</p>}
+                <p>{[area, contact].filter(Boolean).join(' · ') || 'No contact details recorded'}</p>
               </div>
-              <div className={styles.field}>
-                <label className={styles.detailLabel}>Company Name (PT / CV for Invoice)</label>
-                <span className={styles.detailValue}>{companyName ?? '—'}</span>
-              </div>
-            </div>
-
-            <div className={styles.row}>
-              <div className={styles.field}>
-                <label className={styles.detailLabel}>Phone / Contact</label>
-                <span className={styles.detailValue}>{contact ?? '—'}</span>
-              </div>
-              <div className={styles.field}>
-                <label className={styles.detailLabel}>Area</label>
-                <span className={styles.detailValue}>{area ?? '—'}</span>
-              </div>
-            </div>
-            <div className={styles.row}>
-              <div className={styles.field}>
-                <label className={styles.detailLabel}>Delivery Address</label>
-                <span className={styles.detailValue}>{address ?? '—'}</span>
-              </div>
-              <div className={styles.field}>
-                <label className={styles.detailLabel}>Sales Rep</label>
-                <span className={styles.detailValue}>{sales ?? '—'}</span>
-              </div>
-              <div className={styles.field}>
-                <label className={styles.detailLabel}>Payment Timing</label>
-                <span className={styles.detailValue}>{payTiming ?? '—'}</span>
-              </div>
-            </div>
-            <div className={styles.row}>
-              <div className={styles.field}>
-                <label className={styles.detailLabel}>Credit Limit (IDR)</label>
-                <span className={styles.detailValue}>{creditLimit ?? '—'}</span>
-              </div>
-              <div className={styles.field}>
-                <label className={styles.detailLabel}>Terms (days)</label>
-                <span className={styles.detailValue}>{termDays ?? '—'}</span>
-              </div>
-            </div>
-          </Card>
+            </Card>
+          )}
 
           {!isNew && seeCredit && parseInt(creditLimit, 10) > 0 && (
             <Card className={styles.card}>
@@ -233,6 +362,7 @@ export function CustomerDetail() {
               </div>
             </Card>
           )}
+
         </div>
 
         {/* ── Collapsible Side Panel (Notes & History) ── */}
@@ -248,7 +378,7 @@ export function CustomerDetail() {
             title={isPanelOpen ? 'Collapse side panel' : 'Expand side panel'}
           />
 
-          <Card className={styles.historyCard}>
+          <Card className={styles.card}>
             <h3 className={styles.heading}>Order History</h3>
 
             {!isNew && orders.length > 0 ? (

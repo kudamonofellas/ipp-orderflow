@@ -54,6 +54,7 @@ export function MetricCard({ icon, value, label, rangeLabel, onRangeChange }: Me
               aria-expanded={open}
               icon="chevronDown"
               iconPosition="right"
+              isActive={open}
               onClick={() => setOpen((prev) => !prev)}
             >
               {rangeLabel}

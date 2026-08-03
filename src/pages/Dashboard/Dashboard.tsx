@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Icon } from '../../components/Icon/Icon';
 import type { IconName } from '../../components/Icon/icons';
 import { Button } from '../../components/Button/Button';
 import { ChannelSelectModal } from '../../components/ChannelSelectModal/ChannelSelectModal';

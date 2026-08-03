@@ -96,10 +96,6 @@
   gap: var(--space-sm);
   font: var(--text-body);
   color: var(--state-error);
-  background: var(--bg-surface-hover);
-  border-radius: var(--radius-md);
-  padding: var(--space-sm) var(--space-md);
-  margin: 0;
 }
 
 .error :global(svg) {

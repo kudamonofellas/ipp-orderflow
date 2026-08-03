@@ -7,6 +7,7 @@
  * Pushes the main content area (no overlay) via the SidebarContext.
  */
 
+import { Link } from 'react-router-dom';
 import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { Icon } from '../../components/Icon/Icon';
@@ -82,7 +83,11 @@ export function Sidebar() {
 
   return (
     <aside className={[styles.sidebar, collapsed ? styles.collapsed : ''].filter(Boolean).join(' ')}>
-      <div className={styles.logoSection}>
+      <Link
+        to="/"
+        className={styles.logoSection}
+        aria-label="Inti Pangan Perkasa - Home"
+      >
         <img src={logo} alt="" className={styles.logo} aria-hidden="true" />
         {!collapsed && (
           <span className={styles.brandName}>
@@ -91,7 +96,7 @@ export function Sidebar() {
             Perkasa
           </span>
         )}
-      </div>
+      </Link>
 
       <nav className={styles.nav} aria-label="Primary">
         {NAV_ITEMS.map(({ to, label, icon }) => (
@@ -109,25 +114,36 @@ export function Sidebar() {
           </NavLink>
         ))}
       </nav>
-
-      <button
+      <Button
         type="button"
-        className={styles.collapseBtn}
+        variant="tertiary"
+        size="md"
+        icon={collapsed ? 'chevronRight' : 'chevronLeft'}
+        iconOnly
+        style={{
+          backgroundColor: "transparent",
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          margin: "var(--space-sm) auto",
+        }}
         onClick={toggle}
         aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         title={collapsed ? 'Expand' : 'Collapse'}
-      >
-        <Icon name={collapsed ? 'chevronRight' : 'chevronLeft'} size={20} />
-      </button>
+      />
       <Button
-        variant="ghost"
+        variant="tertiary"
         size="md"
         onClick={handleLogout}
+        icon="logout"
+        style={{
+          backgroundColor: "transparent",
+          width: "100%",
+        }}
         aria-label="Sign out"
         title="Sign out"
         className={styles.logoutBtn}
       >
-        <Icon name="logout" size={18} />
         {!collapsed && <span>Sign out</span>}
       </Button>
 

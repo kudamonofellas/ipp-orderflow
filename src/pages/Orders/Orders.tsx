@@ -174,24 +174,26 @@ export function Orders() {
         <h1 className={styles.title}>Orders</h1>
         <div className={styles.controls}>
           <div className={styles.dropdownWrapper} ref={stageDropdownRef}>
-            <button
+            <Button
               type="button"
-              className={styles.stageToggle}
+              variant="secondary"
+              icon="chevronDown"
+              iconPosition="right"
               aria-expanded={stageOpen}
               onClick={() => setStageOpen((o) => !o)}
             >
               {STAGE_OPTIONS.find((o) => o.key === stage)?.label || 'All stages'}
-              <Icon name="chevronDown" size={16} />
-            </button>
+            </Button>
             {stageOpen && (
-              <div className={styles.stageDropdown} role="dialog" aria-label="Filter by stage">
+              <div className={styles.dropdown} role="dialog" aria-label="Filter by stage">
                 {STAGE_OPTIONS.map((opt) => (
-                  <button
+                  <Button
                     key={opt.key}
                     type="button"
+                    variant="ghost"
                     className={[
-                      styles.stageDropdownItem,
-                      stage === opt.key ? styles.stageDropdownItemActive : '',
+                      styles.dropdownItem,
+                      stage === opt.key ? styles.dropdownItemActive : '',
                     ].join(' ')}
                     onClick={() => {
                       setStage(opt.key);
@@ -200,7 +202,7 @@ export function Orders() {
                     }}
                   >
                     {opt.label}
-                  </button>
+                  </Button>
                 ))}
               </div>
             )}
@@ -227,8 +229,8 @@ export function Orders() {
               size="md"
               onClick={startNewOrder}
               title="Create a new order"
+              icon="add"
             >
-              <Icon name="add" size={20} />
               New Order
             </Button>
           )}
@@ -239,24 +241,27 @@ export function Orders() {
         <div className={styles.headerWrap}>
           <h3 className={styles.heading}>{stageCopy.headline}</h3>
           <div className={styles.sortContainer} ref={sortDropdownRef}>
-            <button
+            <Button
               type="button"
-              className={styles.sortToggle}
+              variant="secondary"
+              icon="chevronDown"
+              iconPosition="right"
               aria-expanded={sortOpen}
+              isActive={sortOpen}
               onClick={() => setSortOpen((o) => !o)}
             >
               <span>{SORT_OPTIONS.find((o) => o.key === sortBy)?.label || 'Order ID (Desc)'}</span>
-              <Icon name="chevronDown" size={16} />
-            </button>
+            </Button>
             {sortOpen && (
-              <div className={styles.sortDropdown} role="dialog" aria-label="Sort options">
+              <div className={styles.dropdown} role="dialog" aria-label="Sort options">
                 {SORT_OPTIONS.map((opt) => (
-                  <button
+                  <Button
                     key={opt.key}
                     type="button"
+                    variant="ghost"
                     className={[
-                      styles.sortDropdownItem,
-                      sortBy === opt.key ? styles.sortDropdownItemActive : '',
+                      styles.dropdownItem,
+                      sortBy === opt.key ? styles.dropdownItemActive : '',
                     ].join(' ')}
                     onClick={() => {
                       setSortBy(opt.key);
@@ -264,7 +269,7 @@ export function Orders() {
                     }}
                   >
                     {opt.label}
-                  </button>
+                  </Button>
                 ))}
               </div>
             )}
@@ -306,27 +311,29 @@ export function Orders() {
                 Showing {rangeStart}–{rangeEnd} of {total}
               </span>
               <div className={styles.pageControls}>
-                <button
+                <Button
                   type="button"
-                  className={styles.pageButton}
+                  variant="secondary"
+                  size="sm"
+                  icon="chevronLeft"
+                  iconOnly
                   onClick={() => setPage?.(currentPage - 1)}
                   disabled={currentPage <= 1}
                   aria-label="Previous page"
-                >
-                  <Icon name="chevronLeft" size={16} />
-                </button>
+                />
                 <span className={styles.pageIndicator}>
                   {currentPage} / {totalPages}
                 </span>
-                <button
+                <Button
                   type="button"
-                  className={styles.pageButton}
+                  variant="secondary"
+                  size="sm"
+                  icon="chevronRight"
+                  iconOnly
                   onClick={() => setPage?.(currentPage + 1)}
                   disabled={currentPage >= totalPages}
                   aria-label="Next page"
-                >
-                  <Icon name="chevronRight" size={16} />
-                </button>
+                />
               </div>
             </footer>
           </>

@@ -157,32 +157,6 @@
   gap: var(--space-sm);
 }
 
-.pageButton {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-default);
-  background: var(--bg-surface);
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition:
-    background-color var(--duration-fast) var(--ease-default),
-    color var(--duration-fast) var(--ease-default);
-}
-
-.pageButton:hover:not(:disabled) {
-  background: var(--bg-surface-hover);
-  color: var(--text-primary);
-}
-
-.pageButton:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
 .pageIndicator {
   font: var(--text-label);
   color: var(--text-secondary);
@@ -193,27 +167,6 @@
 
 .sortContainer {
   position: relative;
-}
-
-.sortToggle {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-xs);
-  background: var(--bg-surface);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  padding: 6px var(--space-sm);
-  font: var(--text-label);
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition:
-    background-color var(--duration-fast) var(--ease-default),
-    border-color var(--duration-fast) var(--ease-default);
-}
-
-.sortToggle:hover {
-  background: var(--bg-surface-hover);
-  border-color: var(--accent-primary);
 }
 
 .sortDropdown {
@@ -244,10 +197,6 @@
   border-radius: var(--radius-sm);
   transition: background var(--duration-fast);
   white-space: nowrap;
-}
-
-.sortDropdownItem:hover {
-  background: var(--bg-surface-hover);
 }
 
 .sortDropdownItemActive {

@@ -70,6 +70,7 @@ export interface OpenOrderLine {
 /** An open order row in the Open Orders table. */
 export interface OpenOrder {
   id: string;
+  no: string;
   orderId: string;
   status: string;
   orderDate: string;

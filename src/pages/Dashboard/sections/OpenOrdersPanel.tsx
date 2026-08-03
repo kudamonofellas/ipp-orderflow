@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Button } from '../../../components/Button/Button';
 import { Icon } from '../../../components/Icon/Icon';
 import { Card } from '../../../components/Card/Card';
 import { useCan } from '../../../hooks/useAuth';
@@ -92,20 +93,23 @@ export function OpenOrdersPanel({
         <h3 className={styles.heading}>Open Orders</h3>
         {onSortChange && (
           <div className={styles.sortContainer} ref={sortDropdownRef}>
-            <button
+            <Button
               type="button"
-              className={styles.sortToggle}
+              variant="secondary"
               aria-expanded={sortOpen}
-              onClick={() => setSortOpen((o) => !o)}
-            >
-              <span>{SORT_OPTIONS.find((o) => o.key === sortBy)?.label || 'Order ID (Desc)'}</span>
-              <Icon name="chevronDown" size={16} />
-            </button>
+              icon="chevronDown"
+              size="md"
+              iconPosition="right"
+              isActive={sortOpen}
+              onClick={() => setSortOpen((prev) => !prev)}
+            ><span>{SORT_OPTIONS.find((o) => o.key === sortBy)?.label || 'Order ID (Desc)'}</span>
+            </Button>
             {sortOpen && (
               <div className={styles.sortDropdown} role="dialog" aria-label="Sort options">
                 {SORT_OPTIONS.map((opt) => (
-                  <button
+                  <Button
                     key={opt.key}
+                    variant="ghost"
                     type="button"
                     className={[
                       styles.sortDropdownItem,
@@ -117,7 +121,7 @@ export function OpenOrdersPanel({
                     }}
                   >
                     {opt.label}
-                  </button>
+                  </Button>
                 ))}
               </div>
             )}
@@ -160,27 +164,31 @@ export function OpenOrdersPanel({
               Showing {rangeStart}–{rangeEnd} of {total}
             </span>
             <div className={styles.pageControls}>
-              <button
+              <Button
                 type="button"
-                className={styles.pageButton}
+                variant="secondary"
+                size="sm"
+                icon="chevronLeft"
+                iconOnly
                 onClick={() => onPageChange?.(currentPage - 1)}
                 disabled={currentPage <= 1}
                 aria-label="Previous page"
               >
-                <Icon name="chevronLeft" size={16} />
-              </button>
+              </Button>
               <span className={styles.pageIndicator}>
                 {currentPage} / {totalPages}
               </span>
-              <button
+              <Button
                 type="button"
-                className={styles.pageButton}
+                variant="secondary"
+                size="sm"
+                icon="chevronRight"
+                iconOnly
                 onClick={() => onPageChange?.(currentPage + 1)}
                 disabled={currentPage >= totalPages}
                 aria-label="Next page"
               >
-                <Icon name="chevronRight" size={16} />
-              </button>
+              </Button>
             </div>
           </footer>
         </>
