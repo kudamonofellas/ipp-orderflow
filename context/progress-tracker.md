@@ -143,6 +143,13 @@ change.
   - **Prototype Stage Parity**: Expanded `PipelineStage`/`Stage` types in `pipeline.ts` and stage filter dropdown in `Orders.tsx` to include `outstanding`, `awaiting`, `cancelled`, and `returned`. Updated `useOrders.ts` to support special filters (`active`, `pending-docs`, `completed`, `finance`, `cancelled`).
   - **Dashboard 3-column row height constraint**: Bounded `.panelsGrid` and `.panelsGridTwo` row height to `ReturnWorkflowsPanel` wrapping height in `Dashboard.module.css`.
 
+- **Shared OrderRows component + Orders page count badge (2026-08-04):**
+  - Extracted the duplicated table-row implementation (`OrderRows`) out of `Orders.tsx` and `OpenOrdersPanel.tsx` into `src/components/OrderRows/OrderRows.tsx` + `OrderRows.module.css`. Both the Orders page and the Dashboard's Open Orders panel now render the same expandable-row component (chevron toggle, line-item sub-row, `expandedGroup` rounded-corner treatment) against the shared `OpenOrder` view-model — no more visual drift between the two tables. Each `OrderRows` instance owns its own `<tbody>` (rows are `tbody`-grouped, not wrapped in one page-level `<tbody>`), matching what `Orders.tsx` already did; `OpenOrdersPanel.tsx` was updated to stop wrapping its own `<tbody>` around the list.
+  - Row-level CSS (`orderGroup`, `clickable`, `chevron`/`chevronOpen`, `linesCell`, `lines`, `lineRow`, `lineName`, `lineQty`, `itemsCount`, `arrowCell`) moved out of `Orders.module.css` and `OpenOrdersPanel.module.css` into `OrderRows.module.css`; each page's CSS module now only keeps page-chrome classes (header, table headers, dropdowns, pagination, search).
+  - **Orders page header count**: `<h3 className={styles.heading}>` now shows a pill-styled count (`{total}`) beside the stage headline, reusing the exact `.count` styling from `OrderDetail`'s heading (`--text-caption`, `--text-muted`, `--bg-surface`, `--border-default`, `--radius-xl`, `2px 10px` padding). `total` already comes from `useOrders()` filtered by the active stage (+ search), so the count follows the applied stage filter automatically.
+  - Fixed a handful of pre-existing `tsc -b` build errors unrelated to this change so `npm run build` is clean again: `OpenOrder.no` wasn't being populated by `useOrders.ts` / `useOpenOrders.ts` / `mockDashboard.ts` (added `no: row.no ?? row.order_id ?? '—'`), removed a dead unused `handleOrderCreated` function + its now-unused `refetchOrders`/`refetchCounts` destructures in `Dashboard.tsx`, and removed an unused `Icon` import in `Login.tsx`.
+  - `npm run build` ✓ (`tsc -b` + `vite build`).
+
 ## In Progress
 
 - None

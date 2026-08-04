@@ -5,6 +5,18 @@
 > Token source of truth: `context/ui-context.md` + `context/ui-tokens.md`.
 > CSS implementation: `src/styles/tokens.css`.
 
+## Update — 2026-08-04 Shared OrderRows + Orders count badge
+
+### OrderRows (shared expandable order table row)
+- **Location**: `src/components/OrderRows/OrderRows.tsx` + `OrderRows.module.css`. Renders one order as a self-contained `<tbody>` — arrow/chevron cell, Order ID, `StatusPill`, Order Date, Delivery Date, Sales Rep, Customer, Items count — plus an optional line-items sub-row. Shared verbatim by the Orders page (`src/pages/Orders/Orders.tsx`) and the Dashboard's `OpenOrdersPanel` (`src/pages/Dashboard/sections/OpenOrdersPanel.tsx`); both render `<table>{orders.map(o => <OrderRows key={o.id} order={o} />)}</table>` with **no** page-level `<tbody>` wrapper, since each row owns its own.
+- **Row grouping trick**: the whole row (+ its expanded sub-row, when open) lives inside one `<tbody className={orderGroup}>`, not a bare `<tr>`. This is what lets `.orderGroup` apply hover/rounded-corner styling across both `<tr>`s as a unit — see the `:not(.expandedGroup)` / `.expandedGroup` selector pair in `OrderRows.module.css` for the corner-radius flip between collapsed (radius on the single row) and expanded (radius moves to the last row) states.
+- **Chevron**: `--accent-primary` colored, `transition: transform 0.2s ease`, rotates 90° (`chevronOpen`) when expanded — arrow-cell click toggles independently of the row click (which navigates to `/orders/:id`), via `e.stopPropagation()`.
+- **8-column table contract**: any page embedding `OrderRows` must render exactly this 8-column `<thead>` (arrow · Order ID · Stage · Order Date · Delivery Date · Sales Rep · Customer · Items) — the line-items sub-row hardcodes `colSpan={8}`.
+- **Data contract**: takes a single `order: OpenOrder` (`src/types/dashboard.ts`) prop. Self-contained — reads `useCan()('seePrices')` and `useNavigate()` internally, no prop threading needed.
+
+### Count badge beside a card heading
+- Pattern for showing a live count next to an `<h3>`/heading inside a `Card`: `<span className={styles.count}>{n}</span>` styled `--text-caption` / `--text-muted` text, `--bg-surface` fill, `1px solid var(--border-default)`, `--radius-xl` (pill), `2px 10px` padding. Originated in `OrderDetail`'s Items/Documents headings; now also used on the Orders page header (`Orders.tsx`) next to the stage headline, driven by `useOrders()`'s `total` (already scoped to the active stage + search filter).
+
 ## Update — 2026-07-24 Order Detail Enhancements
 
 ### AddItemModal (inline free-text + catalog match)

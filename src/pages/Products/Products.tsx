@@ -9,7 +9,6 @@ import styles from './Products.module.css';
 
 const PAGE_SIZE = 25;
 
-
 type ActiveFilter = 'all' | 'active' | 'oos';
 
 /** Products page: searchable, filterable list. Warehouse/Admin/Owner can toggle OOS. */
@@ -44,9 +43,20 @@ export function Products() {
     }
 
     if (activeFilter === 'active') {
-      parts.push({ active: { _eq: true } });
+      parts.push({
+        _or: [
+          { oos: { _eq: false } },
+          { oos: { _null: true } },
+          { active: { _eq: true } },
+        ],
+      });
     } else if (activeFilter === 'oos') {
-      parts.push({ _or: [{ active: { _eq: false } }, { active: { _null: true } }] });
+      parts.push({
+        _or: [
+          { oos: { _eq: true } },
+          { active: { _eq: false } },
+        ],
+      });
     }
 
     return parts.length === 0 ? {} : parts.length === 1 ? parts[0] : { _and: parts };
@@ -65,7 +75,7 @@ export function Products() {
           limit: PAGE_SIZE,
           offset: (page - 1) * PAGE_SIZE,
           sort: ['name'],
-          fields: ['id', 'name', 'accurate_name', 'category', 'brand', 'form', 'pack', 'active'],
+          fields: ['id', 'name', 'accurate_name', 'category', 'brand', 'form', 'pack', 'active', 'oos'],
         }),
         aggregateProducts({
           aggregate: { count: '*' },
@@ -88,7 +98,7 @@ export function Products() {
         }
       }
       setLoading(false);
-    };
+    }
 
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(load, search ? 300 : 0);
@@ -112,18 +122,20 @@ export function Products() {
     e.stopPropagation();
     if (!canToggleOOS) return;
     setTogglingId(product.id);
-    const newValue = !product.active;
+    const currentlyActive = product.active ?? !product.oos;
+    const newActive = !currentlyActive;
+    const newOos = !newActive;
 
     // Optimistic update
     setProducts((prev) =>
-      prev.map((p) => (p.id === product.id ? { ...p, active: newValue } : p)),
+      prev.map((p) => (p.id === product.id ? { ...p, active: newActive, oos: newOos } : p)),
     );
 
-    const res = await updateProduct(product.id, { active: newValue });
+    const res = await updateProduct(product.id, { active: newActive, oos: newOos });
     if (res.error) {
       // Revert on failure
       setProducts((prev) =>
-        prev.map((p) => (p.id === product.id ? { ...p, active: product.active } : p)),
+        prev.map((p) => (p.id === product.id ? { ...p, active: product.active, oos: product.oos } : p)),
       );
     }
     setTogglingId(null);
@@ -154,6 +166,7 @@ export function Products() {
               <button
                 key={f.key}
                 id={`products-filter-${f.key}`}
+                type="button"
                 className={`${styles.filterBtn} ${activeFilter === f.key ? styles.filterBtnActive : ''}`}
                 onClick={() => handleFilterChange(f.key)}
               >
@@ -213,53 +226,57 @@ export function Products() {
                   <td colSpan={canToggleOOS ? 5 : 4}>No products found</td>
                 </tr>
               ) : (
-                products.map((p) => (
-                  <tr
-                    key={p.id}
-                    className={`${styles.orderRow} ${styles.clickable} ${p.active === false ? styles.inactive : ''}`}
-                    onClick={() => navigate(`/products/${p.id}`)}
-                    style={{ cursor: 'pointer' }}
-                  >
-                    <td className={styles.td}>
-                      <div className={styles.nameCell}>
-                        <span className={styles.name}>{p.name}</span>
-                        {p.accurate_name && p.accurate_name !== p.name && (
-                          <span className={styles.accurateName}>{p.accurate_name}</span>
-                        )}
-                      </div>
-                    </td>
-                    <td className={styles.td}>
-                      {p.category ? (
-                        <span className={styles.pill}>{p.category}</span>
-                      ) : (
-                        '—'
-                      )}
-                    </td>
-                    <td className={styles.td}>{p.brand ?? '—'}</td>
-                    <td className={styles.td}>
-                      {[p.form, p.pack].filter(Boolean).join(' / ') || '—'}
-                    </td>
-                    {canToggleOOS && (
+                products.map((p) => {
+                  const isActive = p.active ?? !p.oos;
+                  return (
+                    <tr
+                      key={p.id}
+                      className={`${styles.orderRow} ${styles.clickable} ${!isActive ? styles.inactive : ''}`}
+                      onClick={() => navigate(`/products/${p.id}`)}
+                      style={{ cursor: 'pointer' }}
+                    >
                       <td className={styles.td}>
-                        <button
-                          id={`product-toggle-${p.id}`}
-                          className={styles.toggle}
-                          onClick={(e) => handleToggleActive(e, p)}
-                          disabled={togglingId === p.id}
-                          aria-label={p.active ? 'Mark out of stock' : 'Mark active'}
-                          title={p.active ? 'Mark out of stock' : 'Mark active'}
-                        >
-                          <span className={styles.toggleLabel}>
-                            {p.active ? 'Active' : 'OOS'}
-                          </span>
-                          <span className={`${styles.toggleTrack} ${p.active ? styles.on : ''}`}>
-                            <span className={styles.toggleThumb} />
-                          </span>
-                        </button>
+                        <div className={styles.nameCell}>
+                          <span className={styles.name}>{p.name}</span>
+                          {p.accurate_name && p.accurate_name !== p.name && (
+                            <span className={styles.accurateName}>{p.accurate_name}</span>
+                          )}
+                        </div>
                       </td>
-                    )}
-                  </tr>
-                ))
+                      <td className={styles.td}>
+                        {p.category ? (
+                          <span className={styles.pill}>{p.category}</span>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                      <td className={styles.td}>{p.brand ?? '—'}</td>
+                      <td className={styles.td}>
+                        {[p.form, p.pack].filter(Boolean).join(' / ') || '—'}
+                      </td>
+                      {canToggleOOS && (
+                        <td className={styles.td}>
+                          <button
+                            id={`product-toggle-${p.id}`}
+                            type="button"
+                            className={styles.toggle}
+                            onClick={(e) => handleToggleActive(e, p)}
+                            disabled={togglingId === p.id}
+                            aria-label={isActive ? 'Mark out of stock' : 'Mark active'}
+                            title={isActive ? 'Mark out of stock' : 'Mark active'}
+                          >
+                            <span className={styles.toggleLabel}>
+                              {isActive ? 'Active' : 'OOS'}
+                            </span>
+                            <span className={`${styles.toggleTrack} ${isActive ? styles.on : ''}`}>
+                              <span className={styles.toggleThumb} />
+                            </span>
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -272,7 +289,7 @@ export function Products() {
               <button
                 type="button"
                 className={styles.pageButton}
-                onClick={() => setPage?.(currentPage - 1)}
+                onClick={() => setPage(currentPage - 1)}
                 disabled={currentPage <= 1}
                 aria-label="Previous page"
               >
@@ -284,7 +301,7 @@ export function Products() {
               <button
                 type="button"
                 className={styles.pageButton}
-                onClick={() => setPage?.(currentPage + 1)}
+                onClick={() => setPage(currentPage + 1)}
                 disabled={currentPage >= totalPages}
                 aria-label="Next page"
               >

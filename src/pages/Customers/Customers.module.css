@@ -91,7 +91,7 @@
 .orderRow td {
   font: var(--text-body);
   color: var(--text-primary);
-  padding: var(--space-md);
+  padding: var(--space-lg);
   border-top: 1px solid var(--border-subtle);
 }
 
@@ -144,8 +144,9 @@
 
 .nameCell {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  flex-direction: row;
+  gap: var(--space-md);
+  align-items: center;
 }
 
 .name {

@@ -1,27 +1,26 @@
-import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { Card } from '../../components/Card/Card';
-import { Button } from '../../components/Button/Button'
-import { useAuth } from '../../hooks/useAuth';
-import {
-  readCustomers,
-  readOrders,
-  readOrderLines,
-} from '../../lib/directus';
+import { useEffect, useState } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import { Card } from "../../components/Card/Card";
+import { Button } from "../../components/Button/Button";
+import { Avatar } from "../../components/Avatar/Avatar";
+import { StatusPill } from "../../components/StatusPill/StatusPill";
+import { useAuth } from "../../hooks/useAuth";
+import { readCustomers, readOrders, readOrderLines } from "../../lib/directus";
+import { getInitials } from "../../lib/initials";
 import type {
   OrdersCollection,
   OrderLinesCollection,
-} from '../../types/directus';
-import styles from './CustomerDetail.module.css';
+} from "../../types/directus";
+import styles from "./CustomerDetail.module.css";
 
 export function CustomerDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const auth = useAuth();
 
-  const isNew = id === 'new';
-  const canEdit = auth.can('manage_customers');
-  const seeCredit = auth.can('seePrices');
+  const isNew = id === "new";
+  const canEdit = auth.can("manage_customers");
+  const seeCredit = auth.can("seePrices");
 
   const [loading, setLoading] = useState(!isNew);
   const [error, setError] = useState<string | null>(null);
@@ -30,15 +29,16 @@ export function CustomerDetail() {
   const [isPanelOpen, setIsPanelOpen] = useState(true);
 
   // Customer Form State
-  const [name, setName] = useState('');
-  const [companyName, setCompanyName] = useState('');
-  const [contact, setContact] = useState('');
-  const [address, setAddress] = useState('');
-  const [area, setArea] = useState('');
-  const [sales, setSales] = useState('');
-  const [payTiming, setPayTiming] = useState('upfront');
-  const [creditLimit, setCreditLimit] = useState('0');
-  const [termDays, setTermDays] = useState('0');
+  const [name, setName] = useState("");
+  const [companyName, setCompanyName] = useState("");
+  const [contact, setContact] = useState("");
+  const [address, setAddress] = useState("");
+  const [area, setArea] = useState("");
+  const [sales, setSales] = useState("");
+  const [channel, setChannel] = useState("");
+  const [payTiming, setPayTiming] = useState("upfront");
+  const [creditLimit, setCreditLimit] = useState("0");
+  const [termDays, setTermDays] = useState("0");
 
   // Customer dossier
   const [orders, setOrders] = useState<OrdersCollection[]>([]);
@@ -59,26 +59,27 @@ export function CustomerDetail() {
       if (cancelled) return;
 
       if (customerRes.error || !customerRes.data?.[0]) {
-        setError(customerRes.error || 'Customer not found.');
+        setError(customerRes.error || "Customer not found.");
         setLoading(false);
         return;
       }
 
       const cust = customerRes.data[0];
       setName(cust.name);
-      setCompanyName(cust.company_name ?? '');
-      setContact(cust.contact ?? '');
-      setAddress(cust.address ?? '');
-      setArea(cust.area ?? '');
-      setSales(cust.sales ?? '');
-      setPayTiming(cust.pay_timing ?? 'upfront');
+      setCompanyName(cust.company_name ?? "");
+      setContact(cust.contact ?? "");
+      setAddress(cust.address ?? "");
+      setArea(cust.area ?? "");
+      setSales(cust.sales ?? "");
+      setChannel(cust.channel ?? "");
+      setPayTiming(cust.pay_timing ?? "upfront");
       setCreditLimit(String(cust.credit_limit ?? 0));
       setTermDays(String(cust.term_days ?? 0));
 
       // Fetch customer orders
       const ordersRes = await readOrders({
         filter: { customer_id: { _eq: id } },
-        sort: ['-order_date', '-created_at'],
+        sort: ["-order_date", "-created_at"],
         limit: 100,
       });
 
@@ -110,8 +111,12 @@ export function CustomerDetail() {
     return lines
       .filter((l) => l.order_id === orderId && !l.removed)
       .reduce((acc, line) => {
-        const q = typeof line.qty === 'string' ? parseFloat(line.qty) : line.qty ?? 0;
-        const p = typeof line.price === 'string' ? parseFloat(line.price) : line.price ?? 0;
+        const q =
+          typeof line.qty === "string" ? parseFloat(line.qty) : (line.qty ?? 0);
+        const p =
+          typeof line.price === "string"
+            ? parseFloat(line.price)
+            : (line.price ?? 0);
         return acc + q * p;
       }, 0);
   };
@@ -119,16 +124,29 @@ export function CustomerDetail() {
   // Calculate customer exposure
   const getExposure = () => {
     return orders
-      .filter((o) => !o.cancelled && !['delivered', 'cancelled', 'returned'].includes(o.stage ?? ''))
+      .filter(
+        (o) =>
+          !o.cancelled &&
+          !["delivered", "cancelled", "returned"].includes(o.stage ?? ""),
+      )
       .reduce((acc, o) => acc + getOrderValue(o.id), 0);
   };
 
-  if (loading) return <div className={styles.container}>Loading customer details…</div>;
-  if (error) return <div className={styles.container} style={{ color: 'var(--status-danger)' }}>{error}</div>;
+  if (loading)
+    return <div className={styles.container}>Loading customer details…</div>;
+  if (error)
+    return (
+      <div
+        className={styles.container}
+        style={{ color: "var(--status-danger)" }}
+      >
+        {error}
+      </div>
+    );
 
-  const currency = new Intl.NumberFormat('id-ID', {
-    style: 'currency',
-    currency: 'IDR',
+  const currency = new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
     minimumFractionDigits: 0,
   });
 
@@ -139,7 +157,7 @@ export function CustomerDetail() {
         className={[
           styles.layoutGrid,
           isPanelOpen ? styles.layoutGridWithPanel : styles.layoutGridFull,
-        ].join(' ')}
+        ].join(" ")}
       >
         {/* ── Main Column ── */}
         <div className={styles.mainColumn}>
@@ -149,14 +167,22 @@ export function CustomerDetail() {
                 type="button"
                 variant="tertiary"
                 icon="chevronLeft"
-                onClick={() => navigate('/customers')}>
+                onClick={() => navigate("/customers")}
+              >
                 Back
               </Button>
               <div className={styles.titleRow}>
-                <div className={styles.avatar}>{(name || 'C').charAt(0).toUpperCase()}</div>
-                <h3 className={styles.title}>
-                  {isNew ? 'New Customer' : name}
-                </h3>
+                <Avatar
+                  initials={getInitials(name) || "??"}
+                  label={name || ""}
+                  size="lg"
+                />
+                <div className={styles.customerInfo}>
+                  <h3 className={styles.title}>
+                    {isNew ? "New Customer" : name}
+                  </h3>
+                  <p>{channel?.toUpperCase() || "—"}</p>
+                </div>
               </div>
             </div>
             <div className={styles.actions}>
@@ -165,129 +191,171 @@ export function CustomerDetail() {
                   type="button"
                   variant="secondary"
                   icon="edit"
-                  onClick={() => navigate(`/customers/${id}/edit`)}>
+                  onClick={() => navigate(`/customers/${id}/edit`)}
+                >
                   Edit
                 </Button>
               )}
             </div>
           </header>
 
-          <Card className={styles.detailsCard}>
-            <div className={styles.row}>
-              <div className={styles.field}>
-                <span className={styles.detailLabel}>Restaurant / Outlet Name *</span>
-                <span className={styles.detailValue}>{name ?? '—'}</span>
-              </div>
-              <div className={styles.field}>
-                <label className={styles.detailLabel}>Company Name (PT / CV for Invoice)</label>
-                <span className={styles.detailValue}>{companyName ?? '—'}</span>
-              </div>
-            </div>
+          <Card>
+            <div className={styles.fields}>
 
-            <div className={styles.row}>
-              <div className={styles.field}>
-                <label className={styles.detailLabel}>Phone / Contact</label>
-                <span className={styles.detailValue}>{contact ?? '—'}</span>
+              <div className={styles.row}>
+                <div className={styles.field}>
+                  <span className={styles.detailLabel}>
+                    Restaurant / Outlet Name *
+                  </span>
+                  <span className={styles.detailValue}>{name || "—"}</span>
+                </div>
+                <div className={styles.field}>
+                  <label className={styles.detailLabel}>
+                    Company Name (PT / CV for Invoice)
+                  </label>
+                  <span className={styles.detailValue}>{companyName || "—"}</span>
+                </div>
               </div>
-              <div className={styles.field}>
-                <label className={styles.detailLabel}>Area</label>
-                <span className={styles.detailValue}>{area ?? '—'}</span>
+
+              <div className={styles.row}>
+                <div className={styles.field}>
+                  <label className={styles.detailLabel}>Phone / Contact</label>
+                  <span className={styles.detailValue}>{contact || "—"}</span>
+                </div>
+                <div className={styles.field}>
+                  <label className={styles.detailLabel}>Area</label>
+                  <span className={styles.detailValue}>{area || "—"}</span>
+                </div>
+              </div>
+              <div className={styles.row}>
+                <div className={styles.field}>
+                  <label className={styles.detailLabel}>Delivery Address</label>
+                  <span className={styles.detailValue}>{address || "—"}</span>
+                </div>
               </div>
             </div>
-            <div className={styles.row}>
-              <div className={styles.field}>
-                <label className={styles.detailLabel}>Delivery Address</label>
-                <span className={styles.detailValue}>{address ?? '—'}</span>
+          </Card>
+
+          <Card>
+            <div className={styles.heading}>Finance</div>
+            <div className={styles.fields}>
+
+              <div className={styles.row}>
+                <div className={styles.field}>
+                  <label className={styles.detailLabel}>Sales Rep</label>
+                  <span className={styles.detailValue}>{sales || "—"}</span>
+                </div>
+                <div className={styles.field}>
+                  <label className={styles.detailLabel}>Payment Timing</label>
+                  <span className={styles.detailValue}>
+                    {payTiming
+                      ? payTiming.charAt(0).toUpperCase() + payTiming.slice(1)
+                      : "—"}
+                  </span>
+                </div>
               </div>
-              <div className={styles.field}>
-                <label className={styles.detailLabel}>Sales Rep</label>
-                <span className={styles.detailValue}>{sales ?? '—'}</span>
-              </div>
-              <div className={styles.field}>
-                <label className={styles.detailLabel}>Payment Timing</label>
-                <span className={styles.detailValue}>{payTiming ?? '—'}</span>
-              </div>
-            </div>
-            <div className={styles.row}>
-              <div className={styles.field}>
-                <label className={styles.detailLabel}>Credit Limit (IDR)</label>
-                <span className={styles.detailValue}>{creditLimit ?? '—'}</span>
-              </div>
-              <div className={styles.field}>
-                <label className={styles.detailLabel}>Terms (days)</label>
-                <span className={styles.detailValue}>{termDays ?? '—'}</span>
+              <div className={styles.row}>
+                <div className={styles.field}>
+                  <label className={styles.detailLabel}>Credit Limit (IDR)</label>
+                  <span className={styles.detailValue}>{creditLimit || "—"}</span>
+                </div>
+                <div className={styles.field}>
+                  <label className={styles.detailLabel}>Terms (days)</label>
+                  <span className={styles.detailValue}>{termDays || "—"}</span>
+                </div>
               </div>
             </div>
           </Card>
 
           {!isNew && seeCredit && parseInt(creditLimit, 10) > 0 && (
-            <Card className={styles.card}>
+            <Card className={styles.detailsCard}>
               <h3 className={styles.heading}>Credit Profile</h3>
-              <div className={styles.exposureRow}>
-                <span>Account Exposure (In Flight Orders)</span>
-                <span className={styles.exposureVal}>{currency.format(getExposure())}</span>
+              <div className={styles.row}>
+                <label className={styles.detailLabel}>
+                  Account Exposure (In Flight Orders)
+                </label>
+                <span className={styles.detailValue}>
+                  {currency.format(getExposure())}
+                </span>
               </div>
-              <div className={styles.exposureRow}>
-                <span>Credit Limit</span>
-                <span className={styles.exposureVal}>{currency.format(parseInt(creditLimit, 10))}</span>
+              <div className={styles.row}>
+                <label className={styles.detailLabel}>Credit Limit</label>
+                <span className={styles.detailValue}>
+                  {currency.format(parseInt(creditLimit, 10))}
+                </span>
               </div>
             </Card>
           )}
         </div>
 
-        {/* ── Collapsible Side Panel (Notes & History) ── */}
+        {/* ── Collapsible Side Panel (Order History) ── */}
         <aside className={styles.sidePanelColumn}>
           <Button
             type="button"
             variant="secondary"
-            icon={isPanelOpen ? 'chevronRight' : 'chevronLeft'}
+            icon={isPanelOpen ? "chevronRight" : "chevronLeft"}
             iconOnly
             className={styles.panelToggleBtn}
             isActive={isPanelOpen}
             onClick={() => setIsPanelOpen((prev) => !prev)}
-            title={isPanelOpen ? 'Collapse side panel' : 'Expand side panel'}
+            title={isPanelOpen ? "Collapse side panel" : "Expand side panel"}
           />
 
-          <Card className={styles.historyCard}>
-            <h3 className={styles.heading}>Order History</h3>
+          <div
+            className={
+              isPanelOpen
+                ? styles.sidePanelStickyContent
+                : styles.sidePanelStickyContentCollapsed
+            }
+          >
+            <Card className={styles.historyCard}>
+              <h3 className={styles.heading}>Order History</h3>
 
-            {!isNew && orders.length > 0 ? (
-              <table className={styles.table}>
-                <thead>
-                  <tr>
-                    <th style={{ textAlign: 'left' }}>Order ID</th>
-                    <th style={{ textAlign: 'left' }}>Stage</th>
-                    <th style={{ textAlign: 'left' }}>Order Date</th>
-                    <th style={{ textAlign: 'right' }}>Total Value</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {orders.map((o) => (
-                    <tr key={o.id} className={styles.tr} onClick={() => navigate(`/orders/${o.id}`)}>
-                      <td>{o.no || o.order_id}</td>
-                      <td>{o.stage || o.status}</td>
-                      <td>
-                        {o.order_date
-                          ? new Date(o.order_date).toLocaleDateString('en-US', {
-                            month: 'short',
-                            day: 'numeric',
-                            year: 'numeric',
-                          })
-                          : '—'}
-                      </td>
-                      <td style={{ textAlign: 'right' }}>{currency.format(getOrderValue(o.id))}</td>
+              {!isNew && orders.length > 0 ? (
+                <table className={styles.table}>
+                  <thead>
+                    <tr>
+                      <th>Order ID</th>
+                      <th>Stage</th>
+                      <th>Order Date</th>
+                      <th>Total Value</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              <p className={styles.muted}>No order history yet.</p>
-            )}
-          </Card>
+                  </thead>
+                  <tbody>
+                    {orders.map((o) => (
+                      <tr
+                        key={o.id}
+                        className={styles.tr}
+                        onClick={() => navigate(`/orders/${o.id}`)}
+                      >
+                        <td>{o.no || o.order_id}</td>
+                        <td>
+                          <StatusPill status={o.stage || o.status} />
+                        </td>
+                        <td>
+                          {o.order_date
+                            ? new Date(o.order_date).toLocaleDateString(
+                              "en-US",
+                              {
+                                month: "short",
+                                day: "numeric",
+                                year: "numeric",
+                              },
+                            )
+                            : "—"}
+                        </td>
+                        <td>{currency.format(getOrderValue(o.id))}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <p className={styles.muted}>No order history yet.</p>
+              )}
+            </Card>
+          </div>
         </aside>
       </div>
     </div >
-
-
   );
 }

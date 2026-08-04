@@ -113,6 +113,7 @@ export const ProductsCollectionSchema = z.object({
   fixed_pack: z.boolean().nullable().optional(),
   ppn: z.string().nullable().optional(),
   oos: z.boolean().nullable().optional(),
+  active: z.boolean().nullable().optional(),
   date_created: z.string().nullable().optional(),
   date_updated: z.string().nullable().optional(),
 });

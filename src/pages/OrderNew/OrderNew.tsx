@@ -453,10 +453,10 @@ export function OrderNew() {
                         )}
 
                         <Card className={styles.customerCard}>
-                            {badNo && <p className={`${styles.error} ${styles.banner}`}>Order no. should look like {dcOf || 'YYMMDD'}NNN (9 digits).</p>}
-                            {dupOrder && <p className={`${styles.error} ${styles.banner}`}>Order #{orderNoValue} already exists — duplicate?</p>}
+                            {badNo && <p className={`${styles.hint} ${styles.banner}`}>Order no. should look like {dcOf || 'YYMMDD'}NNN (9 digits).</p>}
+                            {dupOrder && <p className={`${styles.hint} ${styles.banner}`}>Order #{orderNoValue} already exists — duplicate?</p>}
                             {seqGap && (
-                                <div className={`${styles.error} ${styles.banner}`}>
+                                <div className={`${styles.hint} ${styles.banner}`}>
                                     <span>The next open queue number is #{expectedNo} — but you entered #{orderNoValue}. Typo, or keep it?</span>
                                     <Button type="button" variant="secondary" size="sm" onClick={() => { setOrderNoValue(expectedNo); setOrderNoTouched(true); }}>
                                         Use #{expectedNo}
@@ -479,7 +479,7 @@ export function OrderNew() {
                                     <input type="date" className={styles.input} value={deliverDate}
                                         onChange={(e) => { setdeliverDate(e.target.value); setDateGuessed(false); }}
                                         disabled={submitting || !allowed} />
-                                    {dateGuessed && <p className={styles.muted} style={{ color: 'var(--state-warning)' }}>Delivery date was guessed — please check.</p>}
+                                    {dateGuessed && <p className={styles.secondary} style={{ color: 'var(--state-warning)' }}>Delivery date was guessed — please check.</p>}
                                 </label>
                             </div>
                             <div className={styles.row}>
@@ -522,9 +522,9 @@ export function OrderNew() {
                                     </button>
                                 </div>
                             )}
-                            {customerMatch.type === 'exact' && <div className={styles.muted} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-xs)' }}><Icon name='check' /> Existing customer.</div>}
+                            {customerMatch.type === 'exact' && <div className={styles.secondary} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-xs)' }}><Icon name='check' /> Existing customer.</div>}
                             {customerMatch.type === 'new' && customerName.trim() && (
-                                <div className={styles.muted}>New customer — <b>{customerName.trim()}</b> will be saved.</div>
+                                <div className={styles.secondary}>New customer — <b>{customerName.trim()}</b> will be saved.</div>
                             )}
 
                             <div className={styles.row}>

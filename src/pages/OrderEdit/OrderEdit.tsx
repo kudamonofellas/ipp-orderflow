@@ -1,10 +1,13 @@
-import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { Card } from '../../components/Card/Card';
-import { Icon } from '../../components/Icon/Icon';
-import { Button } from '../../components/Button/Button';
-import { AddItemModal, type AddItemResult } from '../../components/AddItemModal/AddItemModal';
-import { useAuth, useCurrentUserId } from '../../hooks/useAuth';
+import { useEffect, useState } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import { Card } from "../../components/Card/Card";
+import { Icon } from "../../components/Icon/Icon";
+import { Button } from "../../components/Button/Button";
+import {
+  AddItemModal,
+  type AddItemResult,
+} from "../../components/AddItemModal/AddItemModal";
+import { useAuth, useCurrentUserId } from "../../hooks/useAuth";
 import {
   readOrder,
   readOrderLines,
@@ -19,28 +22,28 @@ import {
   updateLineCut,
   deleteLineCut,
   appendOrderHistory,
-} from '../../lib/directus';
+} from "../../lib/directus";
 import type {
   OrdersCollection,
   OrderLinesCollection,
   CustomersCollection,
   ProductsCollection,
   LineCutsCollection,
-} from '../../types/directus';
-import styles from './OrderEdit.module.css';
+} from "../../types/directus";
+import styles from "./OrderEdit.module.css";
 
-const UNIT_OPTIONS = ['Loaf', 'Box', 'Pack', 'kg', 'gram', 'pcs', 'ekor'];
+const UNIT_OPTIONS = ["Loaf", "Box", "Pack", "kg", "gram", "pcs", "ekor"];
 
-const currency = new Intl.NumberFormat('id-ID', {
-  style: 'currency',
-  currency: 'IDR',
+const currency = new Intl.NumberFormat("id-ID", {
+  style: "currency",
+  currency: "IDR",
   minimumFractionDigits: 0,
 });
 
 function formatDateInput(iso: string | null | undefined): string {
-  if (!iso) return '';
+  if (!iso) return "";
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
+  if (Number.isNaN(d.getTime())) return "";
   return d.toISOString().slice(0, 10);
 }
 
@@ -71,20 +74,22 @@ export function OrderEdit() {
   const [lines, setLines] = useState<OrderLinesCollection[]>([]);
   const [customers, setCustomers] = useState<CustomersCollection[]>([]);
   const [products, setProducts] = useState<ProductsCollection[]>([]);
-  const [lineCutsByLine, setLineCutsByLine] = useState<Record<string, LineCutsCollection[]>>({});
+  const [lineCutsByLine, setLineCutsByLine] = useState<
+    Record<string, LineCutsCollection[]>
+  >({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   /* ── form state ── */
-  const [orderNo, setOrderNo] = useState('');
-  const [customerName, setCustomerName] = useState('');
+  const [orderNo, setOrderNo] = useState("");
+  const [customerName, setCustomerName] = useState("");
   const [customerId, setCustomerId] = useState<string | null>(null);
-  const [company, setCompany] = useState('');
-  const [customerAddress, setCustomerAddress] = useState('');
-  const [deliverDate, setDeliverDate] = useState('');
-  const [orderDate, setOrderDate] = useState('');
-  const [sales, setSales] = useState('');
-  const [contact, setContact] = useState('');
+  const [company, setCompany] = useState("");
+  const [customerAddress, setCustomerAddress] = useState("");
+  const [deliverDate, setDeliverDate] = useState("");
+  const [orderDate, setOrderDate] = useState("");
+  const [sales, setSales] = useState("");
+  const [contact, setContact] = useState("");
   const [editLines, setEditLines] = useState<EditableLine[]>([]);
 
   /* ── modal state ── */
@@ -100,12 +105,14 @@ export function OrderEdit() {
       setLoading(true);
       setError(null);
 
-      const [orderRes, linesRes, customersRes, productsRes] = await Promise.all([
-        readOrder(orderId),
-        readOrderLines({ filter: { order_id: { _eq: orderId } } }),
-        readCustomers(),
-        readProducts(),
-      ]);
+      const [orderRes, linesRes, customersRes, productsRes] = await Promise.all(
+        [
+          readOrder(orderId),
+          readOrderLines({ filter: { order_id: { _eq: orderId } } }),
+          readCustomers(),
+          readProducts(),
+        ],
+      );
 
       if (cancelled) return;
 
@@ -136,13 +143,13 @@ export function OrderEdit() {
       setLineCutsByLine(groupedCuts);
 
       // Populate form state
-      setCustomerName(loadedOrder.customer_name ?? '');
-      setCustomerId(loadedOrder.customer_id ?? null);
-      setOrderNo(loadedOrder.order_id ?? '');
-      setDeliverDate(formatDateInput(loadedOrder.deliver_at));
-      setOrderDate(formatDateInput(loadedOrder.order_date));
-      setSales(loadedOrder.sales ?? loadedOrder.sales_rep ?? '');
-      setContact(loadedOrder.customer_contact ?? '');
+      setCustomerName(loadedOrder?.customer_name ?? "");
+      setCustomerId(loadedOrder?.customer_id ?? null);
+      setOrderNo(loadedOrder?.order_id ?? "");
+      setDeliverDate(formatDateInput(loadedOrder?.deliver_at));
+      setOrderDate(formatDateInput(loadedOrder?.order_date));
+      setSales(loadedOrder?.sales ?? loadedOrder?.sales_rep ?? "");
+      setContact(loadedOrder?.customer_contact ?? "");
 
       setEditLines(
         loadedLines.map((l) => ({
@@ -150,10 +157,13 @@ export function OrderEdit() {
           productId: l.product_id ?? null,
           name: l.name,
           qty: String(parseFloat(String(l.qty ?? 1)) || 1),
-          unit: l.unit ?? 'Loaf',
+          unit: l.unit ?? "Loaf",
           price: String(parseFloat(String(l.price ?? 0)) || 0),
-          cuts: (groupedCuts[l.id] ?? []).map((c) => ({ id: c.id, text: c.text })),
-        }))
+          cuts: (groupedCuts[l.id] ?? []).map((c) => ({
+            id: c.id,
+            text: c.text,
+          })),
+        })),
       );
 
       setLoading(false);
@@ -184,13 +194,13 @@ export function OrderEdit() {
 
   function handleConfirmAddItem(result: AddItemResult) {
     const newLine: EditableLine = {
-      id: 'new_' + Date.now(),
+      id: "new_" + Date.now(),
       isNew: true,
       productId: result.productId,
       name: result.name,
       qty: result.qty,
       unit: result.unit,
-      price: '0',
+      price: "0",
       cuts: [],
     };
     setEditLines((prev) => [...prev, newLine]);
@@ -204,9 +214,9 @@ export function OrderEdit() {
     setEditLines((prev) =>
       prev.map((l) =>
         l.id === lineId
-          ? { ...l, cuts: [...l.cuts, { id: 'cut_' + Date.now(), text: '' }] }
-          : l
-      )
+          ? { ...l, cuts: [...l.cuts, { id: "cut_" + Date.now(), text: "" }] }
+          : l,
+      ),
     );
   }
 
@@ -215,25 +225,33 @@ export function OrderEdit() {
       prev.map((l) =>
         l.id === lineId
           ? { ...l, cuts: l.cuts.filter((c) => c.id !== cutId) }
-          : l
-      )
+          : l,
+      ),
     );
   }
 
   function buildEditSummary(): string {
     const changes: string[] = [];
 
-    if ((order?.customer_name ?? '').trim() !== customerName.trim()) {
-      changes.push(`Customer ${order?.customer_name || '—'}→${customerName || '—'}`);
+    if ((order?.customer_name ?? "").trim() !== customerName.trim()) {
+      changes.push(
+        `Customer ${order?.customer_name || "—"}→${customerName || "—"}`,
+      );
     }
-    if ((order?.sales ?? order?.sales_rep ?? '').trim() !== sales.trim()) {
-      changes.push(`Sales ${order?.sales ?? order?.sales_rep ?? '—'}→${sales || '—'}`);
+    if ((order?.sales ?? order?.sales_rep ?? "").trim() !== sales.trim()) {
+      changes.push(
+        `Sales ${order?.sales ?? order?.sales_rep ?? "—"}→${sales || "—"}`,
+      );
     }
-    if ((order?.customer_contact ?? '').trim() !== contact.trim()) {
-      changes.push(`Contact ${order?.customer_contact || '—'}→${contact || '—'}`);
+    if ((order?.customer_contact ?? "").trim() !== contact.trim()) {
+      changes.push(
+        `Contact ${order?.customer_contact || "—"}→${contact || "—"}`,
+      );
     }
     if (formatDateInput(order?.deliver_at) !== deliverDate) {
-      changes.push(`Delivery Date ${formatDateInput(order?.deliver_at) || '—'}→${deliverDate || '—'}`);
+      changes.push(
+        `Delivery Date ${formatDateInput(order?.deliver_at) || "—"}→${deliverDate || "—"}`,
+      );
     }
 
     const initialLineMap = new Map(lines.map((l) => [l.id, l]));
@@ -249,8 +267,10 @@ export function OrderEdit() {
           if (origQty !== newQty) {
             changes.push(`Line "${el.name}" qty ${origQty}→${newQty}`);
           }
-          if ((orig.unit ?? '') !== el.unit) {
-            changes.push(`Line "${el.name}" unit ${orig.unit || '—'}→${el.unit}`);
+          if ((orig.unit ?? "") !== el.unit) {
+            changes.push(
+              `Line "${el.name}" unit ${orig.unit || "—"}→${el.unit}`,
+            );
           }
           const origPrice = parseFloat(String(orig.price ?? 0));
           const newPrice = parseFloat(el.price);
@@ -276,14 +296,16 @@ export function OrderEdit() {
         const origCutMap = new Map(origCuts.map((c) => [c.id, c.text]));
 
         el.cuts.forEach((c) => {
-          if (c.id.startsWith('cut_')) {
+          if (c.id.startsWith("cut_")) {
             if (c.text.trim()) {
               changes.push(`Line "${el.name}" added cut "${c.text.trim()}"`);
             }
           } else {
             const origText = origCutMap.get(c.id);
             if (origText !== undefined && origText.trim() !== c.text.trim()) {
-              changes.push(`Line "${el.name}" cut "${origText}"→"${c.text.trim()}"`);
+              changes.push(
+                `Line "${el.name}" cut "${origText}"→"${c.text.trim()}"`,
+              );
             }
           }
         });
@@ -296,7 +318,9 @@ export function OrderEdit() {
       }
     });
 
-    return changes.length > 0 ? `Edited — ${changes.join('; ')}` : 'Order edited (no change)';
+    return changes.length > 0
+      ? `Edited — ${changes.join("; ")}`
+      : "Order edited (no change)";
   }
 
   async function handleSaveAllEdits() {
@@ -308,12 +332,17 @@ export function OrderEdit() {
 
     try {
       const orderPatch: Record<string, unknown> = {};
-      if (customerName.trim() !== (order.customer_name ?? '')) orderPatch.customer_name = customerName.trim();
+      if (customerName.trim() !== (order.customer_name ?? ""))
+        orderPatch.customer_name = customerName.trim();
       if (customerId !== order.customer_id) orderPatch.customer_id = customerId;
-      if (sales.trim() !== (order.sales ?? order.sales_rep ?? '')) orderPatch.sales = sales.trim();
-      if (contact.trim() !== (order.customer_contact ?? '')) orderPatch.customer_contact = contact.trim();
-      if (deliverDate !== formatDateInput(order.deliver_at)) orderPatch.deliver_at = deliverDate || null;
-      if (orderDate !== formatDateInput(order.order_date)) orderPatch.order_date = orderDate || null;
+      if (sales.trim() !== (order.sales ?? order.sales_rep ?? ""))
+        orderPatch.sales = sales.trim();
+      if (contact.trim() !== (order.customer_contact ?? ""))
+        orderPatch.customer_contact = contact.trim();
+      if (deliverDate !== formatDateInput(order.deliver_at))
+        orderPatch.deliver_at = deliverDate || null;
+      if (orderDate !== formatDateInput(order.order_date))
+        orderPatch.order_date = orderDate || null;
 
       if (Object.keys(orderPatch).length > 0) {
         const updateRes = await updateOrder(order.id, orderPatch);
@@ -322,7 +351,9 @@ export function OrderEdit() {
 
       // Sync order lines
       const initialLineIds = new Set(lines.map((l) => l.id));
-      const currentEditLineIds = new Set(editLines.filter((l) => !l.isNew).map((l) => l.id));
+      const currentEditLineIds = new Set(
+        editLines.filter((l) => !l.isNew).map((l) => l.id),
+      );
 
       // Delete removed lines
       for (const origId of initialLineIds) {
@@ -344,10 +375,11 @@ export function OrderEdit() {
             name: el.name,
             qty: parseFloat(el.qty) || 1,
             unit: el.unit,
-            status: 'manual',
+            status: "manual",
             sort_order: i,
           });
-          if (createRes.error || !createRes.data) throw new Error(createRes.error ?? 'Failed to create line');
+          if (createRes.error || !createRes.data)
+            throw new Error(createRes.error ?? "Failed to create line");
           targetLineId = createRes.data.id;
         } else {
           const updateRes = await updateOrderLine(el.id, {
@@ -363,7 +395,9 @@ export function OrderEdit() {
 
         // Handle cuts sync for targetLineId
         const origCuts = el.isNew ? [] : (lineCutsByLine[el.id] ?? []);
-        const currentCutIds = new Set(el.cuts.filter((c) => !c.id.startsWith('cut_')).map((c) => c.id));
+        const currentCutIds = new Set(
+          el.cuts.filter((c) => !c.id.startsWith("cut_")).map((c) => c.id),
+        );
 
         for (const origCut of origCuts) {
           if (!currentCutIds.has(origCut.id)) {
@@ -372,9 +406,12 @@ export function OrderEdit() {
         }
 
         for (const cut of el.cuts) {
-          if (cut.id.startsWith('cut_')) {
+          if (cut.id.startsWith("cut_")) {
             if (cut.text.trim()) {
-              await createLineCut({ line_id: targetLineId, text: cut.text.trim() });
+              await createLineCut({
+                line_id: targetLineId,
+                text: cut.text.trim(),
+              });
             }
           } else {
             const orig = origCuts.find((c) => c.id === cut.id);
@@ -385,12 +422,12 @@ export function OrderEdit() {
         }
       }
 
-      if (summaryText !== 'Order edited (no change)') {
+      if (summaryText !== "Order edited (no change)") {
         await appendOrderHistory({
           order_id: order.id,
           what: summaryText,
           who: userId ?? null,
-          stage: order.stage ?? 'intake',
+          stage: order.stage ?? "intake",
         });
       }
 
@@ -402,17 +439,18 @@ export function OrderEdit() {
     }
   }
 
-  if (loading) return <div className={styles.muted}>Loading order details…</div>;
+  if (loading)
+    return <div className={styles.muted}>Loading order details…</div>;
   if (error || !order) {
     return (
-      <div className={styles.muted} style={{ color: 'var(--state-error)' }}>
-        {error || 'Order not found.'}
+      <div className={styles.muted} style={{ color: "var(--state-error)" }}>
+        {error || "Order not found."}
       </div>
     );
   }
 
   const editSummary = buildEditSummary();
-  const hasEditChanges = editSummary !== 'Order edited (no change)';
+  const hasEditChanges = editSummary !== "Order edited (no change)";
 
   return (
     <div className={styles.container}>
@@ -424,23 +462,31 @@ export function OrderEdit() {
                 type="button"
                 variant="tertiary"
                 icon="chevronLeft"
-                onClick={handleCancel}>
+                onClick={handleCancel}
+              >
                 Back to order
               </Button>
               <h2 className={styles.title}>Order {order.order_id}</h2>
             </div>
             <div className={styles.actions}>
-              <Button type="button" variant="secondary" onClick={handleCancel} disabled={submitting}>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={handleCancel}
+                disabled={submitting}
+              >
                 Cancel
               </Button>
               <Button
                 type="button"
                 variant="primary"
-                disabled={!hasEditChanges || submitting || !auth.can('editOrderLines')}
+                disabled={
+                  !hasEditChanges || submitting || !auth.can("editOrderLines")
+                }
                 icon="save"
                 onClick={handleSaveAllEdits}
               >
-                {submitting ? 'Saving…' : 'Save Changes'}
+                {submitting ? "Saving…" : "Save Changes"}
               </Button>
             </div>
           </header>
@@ -461,15 +507,25 @@ export function OrderEdit() {
               </label>
               <label className={styles.field}>
                 <span className={styles.label}>Delivery Date</span>
-                <input type="date" className={styles.input} value={deliverDate}
-                  onChange={(e) => { setDeliverDate(e.target.value); }}
-                  disabled={submitting} />
+                <input
+                  type="date"
+                  className={styles.input}
+                  value={deliverDate}
+                  onChange={(e) => {
+                    setDeliverDate(e.target.value);
+                  }}
+                  disabled={submitting}
+                />
               </label>
             </div>
             <div className={styles.row}>
               <label className={styles.field}>
                 <span className={styles.label}>Customer / Restaurant</span>
-                <select className={styles.select} value={customerId ?? ''} onChange={handleCustomerSelect}>
+                <select
+                  className={styles.select}
+                  value={customerId ?? ""}
+                  onChange={handleCustomerSelect}
+                >
                   <option value="">— Select customer —</option>
                   {customers.map((c) => (
                     <option key={c.id} value={c.id}>
@@ -479,11 +535,19 @@ export function OrderEdit() {
                 </select>
               </label>
               <label className={styles.field}>
-                <span className={styles.label}>Company <span className={styles.caption}>(PT / CV — for the invoice)</span></span>
+                <span className={styles.label}>
+                  Company{" "}
+                  <span className={styles.caption}>
+                    (PT / CV — for the invoice)
+                  </span>
+                </span>
                 <input
-                  type="text" className={styles.input} value={company}
+                  type="text"
+                  className={styles.input}
+                  value={company}
                   onChange={(e) => setCompany(e.target.value)}
-                  disabled={submitting} placeholder="e.g. PT En Prima Food & Beverages"
+                  disabled={submitting}
+                  placeholder="e.g. PT En Prima Food & Beverages"
                 />
               </label>
             </div>
@@ -509,14 +573,18 @@ export function OrderEdit() {
             </div>
             <label className={styles.field}>
               <span className={styles.label}>Delivery Address</span>
-              <textarea className={styles.input} style={{
-                justifyContent: 'flex-start',
-                alignItems: 'flex-start',
-                minHeight: '100px'
-              }}
+              <textarea
+                className={styles.input}
+                style={{
+                  justifyContent: "flex-start",
+                  alignItems: "flex-start",
+                  minHeight: "100px",
+                }}
                 value={customerAddress}
                 onChange={(e) => setCustomerAddress(e.target.value)}
-                disabled={submitting} placeholder="Delivery address" />
+                disabled={submitting}
+                placeholder="Delivery address"
+              />
             </label>
           </Card>
 
@@ -543,7 +611,9 @@ export function OrderEdit() {
                           onChange={(e) => {
                             const val = e.target.value;
                             setEditLines((prev) =>
-                              prev.map((l) => (l.id === line.id ? { ...l, qty: val } : l))
+                              prev.map((l) =>
+                                l.id === line.id ? { ...l, qty: val } : l,
+                              ),
                             );
                           }}
                         />
@@ -554,7 +624,9 @@ export function OrderEdit() {
                           onChange={(e) => {
                             const val = e.target.value;
                             setEditLines((prev) =>
-                              prev.map((l) => (l.id === line.id ? { ...l, unit: val } : l))
+                              prev.map((l) =>
+                                l.id === line.id ? { ...l, unit: val } : l,
+                              ),
                             );
                           }}
                         >
@@ -568,21 +640,29 @@ export function OrderEdit() {
                         <select
                           className={styles.editSelect}
                           style={{ flex: 1 }}
-                          value={line.productId ?? '__custom__'}
+                          value={line.productId ?? "__custom__"}
                           onChange={(e) => {
                             const val = e.target.value;
-                            if (val === '__custom__') {
+                            if (val === "__custom__") {
                               setEditLines((prev) =>
-                                prev.map((l) => (l.id === line.id ? { ...l, productId: null } : l))
+                                prev.map((l) =>
+                                  l.id === line.id
+                                    ? { ...l, productId: null }
+                                    : l,
+                                ),
                               );
                             } else {
                               const prod = products.find((p) => p.id === val);
                               setEditLines((prev) =>
                                 prev.map((l) =>
                                   l.id === line.id
-                                    ? { ...l, productId: val, name: prod?.name ?? l.name }
-                                    : l
-                                )
+                                    ? {
+                                        ...l,
+                                        productId: val,
+                                        name: prod?.name ?? l.name,
+                                      }
+                                    : l,
+                                ),
                               );
                             }
                           }}
@@ -605,13 +685,13 @@ export function OrderEdit() {
                           onChange={(e) => {
                             const val = e.target.value;
                             setEditLines((prev) =>
-                              prev.map((l) => (l.id === line.id ? { ...l, name: val } : l))
+                              prev.map((l) =>
+                                l.id === line.id ? { ...l, name: val } : l,
+                              ),
                             );
                           }}
                         />
                       )}
-
-
                     </div>
                     <Button
                       type="button"
@@ -625,14 +705,28 @@ export function OrderEdit() {
                     </Button>
                   </div>
 
-
-
                   {/* Cuts */}
-                  <div style={{ marginLeft: 28, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <div
+                    style={{
+                      marginLeft: 28,
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 6,
+                    }}
+                  >
                     {line.cuts.map((cut) => (
                       <div key={cut.id} className={styles.editCutRow}>
-                        <Icon name="knife" size={14} style={{ color: 'var(--text-muted)' }} />
-                        <span style={{ fontSize: 'var(--text-label)', color: 'var(--text-secondary)' }}>
+                        <Icon
+                          name="knife"
+                          size={14}
+                          style={{ color: "var(--text-muted)" }}
+                        />
+                        <span
+                          style={{
+                            fontSize: "var(--text-label)",
+                            color: "var(--text-secondary)",
+                          }}
+                        >
                           cutting
                         </span>
                         <input
@@ -647,11 +741,15 @@ export function OrderEdit() {
                               prev.map((l) =>
                                 l.id === line.id
                                   ? {
-                                    ...l,
-                                    cuts: l.cuts.map((c) => (c.id === cut.id ? { ...c, text: val } : c)),
-                                  }
-                                  : l
-                              )
+                                      ...l,
+                                      cuts: l.cuts.map((c) =>
+                                        c.id === cut.id
+                                          ? { ...c, text: val }
+                                          : c,
+                                      ),
+                                    }
+                                  : l,
+                              ),
                             );
                           }}
                         />
@@ -660,7 +758,9 @@ export function OrderEdit() {
                           variant="ghost"
                           size="sm"
                           iconOnly
-                          onClick={() => handleDeleteCutFromLine(line.id, cut.id)}
+                          onClick={() =>
+                            handleDeleteCutFromLine(line.id, cut.id)
+                          }
                         >
                           <Icon name="trash" size={14} />
                         </Button>
@@ -670,7 +770,7 @@ export function OrderEdit() {
                       type="button"
                       variant="tertiary"
                       size="sm"
-                      style={{ alignSelf: 'flex-start' }}
+                      style={{ alignSelf: "flex-start" }}
                       onClick={() => handleAddCutToLine(line.id)}
                     >
                       <Icon name="add" size={14} /> Add cutting
@@ -686,19 +786,26 @@ export function OrderEdit() {
                         min="0"
                         step="any"
                         className={styles.editInput}
-                        style={{ width: 110, textAlign: 'right' }}
+                        style={{ width: 110, textAlign: "right" }}
                         value={line.price}
                         placeholder="0"
                         onChange={(e) => {
                           const val = e.target.value;
                           setEditLines((prev) =>
-                            prev.map((l) => (l.id === line.id ? { ...l, price: val } : l))
+                            prev.map((l) =>
+                              l.id === line.id ? { ...l, price: val } : l,
+                            ),
                           );
                         }}
                       />
-                      <span style={{ textAlign: 'left', width: '32px' }}>x {line.qty}</span>
+                      <span style={{ textAlign: "left", width: "32px" }}>
+                        x {line.qty}
+                      </span>
                       <span className={styles.lineTotalPrice}>
-                        {currency.format((parseFloat(line.price) || 0) * (parseFloat(line.qty) || 0))}
+                        {currency.format(
+                          (parseFloat(line.price) || 0) *
+                            (parseFloat(line.qty) || 0),
+                        )}
                       </span>
                     </div>
                   </div>
@@ -712,7 +819,11 @@ export function OrderEdit() {
               size="lg"
               icon="add"
               onClick={() => setIsAddItemModalOpen(true)}
-              style={{ marginTop: 'var(--space-md)', height: 44, fontWeight: 600 }}
+              style={{
+                marginTop: "var(--space-md)",
+                height: 44,
+                fontWeight: 600,
+              }}
             >
               Add Item
             </Button>

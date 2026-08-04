@@ -14,6 +14,7 @@ import { Icon } from '../../components/Icon/Icon';
 import type { IconName } from '../../components/Icon/icons';
 import { Avatar } from '../../components/Avatar/Avatar';
 import { Button } from '../../components/Button/Button';
+import { getInitials } from '../../lib/initials';
 import { useAuth, useCurrentUserName } from '../../hooks/useAuth';
 import { SidebarContext, type SidebarState } from './sidebar-context';
 import { useSidebar } from './useSidebar';
@@ -68,13 +69,6 @@ export function Sidebar() {
   const { user, role, logout } = useAuth();
   const navigate = useNavigate();
   const name = useCurrentUserName();
-  const initials = name
-    .split(' ')
-    .map((p) => p[0])
-    .filter(Boolean)
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
 
   async function handleLogout() {
     await logout();
@@ -151,7 +145,11 @@ export function Sidebar() {
 
       <div className={styles.bottomSection}>
         <div className={styles.userBlock} title={name || user?.email}>
-          <Avatar initials={initials || '??'} label={name || (user?.email ?? '')} />
+          <Avatar
+          initials={getInitials(name) || '??'}
+          label={name || (user?.email ?? '')}
+          size="md"
+           />
           {!collapsed && (
             <span className={styles.userMeta}>
               <span className={styles.userName}>{name || user?.email}</span>

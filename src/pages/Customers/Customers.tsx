@@ -4,9 +4,12 @@ import { Button } from '../../components/Button/Button';
 import { Icon } from '../../components/Icon/Icon';
 import { Card } from '../../components/Card/Card';
 import { useAuth } from '../../hooks/useAuth';
+import { Avatar } from '../../components/Avatar/Avatar';
+import { getInitials } from '../../lib/initials';
 import { readCustomers, aggregateCustomers } from '../../lib/directus';
 import type { CustomersCollection } from '../../types/directus';
 import styles from './Customers.module.css';
+
 
 const PAGE_SIZE = 20;
 
@@ -85,6 +88,7 @@ export function Customers() {
     setPage(1);
   };
 
+
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
   const rangeStart = total === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1;
@@ -156,10 +160,20 @@ export function Customers() {
                 >
                   <td className={styles.td}>
                     <div className={styles.nameCell}>
+                      
+                        <Avatar
+                          initials={getInitials(c.name) || '??'}
+                          label={c.name || ''}
+                          size="md"
+                        />
+                      
+                      <span style={{ display: 'flex', flexDirection: 'column' }}>
+
                       <span className={styles.name}>{c.name}</span>
                       {c.company_name && (
                         <span className={styles.company}>{c.company_name}</span>
                       )}
+                      </span>
                     </div>
                   </td>
                   <td className={styles.td}>

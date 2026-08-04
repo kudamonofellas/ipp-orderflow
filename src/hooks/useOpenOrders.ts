@@ -104,6 +104,7 @@ function toOpenOrder(
 ): OpenOrder {
   return {
     id: row.id,
+    no: row.no ?? row.order_id ?? '—',
     orderId: row.order_id ?? '—',
     status: row.stage ?? row.status ?? 'Draft',
     orderDate: formatDate(row.order_date ?? row.created_at),

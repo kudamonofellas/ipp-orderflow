@@ -2,7 +2,6 @@ import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { Button } from '../../components/Button/Button';
-import { Icon } from '../../components/Icon/Icon';
 import logo from '../../assets/logo.svg';
 import styles from './Login.module.css';
 

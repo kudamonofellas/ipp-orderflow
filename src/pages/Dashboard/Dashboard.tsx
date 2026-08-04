@@ -37,8 +37,8 @@ export function Dashboard() {
   const [deliveredRange, setDeliveredRange] = useState<RangeWithLabel>({ val: { type: 'today' }, label: 'Today' });
   const [cancelledRange, setCancelledRange] = useState<RangeWithLabel>({ val: { type: 'today' }, label: 'Today' });
 
-  const { orders: openOrders, loading: ordersLoading, error, total, page, pageSize, setPage, refetch: refetchOrders } = useOpenOrders(sortBy);
-  const { metrics, stageCounts, loading: countsLoading, refetch: refetchCounts } = useDashboardCounts(
+  const { orders: openOrders, loading: ordersLoading, error, total, page, pageSize, setPage } = useOpenOrders(sortBy);
+  const { metrics, stageCounts, loading: countsLoading } = useDashboardCounts(
     totalRange,
     deliveredRange,
     cancelledRange,
@@ -66,12 +66,6 @@ export function Dashboard() {
   function handleParsed(draft: ParsedOrderDraft, rawText: string, attachments: File[]) {
     setOrderStep(0); // close the intake modal
     navigate('/orders/new', { state: { prefill: draft, rawText, attachments } });
-  }
-
-  function handleOrderCreated() {
-    refetchOrders();
-    refetchCounts();
-    closeAll();
   }
 
   const isLoading = ordersLoading || countsLoading;
