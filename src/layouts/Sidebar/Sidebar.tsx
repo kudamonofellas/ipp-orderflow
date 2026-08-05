@@ -16,9 +16,10 @@ import { Avatar } from '../../components/Avatar/Avatar';
 import { Button } from '../../components/Button/Button';
 import { getInitials } from '../../lib/initials';
 import { useAuth, useCurrentUserName } from '../../hooks/useAuth';
+import { useTheme } from '../../hooks/useTheme';
 import { SidebarContext, type SidebarState } from './sidebar-context';
 import { useSidebar } from './useSidebar';
-import logo from '../../assets/logo.svg';
+import { Logo } from '../../components/Logo/Logo';
 import styles from './Sidebar.module.css';
 
 const STORAGE_KEY = 'ipp_sidebar_collapsed';
@@ -66,6 +67,7 @@ export function SidebarProvider({ children }: { children: ReactNode }) {
 
 export function Sidebar() {
   const { collapsed, toggle } = useSidebar();
+  const { theme, toggle: toggleTheme } = useTheme();
   const { user, role, logout } = useAuth();
   const navigate = useNavigate();
   const name = useCurrentUserName();
@@ -82,7 +84,7 @@ export function Sidebar() {
         className={styles.logoSection}
         aria-label="Inti Pangan Perkasa - Home"
       >
-        <img src={logo} alt="" className={styles.logo} aria-hidden="true" />
+        <Logo className={styles.logo} />
         {!collapsed && (
           <span className={styles.brandName}>
             Inti Pangan
@@ -124,6 +126,23 @@ export function Sidebar() {
         onClick={toggle}
         aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         title={collapsed ? 'Expand' : 'Collapse'}
+      />
+      <Button
+        type="button"
+        variant="tertiary"
+        size="md"
+        icon={theme === 'dark' ? 'sun' : 'moon'}
+        iconOnly
+        style={{
+          backgroundColor: "transparent",
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          margin: "var(--space-sm) auto",
+        }}
+        onClick={toggleTheme}
+        aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+        title={theme === 'dark' ? 'Light mode' : 'Dark mode'}
       />
       <Button
         variant="tertiary"

@@ -93,7 +93,6 @@ function groupLinesByOrderId(
 function toOpenOrder(
   row: {
     id: string;
-    order_id?: string | null;
     no?: string | null;
     stage?: string | null;
     status?: string | null;
@@ -107,8 +106,7 @@ function toOpenOrder(
 ): OpenOrder {
   return {
     id: row.id,
-    no: row.no ?? row.order_id ?? "—",
-    orderId: row.order_id ?? "—",
+    no: row.no ?? "—",
     status: row.stage ?? row.status ?? "Draft",
     orderDate: formatDate(row.order_date ?? row.created_at),
     deliveryDate: formatDate(row.delivery_date),
@@ -121,12 +119,12 @@ function toOpenOrder(
 /**
  * @param stageFilter  'all' = all orders, or a specific stage key from the pipeline enum.
  * @param search       Free-text search on order number or customer name.
- * @param sort         Directus sort order string (e.g. '-order_id').
+ * @param sort         Directus sort order string (e.g. '-no').
  */
 export function useOrders(
   stageFilter: string = "all",
   search: string = "",
-  sort: string = "-order_id",
+  sort: string = "-no",
 ): UseOrdersResult {
   const [orders, setOrders] = useState<OpenOrder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -205,7 +203,6 @@ export function useOrders(
           {
             _or: [
               { no: { _icontains: q } },
-              { order_id: { _icontains: q } },
               { customer_name: { _icontains: q } },
             ],
           },
@@ -217,7 +214,6 @@ export function useOrders(
           filter,
           fields: [
             "id",
-            "order_id",
             "no",
             "stage",
             "status",

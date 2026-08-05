@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { Card } from "../../components/Card/Card";
 import { Icon } from "../../components/Icon/Icon";
 import { Button } from "../../components/Button/Button";
@@ -169,6 +169,12 @@ interface WeighingLine {
 export function OrderDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  /** Where "Back" should return to — set by whoever linked here (Orders,
+   *  Dashboard, a customer's order history, a notification). Falls back to
+   *  the orders list rather than `navigate(-1)`, which can land on an
+   *  intermediate page like the just-submitted "New Order" form. */
+  const backTo = (location.state as { from?: string } | null)?.from ?? "/orders";
   const auth = useAuth();
   const userId = useCurrentUserId();
 
@@ -882,13 +888,13 @@ export function OrderDetail() {
                 type="button"
                 variant="tertiary"
                 icon="chevronLeft"
-                onClick={() => navigate(-1)}
+                onClick={() => navigate(backTo)}
               >
                 Back
               </Button>
 
               <div className={styles.titleRow}>
-                <h3 className={styles.title}>Order {order.order_id}</h3>
+                <h3 className={styles.title}>Order {order.no}</h3>
                 {isCancelled && (
                   <span
                     style={{
@@ -1007,7 +1013,10 @@ export function OrderDetail() {
                 customerId ? styles.profileRowClickable : "",
               ].join(" ")}
               onClick={() => {
-                if (customerId) navigate(`/customers/${customerId}`);
+                if (customerId)
+                  navigate(`/customers/${customerId}`, {
+                    state: { from: location.pathname },
+                  });
               }}
               title={customerId ? "View customer details" : undefined}
             >

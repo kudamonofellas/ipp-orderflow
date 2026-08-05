@@ -28,8 +28,8 @@ const STAGE_OPTIONS = [
 ];
 
 const SORT_OPTIONS = [
-  { key: "-order_id", label: "Order ID (Desc)" },
-  { key: "order_id", label: "Order ID (Asc)" },
+  { key: "-no", label: "Order ID (Desc)" },
+  { key: "no", label: "Order ID (Asc)" },
   { key: "-delivery_date", label: "Delivery Date (Desc)" },
   { key: "delivery_date", label: "Delivery Date (Asc)" },
 ];
@@ -75,7 +75,7 @@ export function Orders() {
 
   const [stage, setStage] = useState(location.state?.stage || "all");
   const [search, setSearch] = useState("");
-  const [sortBy, setSortBy] = useState("-order_id");
+  const [sortBy, setSortBy] = useState("-no");
   const [stageOpen, setStageOpen] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
   const stageDropdownRef = useRef<HTMLDivElement>(null);
@@ -101,7 +101,7 @@ export function Orders() {
   ) {
     setOrderStep(0);
     navigate("/orders/new", {
-      state: { prefill: draft, rawText, attachments },
+      state: { prefill: draft, rawText, attachments, from: location.pathname },
     });
   }
 

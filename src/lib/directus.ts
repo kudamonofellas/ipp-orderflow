@@ -548,7 +548,6 @@ export async function getNextOrderNo(
 /** Shape for creating a new order row (mirrors the target schema). */
 export interface CreateOrderInput {
   no: string;
-  order_id: string;
   customer_id: string;
   customer_name?: string | null;
   customer_contact?: string | null;

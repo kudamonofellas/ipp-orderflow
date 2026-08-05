@@ -177,6 +177,13 @@ change.
   - **Entries are clickable**: click navigates to `/orders/:id` using `entry.orderUuid` (`order_history.order_id`, which is the same UUID `readOrder()` expects) and closes the popover; entries whose order couldn't be resolved (`orderUuid` empty) no-op rather than navigating to a broken route.
   - `npm run build` ✓, `npm run lint` ✓. Smoke-tested via dev server (all changed files transform cleanly).
 
+- **Dark mode toggle + logo theming (2026-08-05):**
+  - **`src/hooks/theme-context.ts` / `useTheme.ts` / `ThemeProvider.tsx`**: new theme context following the exact `SidebarProvider`/`useSidebar` split pattern (context/hook/provider in separate files to satisfy react-refresh/only-export-components). Persists `'light' | 'dark'` to `localStorage` key `ipp_theme`; falls back to `prefers-color-scheme` on first visit (no stored value); applies `data-theme` on `document.documentElement` via `useEffect`. `App.tsx` wraps the whole tree (including `/login`, outside `AuthProvider`) in `<ThemeProvider>` so theme persists across auth state.
+  - **Missing dark-token overrides filled in** (`src/styles/tokens.css` `[data-theme='dark']` block): `--bg-surface-hover-dark`, `--bg-muted`, `--accent-primary-light`, `--accent-secondary`, `--state-error/success/warning/info`, `--notification-accent` — these existed as light-only values before and were unchanged in dark mode. `context/ui-context.md`'s Dark Theme color table updated to match.
+  - **Sidebar toggle**: new icon-only `Button` next to the existing collapse-toggle button (same `variant="tertiary"` / styling pattern), sun icon (`hugeicons:sun-01`) shown in dark mode, moon icon (`hugeicons:moon-02`) in light mode — both added to `src/components/Icon/icons.ts`'s `ICONS` registry.
+  - **Logo dark-mode fix**: the brand mark's black paths were hardcoded `#030303` in `src/assets/logo.svg`, rendered via `<img src={logo}>` — an `<img>` can't read page CSS variables, so it stayed black in dark mode. Fixed by adding `src/components/Logo/Logo.tsx`, an inline-JSX SVG component with the two black paths using `fill="var(--logo-mark)"` (new token: `#030303` light / `#FFFFFF` dark) and the brand-red paths kept as literal `#EC1C25` (brand color, not theme-dependent). Replaces the `<img>` in `Sidebar.tsx` and `Login.tsx`; `src/assets/logo.svg` itself is left in place (still referenced by history/docs) but no longer imported by any live component.
+  - `tsc --noEmit` ✓, `eslint` on changed files ✓.
+
 ## In Progress
 
 - None

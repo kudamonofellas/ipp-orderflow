@@ -18,8 +18,8 @@ interface OpenOrdersPanelProps {
 }
 
 const SORT_OPTIONS = [
-  { key: "-order_id", label: "Order ID (Desc)" },
-  { key: "order_id", label: "Order ID (Asc)" },
+  { key: "-no", label: "Order ID (Desc)" },
+  { key: "no", label: "Order ID (Asc)" },
   { key: "-delivery_date", label: "Delivery Date (Desc)" },
   { key: "delivery_date", label: "Delivery Date (Asc)" },
 ];
@@ -33,7 +33,7 @@ export function OpenOrdersPanel({
   page = 1,
   pageSize = 20,
   onPageChange,
-  sortBy = "-order_id",
+  sortBy = "-no",
   onSortChange,
 }: OpenOrdersPanelProps) {
   const [sortOpen, setSortOpen] = useState(false);

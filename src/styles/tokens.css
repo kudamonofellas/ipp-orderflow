@@ -9,8 +9,8 @@
 
 :root {
   /* ===== Typography ===== */
-  --font-sans: 'Outfit', system-ui, 'Segoe UI', Roboto, sans-serif;
-  --font-mono: 'Source Code Pro', ui-monospace, Consolas, monospace;
+  --font-sans: "Outfit", system-ui, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "Source Code Pro", ui-monospace, Consolas, monospace;
 
   /* Type scale */
   --text-page-title: 600 28px/1.3 var(--font-sans);
@@ -78,6 +78,8 @@
 
   --notification-accent: #ef4444;
 
+  --logo-mark: #030303;
+
   /* ===== Shadows ===== */
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
@@ -112,7 +114,7 @@
 }
 
 /* ===== Dark Theme ===== */
-[data-theme='dark'] {
+[data-theme="dark"] {
   --bg-base: #0f1419;
   --bg-surface: #1a1d1f;
   --bg-surface-hover: #24272a;
@@ -121,15 +123,30 @@
   --text-secondary: #9ca3af;
   --text-muted: #6c757d;
 
-  --accent-primary: #2b7a8f;
+  --accent-primary: #57b3cd;
   --accent-primary-dark: #1e4d5c;
   --text-on-accent: #ffffff;
 
   --border-default: #2c3035;
   --border-subtle: #24272a;
 
+  --bg-surface-hover-dark: #16333d;
+  --bg-muted: #1c2226;
+
+  --accent-primary-light: #4db8dd;
+  --accent-secondary: #4a5fb8;
+
+  --state-error: #f87171;
+  --state-success: #34d399;
+  --state-warning: #fbbf24;
+  --state-info: #60a5fa;
+
   --bg-badge: #1e1b4b;
   --text-badge: #a5b4fc;
+
+  --notification-accent: #f87171;
+
+  --logo-mark: #ffffff;
 
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.4);
@@ -140,7 +157,6 @@
 
 /* ===== Reduced motion ===== */
 @media (prefers-reduced-motion: reduce) {
-
   *,
   *::before,
   *::after {

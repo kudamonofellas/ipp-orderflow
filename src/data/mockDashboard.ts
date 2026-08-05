@@ -56,7 +56,6 @@ export const openOrders: OpenOrder[] = [
   {
     id: 'o1',
     no: '260701019',
-    orderId: '260701019',
     status: 'Open',
     orderDate: 'July 1st, 2026',
     deliveryDate: 'July 1st, 2026',
@@ -71,7 +70,6 @@ export const openOrders: OpenOrder[] = [
   {
     id: 'o2',
     no: '260628005',
-    orderId: '260628005',
     status: 'Open',
     orderDate: 'July 1st, 2026',
     deliveryDate: 'July 1st, 2026',

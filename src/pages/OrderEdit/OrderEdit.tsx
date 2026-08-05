@@ -145,7 +145,7 @@ export function OrderEdit() {
       // Populate form state
       setCustomerName(loadedOrder?.customer_name ?? "");
       setCustomerId(loadedOrder?.customer_id ?? null);
-      setOrderNo(loadedOrder?.order_id ?? "");
+      setOrderNo(loadedOrder?.no ?? "");
       setCompany(loadedOrder?.customer_legal_name ?? "");
       setCustomerAddress(loadedOrder?.customer_address ?? "");
       setDeliverDate(formatDateInput(loadedOrder?.deliver_at));
@@ -235,8 +235,8 @@ export function OrderEdit() {
   function buildEditSummary(): string {
     const changes: string[] = [];
 
-    if ((order?.order_id ?? "").trim() !== orderNo.trim()) {
-      changes.push(`Order No. ${order?.order_id || "—"}→${orderNo || "—"}`);
+    if ((order?.no ?? "").trim() !== orderNo.trim()) {
+      changes.push(`Order No. ${order?.no || "—"}→${orderNo || "—"}`);
     }
     if ((order?.customer_name ?? "").trim() !== customerName.trim()) {
       changes.push(
@@ -347,8 +347,8 @@ export function OrderEdit() {
 
     try {
       const orderPatch: Record<string, unknown> = {};
-      if (orderNo.trim() !== (order.order_id ?? ""))
-        orderPatch.order_id = orderNo.trim();
+      if (orderNo.trim() !== (order.no ?? ""))
+        orderPatch.no = orderNo.trim();
       if (customerName.trim() !== (order.customer_name ?? ""))
         orderPatch.customer_name = customerName.trim();
       if (customerId !== order.customer_id) orderPatch.customer_id = customerId;
@@ -487,7 +487,7 @@ export function OrderEdit() {
               >
                 Back to order
               </Button>
-              <h2 className={styles.title}>Order {order.order_id}</h2>
+              <h2 className={styles.title}>Order {order.no}</h2>
             </div>
             <div className={styles.actions}>
               <Button

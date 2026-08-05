@@ -16,12 +16,14 @@ import { z } from "zod";
  *
  * Extended with the target-schema fields (no, customer_id, stage, channel,
  * sales, deliver_at, taken_by, return/payment flags). Legacy fields
- * (order_id, status, customer_name, order_items, …) stay optional so reads
+ * (status, customer_name, order_items, …) stay optional so reads
  * that don't select the new fields still validate.
+ *
+ * `no` is the single order-number field — the legacy duplicate `order_id`
+ * column has been retired from the app (see context/schema/target-db-schema.md).
  */
 export const OrdersCollectionSchema = z.object({
   id: z.string(),
-  order_id: z.string().nullable().optional(),
   no: z.string().nullable().optional(),
   customer_id: z.string().nullable().optional(),
   taken_by: z.string().nullable().optional(),

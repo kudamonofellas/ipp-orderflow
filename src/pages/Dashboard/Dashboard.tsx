@@ -30,7 +30,7 @@ const METRIC_ICONS: Record<string, IconName> = {
 /** Admin dashboard — mirrors context/designs/Dashboard.png. */
 export function Dashboard() {
   const navigate = useNavigate();
-  const [sortBy, setSortBy] = useState('-order_id');
+  const [sortBy, setSortBy] = useState('-no');
   const [totalRange, setTotalRange] = useState<RangeWithLabel>({ val: { type: 'today' }, label: 'Today' });
   const [deliveredRange, setDeliveredRange] = useState<RangeWithLabel>({ val: { type: 'today' }, label: 'Today' });
   const [cancelledRange, setCancelledRange] = useState<RangeWithLabel>({ val: { type: 'today' }, label: 'Today' });
@@ -64,7 +64,7 @@ export function Dashboard() {
 
   function handleParsed(draft: ParsedOrderDraft, rawText: string, attachments: File[]) {
     setOrderStep(0); // close the intake modal
-    navigate('/orders/new', { state: { prefill: draft, rawText, attachments } });
+    navigate('/orders/new', { state: { prefill: draft, rawText, attachments, from: '/' } });
   }
 
   const isLoading = ordersLoading || countsLoading || attentionLoading;

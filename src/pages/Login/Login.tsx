@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth";
 import { Button } from "../../components/Button/Button";
-import logo from "../../assets/logo.svg";
+import { Logo } from "../../components/Logo/Logo";
 import styles from "./Login.module.css";
 
 /**
@@ -30,7 +30,7 @@ export function Login() {
     <div className={styles.page}>
       <div className={styles.card}>
         <div className={styles.brand}>
-          <img src={logo} alt="" className={styles.logo} aria-hidden="true" />
+          <Logo className={styles.logo} />
           <span className={styles.brandName}>
             Inti Pangan
             <br />

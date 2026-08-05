@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { AppLayout } from './layouts/AppLayout/AppLayout';
 import { SidebarProvider } from './layouts/Sidebar/Sidebar';
 import { AuthProvider } from './hooks/RoleContext';
+import { ThemeProvider } from './hooks/ThemeProvider';
 import { useAuth } from './hooks/useAuth';
 import { Customers } from './pages/Customers/Customers';
 import { CustomerDetail } from './pages/CustomerDetail/CustomerDetail';
@@ -43,6 +44,7 @@ function LoginRoute() {
 
 export default function App() {
   return (
+    <ThemeProvider>
     <AuthProvider>
       <BrowserRouter>
         <Routes>
@@ -74,6 +76,7 @@ export default function App() {
         </Routes>
       </BrowserRouter>
     </AuthProvider>
+    </ThemeProvider>
   );
 }
 
