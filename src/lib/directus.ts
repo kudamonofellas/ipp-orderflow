@@ -31,7 +31,7 @@ import {
   deleteItem,
   uploadFiles,
   readUsers,
-} from '@directus/sdk';
+} from "@directus/sdk";
 import {
   CustomersCollectionSchema,
   CustomersCollectionArraySchema,
@@ -55,8 +55,8 @@ import {
   LinePhotosCollectionSchema,
   LinePhotosCollectionArraySchema,
   LineWeighingPhotosCollectionSchema,
-  LineWeighingPhotosCollectionArraySchema
-} from './schemas';
+  LineWeighingPhotosCollectionArraySchema,
+} from "./schemas";
 import type {
   CorrectionsCollection,
   CustomersCollection,
@@ -70,19 +70,16 @@ import type {
   LineCutsCollection,
   LineWeighingsCollection,
   LinePhotosCollection,
-  LineWeighingPhotosCollection
-} from '../types/directus';
-import {
-  buildOrderNo,
-  parseOrderNo
-} from './orderNo';
+  LineWeighingPhotosCollection,
+} from "../types/directus";
+import { buildOrderNo, parseOrderNo } from "./orderNo";
 
 const url = import.meta.env.VITE_DIRECTUS_URL;
 const staticTokenValue = import.meta.env.VITE_DIRECTUS_TOKEN;
 
 if (!url) {
   throw new Error(
-    'VITE_DIRECTUS_URL is not set. Copy .env.example to .env and fill it in.',
+    "VITE_DIRECTUS_URL is not set. Copy .env.example to .env and fill it in.",
   );
 }
 
@@ -97,7 +94,7 @@ if (!url) {
  * This is auth state only — no business data (orders, customers, etc.) is
  * stored here, so architecture.md invariant #2 is not violated.
  */
-const SESSION_KEY = 'ipp_auth_tokens';
+const SESSION_KEY = "ipp_auth_tokens";
 
 interface AuthTokens {
   access_token: string | null;
@@ -147,7 +144,9 @@ const localAuthStorage = {
  *   configured with a long-lived static token (early read-only wiring).
  */
 const authClient = createDirectus(url)
-  .with(authentication('json', { storage: localAuthStorage, autoRefresh: false }))
+  .with(
+    authentication("json", { storage: localAuthStorage, autoRefresh: false }),
+  )
   .with(rest());
 
 const tokenClient = staticTokenValue
@@ -196,8 +195,8 @@ export async function login(
     }
     return {
       data: {
-        access_token: result.access_token ?? '',
-        refresh_token: result.refresh_token ?? '',
+        access_token: result.access_token ?? "",
+        refresh_token: result.refresh_token ?? "",
         expires: result.expires ?? 0,
       },
       error: null,
@@ -238,8 +237,15 @@ export interface DirectusUser {
 export async function readMe(): Promise<DirectusResult<DirectusUser>> {
   try {
     const raw = await authClient.request(
-      readUser('me', {
-        fields: ['id', 'first_name', 'last_name', 'email', 'role.id', 'role.name'],
+      readUser("me", {
+        fields: [
+          "id",
+          "first_name",
+          "last_name",
+          "email",
+          "role.id",
+          "role.name",
+        ],
       }),
     );
     const user = raw as unknown as DirectusUser;
@@ -252,7 +258,7 @@ export async function readMe(): Promise<DirectusResult<DirectusUser>> {
 /** True if the auth client currently holds a valid (non-expired) access token. */
 export function hasToken(): boolean {
   const t = authClient.getToken() as unknown;
-  if (typeof t === 'string' && (t as string).length > 0) return true;
+  if (typeof t === "string" && (t as string).length > 0) return true;
   // Fall back to localStorage (the SDK may not have rehydrated into memory yet)
   try {
     const raw = localStorage.getItem(SESSION_KEY);
@@ -292,7 +298,7 @@ export function clearAuthStorage(): void {
  */
 export function getAccessTokenSync(): string | null {
   const t = authClient.getToken() as unknown;
-  if (typeof t === 'string' && t.length > 0) return t;
+  if (typeof t === "string" && t.length > 0) return t;
   try {
     const raw = localStorage.getItem(SESSION_KEY);
     if (!raw) return null;
@@ -318,10 +324,13 @@ export async function readOrders(
   query: DirectusQuery,
 ): Promise<DirectusResult<OrdersCollection[]>> {
   try {
-    const raw = await getClient().request(readItems('orders', query));
+    const raw = await getClient().request(readItems("orders", query));
     const parsed = OrdersCollectionArraySchema.safeParse(raw);
     if (!parsed.success) {
-      return { data: null, error: `Invalid orders response: ${parsed.error.message}` };
+      return {
+        data: null,
+        error: `Invalid orders response: ${parsed.error.message}`,
+      };
     }
     return { data: parsed.data, error: null };
   } catch (err) {
@@ -335,10 +344,13 @@ export async function readOrder(
   query: DirectusQuery = {},
 ): Promise<DirectusResult<OrdersCollection>> {
   try {
-    const raw = await getClient().request(readItem('orders', id, query));
+    const raw = await getClient().request(readItem("orders", id, query));
     const parsed = OrdersCollectionSchema.safeParse(raw);
     if (!parsed.success) {
-      return { data: null, error: `Invalid order response: ${parsed.error.message}` };
+      return {
+        data: null,
+        error: `Invalid order response: ${parsed.error.message}`,
+      };
     }
     return { data: parsed.data, error: null };
   } catch (err) {
@@ -351,10 +363,13 @@ export async function readMessages(
   query: DirectusQuery,
 ): Promise<DirectusResult<MessagesCollection[]>> {
   try {
-    const raw = await getClient().request(readItems('messages', query));
+    const raw = await getClient().request(readItems("messages", query));
     const parsed = MessagesCollectionArraySchema.safeParse(raw);
     if (!parsed.success) {
-      return { data: null, error: `Invalid messages response: ${parsed.error.message}` };
+      return {
+        data: null,
+        error: `Invalid messages response: ${parsed.error.message}`,
+      };
     }
     return { data: parsed.data, error: null };
   } catch (err) {
@@ -367,10 +382,13 @@ export async function readCustomers(
   query: DirectusQuery = {},
 ): Promise<DirectusResult<CustomersCollection[]>> {
   try {
-    const raw = await getClient().request(readItems('customers', query));
+    const raw = await getClient().request(readItems("customers", query));
     const parsed = CustomersCollectionArraySchema.safeParse(raw);
     if (!parsed.success) {
-      return { data: null, error: `Invalid customers response: ${parsed.error.message}` };
+      return {
+        data: null,
+        error: `Invalid customers response: ${parsed.error.message}`,
+      };
     }
     return { data: parsed.data, error: null };
   } catch (err) {
@@ -383,10 +401,13 @@ export async function readProducts(
   query: DirectusQuery = {},
 ): Promise<DirectusResult<ProductsCollection[]>> {
   try {
-    const raw = await getClient().request(readItems('products', query));
+    const raw = await getClient().request(readItems("products", query));
     const parsed = ProductsCollectionArraySchema.safeParse(raw);
     if (!parsed.success) {
-      return { data: null, error: `Invalid products response: ${parsed.error.message}` };
+      return {
+        data: null,
+        error: `Invalid products response: ${parsed.error.message}`,
+      };
     }
     return { data: parsed.data, error: null };
   } catch (err) {
@@ -399,10 +420,13 @@ export async function readOrderLines(
   query: DirectusQuery,
 ): Promise<DirectusResult<OrderLinesCollection[]>> {
   try {
-    const raw = await getClient().request(readItems('order_lines', query));
+    const raw = await getClient().request(readItems("order_lines", query));
     const parsed = OrderLinesCollectionArraySchema.safeParse(raw);
     if (!parsed.success) {
-      return { data: null, error: `Invalid order_lines response: ${parsed.error.message}` };
+      return {
+        data: null,
+        error: `Invalid order_lines response: ${parsed.error.message}`,
+      };
     }
     return { data: parsed.data, error: null };
   } catch (err) {
@@ -423,7 +447,20 @@ export async function aggregateOrders(
   query: DirectusQuery,
 ): Promise<DirectusResult<AggregateCountRow[]>> {
   try {
-    const raw = await getClient().request(aggregate('orders', query as never));
+    // The @directus/sdk aggregate() composable expects filter/sort/limit/etc.
+    // nested under a `query` key — { aggregate, groupBy, query: { filter } } —
+    // NOT as top-level siblings of `aggregate`/`groupBy`. Callers here pass
+    // { filter, aggregate, groupBy } for convenience; reshape it before
+    // handing off to the SDK, or `filter` is silently dropped and every
+    // aggregate call returns the unfiltered collection-wide count.
+    const { aggregate: aggregateOpts, groupBy, ...rest } = query;
+    const raw = await getClient().request(
+      aggregate("orders", {
+        aggregate: aggregateOpts,
+        ...(groupBy !== undefined ? { groupBy } : {}),
+        ...(Object.keys(rest).length > 0 ? { query: rest } : {}),
+      } as never),
+    );
     const rows = Array.isArray(raw) ? (raw as AggregateCountRow[]) : [];
     return { data: rows, error: null };
   } catch (err) {
@@ -440,7 +477,9 @@ export async function aggregateCustomers(
   query: DirectusQuery,
 ): Promise<DirectusResult<AggregateCountRow[]>> {
   try {
-    const raw = await getClient().request(aggregate('customers', query as never));
+    const raw = await getClient().request(
+      aggregate("customers", query as never),
+    );
     const rows = Array.isArray(raw) ? (raw as AggregateCountRow[]) : [];
     return { data: rows, error: null };
   } catch (err) {
@@ -457,7 +496,9 @@ export async function aggregateProducts(
   query: DirectusQuery,
 ): Promise<DirectusResult<AggregateCountRow[]>> {
   try {
-    const raw = await getClient().request(aggregate('products', query as never));
+    const raw = await getClient().request(
+      aggregate("products", query as never),
+    );
     const rows = Array.isArray(raw) ? (raw as AggregateCountRow[]) : [];
     return { data: rows, error: null };
   } catch (err) {
@@ -473,11 +514,13 @@ export async function aggregateProducts(
  * still rely on the DB UNIQUE constraint to catch a race; on conflict we
  * surface the error to the form.
  */
-export async function getNextOrderNo(dateCode: string): Promise<DirectusResult<string>> {
+export async function getNextOrderNo(
+  dateCode: string,
+): Promise<DirectusResult<string>> {
   try {
     const raw = await getClient().request(
-      readItems('orders', {
-        fields: ['no'],
+      readItems("orders", {
+        fields: ["no"],
         filter: { no: { _starts_with: dateCode } },
         limit: -1,
       }),
@@ -486,7 +529,10 @@ export async function getNextOrderNo(dateCode: string): Promise<DirectusResult<s
     const used = new Set(
       rows
         .map((r) => (r.no ? parseOrderNo(r.no) : null))
-        .filter((p): p is { dateCode: string; seq: number } => !!p && p.dateCode === dateCode)
+        .filter(
+          (p): p is { dateCode: string; seq: number } =>
+            !!p && p.dateCode === dateCode,
+        )
         .map((p) => p.seq),
     );
     let seq = 1;
@@ -521,10 +567,13 @@ export async function createOrder(
   input: CreateOrderInput,
 ): Promise<DirectusResult<OrdersCollection>> {
   try {
-    const raw = await getClient().request(createItem('orders', input as never));
+    const raw = await getClient().request(createItem("orders", input as never));
     const parsed = OrdersCollectionSchema.safeParse(raw);
     if (!parsed.success) {
-      return { data: null, error: `Invalid order response: ${parsed.error.message}` };
+      return {
+        data: null,
+        error: `Invalid order response: ${parsed.error.message}`,
+      };
     }
     return { data: parsed.data, error: null };
   } catch (err) {
@@ -549,12 +598,22 @@ export async function createOrderLines(
 ): Promise<DirectusResult<OrderLinesCollection[]>> {
   try {
     const cleanLines = lines.map((l) =>
-      sanitizeUuidFields(l as unknown as Record<string, unknown>, ['product_id', 'order_id', 'weigh_photo', 'returned_weigh_photo'])
+      sanitizeUuidFields(l as unknown as Record<string, unknown>, [
+        "product_id",
+        "order_id",
+        "weigh_photo",
+        "returned_weigh_photo",
+      ]),
     );
-    const raw = await getClient().request(createItems('order_lines', cleanLines as never));
+    const raw = await getClient().request(
+      createItems("order_lines", cleanLines as never),
+    );
     const parsed = OrderLinesCollectionArraySchema.safeParse(raw);
     if (!parsed.success) {
-      return { data: null, error: `Invalid order_lines response: ${parsed.error.message}` };
+      return {
+        data: null,
+        error: `Invalid order_lines response: ${parsed.error.message}`,
+      };
     }
     return { data: parsed.data, error: null };
   } catch (err) {
@@ -575,10 +634,15 @@ export async function appendOrderHistory(
   input: CreateOrderHistoryInput,
 ): Promise<DirectusResult<OrderHistoryCollection>> {
   try {
-    const raw = await getClient().request(createItem('order_history', input as never));
+    const raw = await getClient().request(
+      createItem("order_history", input as never),
+    );
     const parsed = OrderHistoryCollectionSchema.safeParse(raw);
     if (!parsed.success) {
-      return { data: null, error: `Invalid order_history response: ${parsed.error.message}` };
+      return {
+        data: null,
+        error: `Invalid order_history response: ${parsed.error.message}`,
+      };
     }
     return { data: parsed.data, error: null };
   } catch (err) {
@@ -592,15 +656,37 @@ export async function readOrderHistory(
 ): Promise<DirectusResult<OrderHistoryCollection[]>> {
   try {
     const raw = await getClient().request(
-      readItems('order_history', {
+      readItems("order_history", {
         filter: { order_id: { _eq: orderId } } as never,
-        sort: ['at'] as never,
+        sort: ["at"] as never,
         limit: -1,
       }),
     );
     const parsed = OrderHistoryCollectionArraySchema.safeParse(raw);
     if (!parsed.success) {
-      return { data: null, error: `Invalid order_history response: ${parsed.error.message}` };
+      return {
+        data: null,
+        error: `Invalid order_history response: ${parsed.error.message}`,
+      };
+    }
+    return { data: parsed.data, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+/** Read order_history rows across ALL orders (dashboard activity feed), validated through zod. */
+export async function readOrderHistoryFeed(
+  query: DirectusQuery = {},
+): Promise<DirectusResult<OrderHistoryCollection[]>> {
+  try {
+    const raw = await getClient().request(readItems("order_history", query));
+    const parsed = OrderHistoryCollectionArraySchema.safeParse(raw);
+    if (!parsed.success) {
+      return {
+        data: null,
+        error: `Invalid order_history response: ${parsed.error.message}`,
+      };
     }
     return { data: parsed.data, error: null };
   } catch (err) {
@@ -611,11 +697,17 @@ export async function readOrderHistory(
 export async function readAllUsers(): Promise<DirectusResult<UserBrief[]>> {
   try {
     const raw = await getClient().request(
-      readUsers({ fields: ['id', 'first_name', 'last_name', 'email'], limit: -1 } as never),
+      readUsers({
+        fields: ["id", "first_name", "last_name", "email"],
+        limit: -1,
+      } as never),
     );
     const parsed = UserBriefArraySchema.safeParse(raw);
     if (!parsed.success) {
-      return { data: null, error: `Invalid users response: ${parsed.error.message}` };
+      return {
+        data: null,
+        error: `Invalid users response: ${parsed.error.message}`,
+      };
     }
     return { data: parsed.data, error: null };
   } catch (err) {
@@ -635,15 +727,18 @@ export async function readAttachments(
 ): Promise<DirectusResult<AttachmentsCollection[]>> {
   try {
     const raw = await getClient().request(
-      readItems('attachments', {
+      readItems("attachments", {
         filter: { order_uuid: { _eq: orderId } } as never,
-        sort: ['-created_at'] as never,
+        sort: ["-created_at"] as never,
         limit: -1,
       }),
     );
     const parsed = AttachmentsCollectionArraySchema.safeParse(raw);
     if (!parsed.success) {
-      return { data: null, error: `Invalid attachments response: ${parsed.error.message}` };
+      return {
+        data: null,
+        error: `Invalid attachments response: ${parsed.error.message}`,
+      };
     }
     return { data: parsed.data, error: null };
   } catch (err) {
@@ -657,26 +752,29 @@ export async function readAttachments(
  * WhatsApp-sourced attachments.
  */
 
-
-
 export interface CreateAttachmentInput {
   order_uuid: string;
-  doc_type: string;        // 'DO' | 'SI' | 'Return Note' | 'Other'
-  number?: string;         // document number e.g. "DO-2026-0042"
-  note?: string;           // admin free-text note
-  label?: string;          // display label e.g. "Signed Invoice"
-  document_file?: string;  // uuid from directus_files after uploadFile()
-  created_by?: string;     // directus user uuid from useCurrentUserId()
+  doc_type: string; // 'DO' | 'SI' | 'Return Note' | 'Other'
+  number?: string; // document number e.g. "DO-2026-0042"
+  note?: string; // admin free-text note
+  label?: string; // display label e.g. "Signed Invoice"
+  document_file?: string; // uuid from directus_files after uploadFile()
+  created_by?: string; // directus user uuid from useCurrentUserId()
 }
 
 export async function createAttachment(
   input: CreateAttachmentInput,
 ): Promise<DirectusResult<AttachmentsCollection>> {
   try {
-    const raw = await getClient().request(createItem('attachments', input as never));
+    const raw = await getClient().request(
+      createItem("attachments", input as never),
+    );
     const parsed = AttachmentsCollectionSchema.safeParse(raw);
     if (!parsed.success) {
-      return { data: null, error: `Invalid attachment response: ${parsed.error.message}` };
+      return {
+        data: null,
+        error: `Invalid attachment response: ${parsed.error.message}`,
+      };
     }
     return { data: parsed.data, error: null };
   } catch (err) {
@@ -684,9 +782,11 @@ export async function createAttachment(
   }
 }
 
-export async function deleteAttachment(id: number | string): Promise<DirectusResult<void>> {
+export async function deleteAttachment(
+  id: number | string,
+): Promise<DirectusResult<void>> {
   try {
-    await getClient().request(deleteItem('attachments', id));
+    await getClient().request(deleteItem("attachments", id));
     return { data: undefined, error: null };
   } catch (err) {
     return { data: null, error: errMsg(err) };
@@ -703,12 +803,12 @@ export async function uploadFile(
 ): Promise<DirectusResult<{ id: string }>> {
   try {
     const formData = new FormData();
-    formData.append('file', file);
-    if (folder) formData.append('folder', folder);
+    formData.append("file", file);
+    if (folder) formData.append("folder", folder);
     const raw = await getClient().request(uploadFiles(formData));
     const result = raw as unknown as { id: string };
     if (!result?.id) {
-      return { data: null, error: 'File upload returned no id' };
+      return { data: null, error: "File upload returned no id" };
     }
     return { data: { id: result.id }, error: null };
   } catch (err) {
@@ -717,10 +817,16 @@ export async function uploadFile(
 }
 
 function isUuid(val: unknown): boolean {
-  return typeof val === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+  return (
+    typeof val === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val)
+  );
 }
 
-function sanitizeUuidFields<T extends Record<string, unknown>>(obj: T, fields: string[]): T {
+function sanitizeUuidFields<T extends Record<string, unknown>>(
+  obj: T,
+  fields: string[],
+): T {
   const copy = { ...obj };
   for (const f of fields) {
     if (f in copy) {
@@ -739,11 +845,16 @@ export async function updateOrder(
   patch: Record<string, unknown>,
 ): Promise<DirectusResult<OrdersCollection>> {
   try {
-    const cleanPatch = sanitizeUuidFields(patch, ['customer_id', 'taken_by']);
-    const raw = await getClient().request(updateItem('orders', id, cleanPatch as never));
+    const cleanPatch = sanitizeUuidFields(patch, ["customer_id", "taken_by"]);
+    const raw = await getClient().request(
+      updateItem("orders", id, cleanPatch as never),
+    );
     const parsed = OrdersCollectionSchema.safeParse(raw);
     if (!parsed.success) {
-      return { data: null, error: `Invalid order response: ${parsed.error.message}` };
+      return {
+        data: null,
+        error: `Invalid order response: ${parsed.error.message}`,
+      };
     }
     return { data: parsed.data, error: null };
   } catch (err) {
@@ -756,11 +867,21 @@ export async function updateOrderLine(
   patch: Record<string, unknown>,
 ): Promise<DirectusResult<OrderLinesCollection>> {
   try {
-    const cleanPatch = sanitizeUuidFields(patch, ['product_id', 'order_id', 'weigh_photo', 'returned_weigh_photo']);
-    const raw = await getClient().request(updateItem('order_lines', id, cleanPatch as never));
+    const cleanPatch = sanitizeUuidFields(patch, [
+      "product_id",
+      "order_id",
+      "weigh_photo",
+      "returned_weigh_photo",
+    ]);
+    const raw = await getClient().request(
+      updateItem("order_lines", id, cleanPatch as never),
+    );
     const parsed = OrderLinesCollectionSchema.safeParse(raw);
     if (!parsed.success) {
-      return { data: null, error: `Invalid order_line response: ${parsed.error.message}` };
+      return {
+        data: null,
+        error: `Invalid order_line response: ${parsed.error.message}`,
+      };
     }
     return { data: parsed.data, error: null };
   } catch (err) {
@@ -772,11 +893,19 @@ export async function createOrderLine(
   input: CreateOrderLineInput,
 ): Promise<DirectusResult<OrderLinesCollection>> {
   try {
-    const cleanInput = sanitizeUuidFields(input as unknown as Record<string, unknown>, ['product_id', 'order_id', 'weigh_photo', 'returned_weigh_photo']);
-    const raw = await getClient().request(createItem('order_lines', cleanInput as never));
+    const cleanInput = sanitizeUuidFields(
+      input as unknown as Record<string, unknown>,
+      ["product_id", "order_id", "weigh_photo", "returned_weigh_photo"],
+    );
+    const raw = await getClient().request(
+      createItem("order_lines", cleanInput as never),
+    );
     const parsed = OrderLinesCollectionSchema.safeParse(raw);
     if (!parsed.success) {
-      return { data: null, error: `Invalid order_line response: ${parsed.error.message}` };
+      return {
+        data: null,
+        error: `Invalid order_line response: ${parsed.error.message}`,
+      };
     }
     return { data: parsed.data, error: null };
   } catch (err) {
@@ -784,9 +913,11 @@ export async function createOrderLine(
   }
 }
 
-export async function deleteOrderLine(id: string): Promise<DirectusResult<void>> {
+export async function deleteOrderLine(
+  id: string,
+): Promise<DirectusResult<void>> {
   try {
-    await getClient().request(deleteItem('order_lines', id));
+    await getClient().request(deleteItem("order_lines", id));
     return { data: undefined, error: null };
   } catch (err) {
     return { data: null, error: errMsg(err) };
@@ -800,15 +931,18 @@ export async function readLineCuts(
   if (lineIds.length === 0) return { data: [], error: null };
   try {
     const raw = await getClient().request(
-      readItems('line_cuts', {
+      readItems("line_cuts", {
         filter: { line_id: { _in: lineIds } } as never,
-        sort: ['sort_order'] as never,
+        sort: ["sort_order"] as never,
         limit: -1,
       }),
     );
     const parsed = LineCutsCollectionArraySchema.safeParse(raw);
     if (!parsed.success) {
-      return { data: null, error: `Invalid line_cuts response: ${parsed.error.message}` };
+      return {
+        data: null,
+        error: `Invalid line_cuts response: ${parsed.error.message}`,
+      };
     }
     return { data: parsed.data, error: null };
   } catch (err) {
@@ -816,14 +950,21 @@ export async function readLineCuts(
   }
 }
 
-export async function createLineCut(
-  input: { line_id: string; text: string; sort_order?: number },
-): Promise<DirectusResult<LineCutsCollection>> {
+export async function createLineCut(input: {
+  line_id: string;
+  text: string;
+  sort_order?: number;
+}): Promise<DirectusResult<LineCutsCollection>> {
   try {
-    const raw = await getClient().request(createItem('line_cuts', input as never));
+    const raw = await getClient().request(
+      createItem("line_cuts", input as never),
+    );
     const parsed = LineCutsCollectionSchema.safeParse(raw);
     if (!parsed.success) {
-      return { data: null, error: `Invalid line_cuts response: ${parsed.error.message}` };
+      return {
+        data: null,
+        error: `Invalid line_cuts response: ${parsed.error.message}`,
+      };
     }
     return { data: parsed.data, error: null };
   } catch (err) {
@@ -836,10 +977,15 @@ export async function updateLineCut(
   patch: Partial<{ text: string; done: boolean; sort_order: number }>,
 ): Promise<DirectusResult<LineCutsCollection>> {
   try {
-    const raw = await getClient().request(updateItem('line_cuts', id, patch as never));
+    const raw = await getClient().request(
+      updateItem("line_cuts", id, patch as never),
+    );
     const parsed = LineCutsCollectionSchema.safeParse(raw);
     if (!parsed.success) {
-      return { data: null, error: `Invalid line_cuts response: ${parsed.error.message}` };
+      return {
+        data: null,
+        error: `Invalid line_cuts response: ${parsed.error.message}`,
+      };
     }
     return { data: parsed.data, error: null };
   } catch (err) {
@@ -849,7 +995,7 @@ export async function updateLineCut(
 
 export async function deleteLineCut(id: string): Promise<DirectusResult<void>> {
   try {
-    await getClient().request(deleteItem('line_cuts', id));
+    await getClient().request(deleteItem("line_cuts", id));
     return { data: undefined, error: null };
   } catch (err) {
     return { data: null, error: errMsg(err) };
@@ -862,27 +1008,39 @@ export async function readLineWeighings(
   if (lineIds.length === 0) return { data: [], error: null };
   try {
     const raw = await getClient().request(
-      readItems('line_weighings', {
+      readItems("line_weighings", {
         filter: { line_id: { _in: lineIds } } as never,
-        sort: ['created_at'] as never,
+        sort: ["created_at"] as never,
         limit: -1,
       }),
     );
     const parsed = LineWeighingsCollectionArraySchema.safeParse(raw);
-    if (!parsed.success) return { data: null, error: `Invalid line_weighings response: ${parsed.error.message}` };
+    if (!parsed.success)
+      return {
+        data: null,
+        error: `Invalid line_weighings response: ${parsed.error.message}`,
+      };
     return { data: parsed.data, error: null };
   } catch (err) {
     return { data: null, error: errMsg(err) };
   }
 }
 
-export async function createLineWeighing(
-  input: { line_id: string; weight?: number | null; photo_id?: string | null },
-): Promise<DirectusResult<LineWeighingsCollection>> {
+export async function createLineWeighing(input: {
+  line_id: string;
+  weight?: number | null;
+  photo_id?: string | null;
+}): Promise<DirectusResult<LineWeighingsCollection>> {
   try {
-    const raw = await getClient().request(createItem('line_weighings', input as never));
+    const raw = await getClient().request(
+      createItem("line_weighings", input as never),
+    );
     const parsed = LineWeighingsCollectionSchema.safeParse(raw);
-    if (!parsed.success) return { data: null, error: `Invalid line_weighings response: ${parsed.error.message}` };
+    if (!parsed.success)
+      return {
+        data: null,
+        error: `Invalid line_weighings response: ${parsed.error.message}`,
+      };
     return { data: parsed.data, error: null };
   } catch (err) {
     return { data: null, error: errMsg(err) };
@@ -894,18 +1052,26 @@ export async function updateLineWeighing(
   patch: Partial<{ weight: number | null; photo_id: string | null }>,
 ): Promise<DirectusResult<LineWeighingsCollection>> {
   try {
-    const raw = await getClient().request(updateItem('line_weighings', id, patch as never));
+    const raw = await getClient().request(
+      updateItem("line_weighings", id, patch as never),
+    );
     const parsed = LineWeighingsCollectionSchema.safeParse(raw);
-    if (!parsed.success) return { data: null, error: `Invalid line_weighings response: ${parsed.error.message}` };
+    if (!parsed.success)
+      return {
+        data: null,
+        error: `Invalid line_weighings response: ${parsed.error.message}`,
+      };
     return { data: parsed.data, error: null };
   } catch (err) {
     return { data: null, error: errMsg(err) };
   }
 }
 
-export async function deleteLineWeighing(id: string): Promise<DirectusResult<void>> {
+export async function deleteLineWeighing(
+  id: string,
+): Promise<DirectusResult<void>> {
   try {
-    await getClient().request(deleteItem('line_weighings', id));
+    await getClient().request(deleteItem("line_weighings", id));
     return { data: undefined, error: null };
   } catch (err) {
     return { data: null, error: errMsg(err) };
@@ -918,36 +1084,50 @@ export async function readLinePhotos(
   if (lineIds.length === 0) return { data: [], error: null };
   try {
     const raw = await getClient().request(
-      readItems('line_photos', {
+      readItems("line_photos", {
         filter: { line_id: { _in: lineIds } } as never,
-        sort: ['sort_order'] as never,
+        sort: ["sort_order"] as never,
         limit: -1,
       }),
     );
     const parsed = LinePhotosCollectionArraySchema.safeParse(raw);
-    if (!parsed.success) return { data: null, error: `Invalid line_photos response: ${parsed.error.message}` };
+    if (!parsed.success)
+      return {
+        data: null,
+        error: `Invalid line_photos response: ${parsed.error.message}`,
+      };
     return { data: parsed.data, error: null };
   } catch (err) {
     return { data: null, error: errMsg(err) };
   }
 }
 
-export async function createLinePhoto(
-  input: { line_id: string; photo_id: string; sort_order?: number },
-): Promise<DirectusResult<LinePhotosCollection>> {
+export async function createLinePhoto(input: {
+  line_id: string;
+  photo_id: string;
+  sort_order?: number;
+}): Promise<DirectusResult<LinePhotosCollection>> {
   try {
-    const raw = await getClient().request(createItem('line_photos', input as never));
+    const raw = await getClient().request(
+      createItem("line_photos", input as never),
+    );
     const parsed = LinePhotosCollectionSchema.safeParse(raw);
-    if (!parsed.success) return { data: null, error: `Invalid line_photos response: ${parsed.error.message}` };
+    if (!parsed.success)
+      return {
+        data: null,
+        error: `Invalid line_photos response: ${parsed.error.message}`,
+      };
     return { data: parsed.data, error: null };
   } catch (err) {
     return { data: null, error: errMsg(err) };
   }
 }
 
-export async function deleteLinePhoto(id: string): Promise<DirectusResult<void>> {
+export async function deleteLinePhoto(
+  id: string,
+): Promise<DirectusResult<void>> {
   try {
-    await getClient().request(deleteItem('line_photos', id));
+    await getClient().request(deleteItem("line_photos", id));
     return { data: undefined, error: null };
   } catch (err) {
     return { data: null, error: errMsg(err) };
@@ -960,36 +1140,50 @@ export async function readLineWeighingPhotos(
   if (weighingIds.length === 0) return { data: [], error: null };
   try {
     const raw = await getClient().request(
-      readItems('line_weighing_photos', {
+      readItems("line_weighing_photos", {
         filter: { weighing_id: { _in: weighingIds } } as never,
-        sort: ['sort_order'] as never,
+        sort: ["sort_order"] as never,
         limit: -1,
       }),
     );
     const parsed = LineWeighingPhotosCollectionArraySchema.safeParse(raw);
-    if (!parsed.success) return { data: null, error: `Invalid line_weighing_photos response: ${parsed.error.message}` };
+    if (!parsed.success)
+      return {
+        data: null,
+        error: `Invalid line_weighing_photos response: ${parsed.error.message}`,
+      };
     return { data: parsed.data, error: null };
   } catch (err) {
     return { data: null, error: errMsg(err) };
   }
 }
 
-export async function createLineWeighingPhoto(
-  input: { weighing_id: string; photo_id: string; sort_order?: number },
-): Promise<DirectusResult<LineWeighingPhotosCollection>> {
+export async function createLineWeighingPhoto(input: {
+  weighing_id: string;
+  photo_id: string;
+  sort_order?: number;
+}): Promise<DirectusResult<LineWeighingPhotosCollection>> {
   try {
-    const raw = await getClient().request(createItem('line_weighing_photos', input as never));
+    const raw = await getClient().request(
+      createItem("line_weighing_photos", input as never),
+    );
     const parsed = LineWeighingPhotosCollectionSchema.safeParse(raw);
-    if (!parsed.success) return { data: null, error: `Invalid line_weighing_photos response: ${parsed.error.message}` };
+    if (!parsed.success)
+      return {
+        data: null,
+        error: `Invalid line_weighing_photos response: ${parsed.error.message}`,
+      };
     return { data: parsed.data, error: null };
   } catch (err) {
     return { data: null, error: errMsg(err) };
   }
 }
 
-export async function deleteLineWeighingPhoto(id: string): Promise<DirectusResult<void>> {
+export async function deleteLineWeighingPhoto(
+  id: string,
+): Promise<DirectusResult<void>> {
   try {
-    await getClient().request(deleteItem('line_weighing_photos', id));
+    await getClient().request(deleteItem("line_weighing_photos", id));
     return { data: undefined, error: null };
   } catch (err) {
     return { data: null, error: errMsg(err) };
@@ -1002,10 +1196,15 @@ export async function updateProduct(
   patch: Record<string, unknown>,
 ): Promise<DirectusResult<ProductsCollection>> {
   try {
-    const raw = await getClient().request(updateItem('products', id, patch as never));
+    const raw = await getClient().request(
+      updateItem("products", id, patch as never),
+    );
     const parsed = ProductsCollectionSchema.safeParse(raw);
     if (!parsed.success) {
-      return { data: null, error: `Invalid product response: ${parsed.error.message}` };
+      return {
+        data: null,
+        error: `Invalid product response: ${parsed.error.message}`,
+      };
     }
     return { data: parsed.data, error: null };
   } catch (err) {
@@ -1022,7 +1221,7 @@ export async function updateProduct(
 export interface ParsedOrderDraft {
   customerTyped: string | null;
   customerId: string | null;
-  customerMatch: 'exact' | 'phone' | 'fuzzy' | 'new' | 'none' | null;
+  customerMatch: "exact" | "phone" | "fuzzy" | "new" | "none" | null;
   company: string | null;
   deliver: string | null;
   dateGuessed: boolean;
@@ -1041,7 +1240,7 @@ export interface ParsedOrderLine {
   unit: string;
   productId: string | null;
   name: string;
-  status: 'recognized' | 'probable' | 'unrecognized';
+  status: "recognized" | "probable" | "unrecognized";
   cuts: string[];
   price: string | null;
   learned: boolean;
@@ -1054,7 +1253,7 @@ interface RawParsedOrderLine {
   qty: number;
   unit: string;
   product: { id: string; name: string } | null;
-  status: 'recognized' | 'probable' | 'unrecognized';
+  status: "recognized" | "probable" | "unrecognized";
   cuts: string[];
   price: number | string | null;
   learned: boolean;
@@ -1063,7 +1262,7 @@ interface RawParsedOrderLine {
 interface RawParsedOrderDraft {
   customer: { id: string | null; name: string } | null;
   customerTyped: string | null;
-  customerMatch: 'exact' | 'phone' | 'fuzzy' | 'new' | 'none' | null;
+  customerMatch: "exact" | "phone" | "fuzzy" | "new" | "none" | null;
   deliver: string | null;
   dateGuessed: boolean;
   multiCustomer: boolean;
@@ -1082,17 +1281,19 @@ export async function parseOrderText(
   try {
     const internalToken = import.meta.env.VITE_INTERNAL_TOKEN;
     const isDev = import.meta.env.DEV;
-    const url = isDev ? '/order-api/parse-order' : `${import.meta.env.VITE_DIRECTUS_URL}/order-api/parse-order`;
+    const url = isDev
+      ? "/order-api/parse-order"
+      : `${import.meta.env.VITE_DIRECTUS_URL}/order-api/parse-order`;
     const res = await fetch(url, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
-        'x-internal-token': internalToken ?? '',
+        "Content-Type": "application/json",
+        "x-internal-token": internalToken ?? "",
       },
       body: JSON.stringify({ text }),
     });
     if (!res.ok) {
-      const body = await res.text().catch(() => '');
+      const body = await res.text().catch(() => "");
       return { data: null, error: `Parse API error ${res.status}: ${body}` };
     }
     const raw = (await res.json()) as RawParsedOrderDraft;
@@ -1129,8 +1330,6 @@ export async function parseOrderText(
   }
 }
 
-
-
 /* =========================================================== Corrections === */
 
 /**
@@ -1148,31 +1347,34 @@ export async function upsertCorrection(
   try {
     // Check for existing correction with the same token_key
     const existing = (await getClient().request(
-      readItems('corrections', {
+      readItems("corrections", {
         filter: { token_key: { _eq: tokenKey } } as never,
         limit: 1,
-        fields: ['id', 'times_used'] as never,
+        fields: ["id", "times_used"] as never,
       }),
     )) as Array<{ id: string; times_used: number | null }>;
 
     if (existing && existing.length > 0) {
       const row = existing[0];
       const raw = await getClient().request(
-        updateItem('corrections', row.id, {
+        updateItem("corrections", row.id, {
           product_id: productId,
           times_used: (row.times_used ?? 0) + 1,
         } as never),
       );
       const parsed = CorrectionsCollectionSchema.safeParse(raw);
       if (!parsed.success) {
-        return { data: null, error: `Invalid corrections response: ${parsed.error.message}` };
+        return {
+          data: null,
+          error: `Invalid corrections response: ${parsed.error.message}`,
+        };
       }
       return { data: parsed.data, error: null };
     }
 
     // Create new correction
     const raw = await getClient().request(
-      createItem('corrections', {
+      createItem("corrections", {
         token_key: tokenKey,
         product_id: productId,
         times_used: 1,
@@ -1180,7 +1382,10 @@ export async function upsertCorrection(
     );
     const parsed = CorrectionsCollectionSchema.safeParse(raw);
     if (!parsed.success) {
-      return { data: null, error: `Invalid corrections response: ${parsed.error.message}` };
+      return {
+        data: null,
+        error: `Invalid corrections response: ${parsed.error.message}`,
+      };
     }
     return { data: parsed.data, error: null };
   } catch (err) {
@@ -1191,13 +1396,20 @@ export async function upsertCorrection(
 /* ============================================================ Customers CRUD === */
 
 export async function createCustomer(
-  input: Omit<CustomersCollection, 'id' | 'created_at' | 'updated_at'> & { id?: string },
+  input: Omit<CustomersCollection, "id" | "created_at" | "updated_at"> & {
+    id?: string;
+  },
 ): Promise<DirectusResult<CustomersCollection>> {
   try {
-    const raw = await getClient().request(createItem('customers', input as never));
+    const raw = await getClient().request(
+      createItem("customers", input as never),
+    );
     const parsed = CustomersCollectionSchema.safeParse(raw);
     if (!parsed.success) {
-      return { data: null, error: `Invalid customer response: ${parsed.error.message}` };
+      return {
+        data: null,
+        error: `Invalid customer response: ${parsed.error.message}`,
+      };
     }
     return { data: parsed.data, error: null };
   } catch (err) {
@@ -1210,10 +1422,15 @@ export async function updateCustomer(
   patch: Partial<CustomersCollection>,
 ): Promise<DirectusResult<CustomersCollection>> {
   try {
-    const raw = await getClient().request(updateItem('customers', id, patch as never));
+    const raw = await getClient().request(
+      updateItem("customers", id, patch as never),
+    );
     const parsed = CustomersCollectionSchema.safeParse(raw);
     if (!parsed.success) {
-      return { data: null, error: `Invalid customer response: ${parsed.error.message}` };
+      return {
+        data: null,
+        error: `Invalid customer response: ${parsed.error.message}`,
+      };
     }
     return { data: parsed.data, error: null };
   } catch (err) {
@@ -1221,9 +1438,11 @@ export async function updateCustomer(
   }
 }
 
-export async function deleteCustomer(id: string): Promise<DirectusResult<void>> {
+export async function deleteCustomer(
+  id: string,
+): Promise<DirectusResult<void>> {
   try {
-    await getClient().request(deleteItem('customers', id));
+    await getClient().request(deleteItem("customers", id));
     return { data: undefined, error: null };
   } catch (err) {
     return { data: null, error: errMsg(err) };
@@ -1233,13 +1452,20 @@ export async function deleteCustomer(id: string): Promise<DirectusResult<void>> 
 /* ============================================================ Products CRUD === */
 
 export async function createProduct(
-  input: Omit<ProductsCollection, 'id' | 'created_at' | 'updated_at'> & { id?: string },
+  input: Omit<ProductsCollection, "id" | "created_at" | "updated_at"> & {
+    id?: string;
+  },
 ): Promise<DirectusResult<ProductsCollection>> {
   try {
-    const raw = await getClient().request(createItem('products', input as never));
+    const raw = await getClient().request(
+      createItem("products", input as never),
+    );
     const parsed = ProductsCollectionSchema.safeParse(raw);
     if (!parsed.success) {
-      return { data: null, error: `Invalid product response: ${parsed.error.message}` };
+      return {
+        data: null,
+        error: `Invalid product response: ${parsed.error.message}`,
+      };
     }
     return { data: parsed.data, error: null };
   } catch (err) {
@@ -1249,7 +1475,7 @@ export async function createProduct(
 
 export async function deleteProduct(id: string): Promise<DirectusResult<void>> {
   try {
-    await getClient().request(deleteItem('products', id));
+    await getClient().request(deleteItem("products", id));
     return { data: undefined, error: null };
   } catch (err) {
     return { data: null, error: errMsg(err) };

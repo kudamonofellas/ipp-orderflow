@@ -114,7 +114,6 @@
   background: var(--bg-surface-hover);
 }
 
-
 .th {
   padding: var(--space-sm) var(--space-md);
   text-align: left;
@@ -123,7 +122,6 @@
   white-space: nowrap;
   user-select: none;
 }
-
 
 .tr {
   border-bottom: 1px solid var(--border-subtle);
@@ -165,7 +163,7 @@
   padding: 2px 8px;
   border-radius: var(--radius-md);
   font: var(--text-caption);
-  font-weight: 500;
+  font-weight: 600;
   background: var(--bg-muted);
   color: var(--text-muted);
   text-transform: uppercase;
@@ -176,7 +174,7 @@
   color: var(--accent-primary);
 }
 
-.channelPill[data-channel="Meatfellas" i] {
+.channelPill[data-channel="Retail" i] {
   background: color-mix(in srgb, var(--accent-secondary), transparent 90%);
   color: var(--accent-secondary);
 }

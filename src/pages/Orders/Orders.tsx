@@ -18,6 +18,7 @@ const STAGE_OPTIONS = [
   { key: "active", label: "In progress" },
   { key: "pending-docs", label: "Signed DO/SI not returned yet" },
   { key: "completed", label: "Completed" },
+  { key: "late", label: "Past delivery date" },
   ...PIPELINE_STAGES.map((s) => ({ key: s.key, label: s.label })),
   { key: "outstanding", label: "Outstanding" },
   { key: "awaiting", label: "Awaiting stock" },
@@ -42,6 +43,7 @@ const STAGE_COPY: Record<string, { headline: string; empty: string }> = {
     empty: "No orders awaiting signed DO/SI.",
   },
   completed: { headline: "Completed Orders", empty: "No completed orders." },
+  late: { headline: "Past Delivery Date", empty: "No overdue orders." },
   intake: { headline: "New Orders", empty: "No new orders." },
   cold: {
     headline: "Cold Storage Picking",
@@ -179,6 +181,10 @@ export function Orders() {
               variant="secondary"
               icon="chevronDown"
               iconPosition="right"
+              style={{
+                width: "240px",
+                justifyContent: "space-between",
+              }}
               aria-expanded={stageOpen}
               onClick={() => setStageOpen((o) => !o)}
             >
@@ -253,6 +259,10 @@ export function Orders() {
               variant="secondary"
               icon="chevronDown"
               iconPosition="right"
+              style={{
+                width: "200px",
+                justifyContent: "space-between",
+              }}
               aria-expanded={sortOpen}
               isActive={sortOpen}
               onClick={() => setSortOpen((o) => !o)}

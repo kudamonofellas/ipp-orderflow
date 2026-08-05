@@ -146,6 +146,8 @@ export function OrderEdit() {
       setCustomerName(loadedOrder?.customer_name ?? "");
       setCustomerId(loadedOrder?.customer_id ?? null);
       setOrderNo(loadedOrder?.order_id ?? "");
+      setCompany(loadedOrder?.customer_legal_name ?? "");
+      setCustomerAddress(loadedOrder?.customer_address ?? "");
       setDeliverDate(formatDateInput(loadedOrder?.deliver_at));
       setOrderDate(formatDateInput(loadedOrder?.order_date));
       setSales(loadedOrder?.sales ?? loadedOrder?.sales_rep ?? "");
@@ -233,9 +235,22 @@ export function OrderEdit() {
   function buildEditSummary(): string {
     const changes: string[] = [];
 
+    if ((order?.order_id ?? "").trim() !== orderNo.trim()) {
+      changes.push(`Order No. ${order?.order_id || "—"}→${orderNo || "—"}`);
+    }
     if ((order?.customer_name ?? "").trim() !== customerName.trim()) {
       changes.push(
         `Customer ${order?.customer_name || "—"}→${customerName || "—"}`,
+      );
+    }
+    if ((order?.customer_legal_name ?? "").trim() !== company.trim()) {
+      changes.push(
+        `Company ${order?.customer_legal_name || "—"}→${company || "—"}`,
+      );
+    }
+    if ((order?.customer_address ?? "").trim() !== customerAddress.trim()) {
+      changes.push(
+        `Delivery Address ${order?.customer_address || "—"}→${customerAddress || "—"}`,
       );
     }
     if ((order?.sales ?? order?.sales_rep ?? "").trim() !== sales.trim()) {
@@ -332,9 +347,15 @@ export function OrderEdit() {
 
     try {
       const orderPatch: Record<string, unknown> = {};
+      if (orderNo.trim() !== (order.order_id ?? ""))
+        orderPatch.order_id = orderNo.trim();
       if (customerName.trim() !== (order.customer_name ?? ""))
         orderPatch.customer_name = customerName.trim();
       if (customerId !== order.customer_id) orderPatch.customer_id = customerId;
+      if (company.trim() !== (order.customer_legal_name ?? ""))
+        orderPatch.customer_legal_name = company.trim() || null;
+      if (customerAddress.trim() !== (order.customer_address ?? ""))
+        orderPatch.customer_address = customerAddress.trim() || null;
       if (sales.trim() !== (order.sales ?? order.sales_rep ?? ""))
         orderPatch.sales = sales.trim();
       if (contact.trim() !== (order.customer_contact ?? ""))

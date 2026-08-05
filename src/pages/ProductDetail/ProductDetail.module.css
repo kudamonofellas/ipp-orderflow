@@ -1,22 +1,42 @@
 .container {
   display: flex;
   flex-direction: column;
-  gap: var(--space-xl);
-  max-width: 640px;
+  gap: var(--space-md);
+  max-width: 1280px;
   margin: 0 auto;
 }
 
 .header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: var(--space-md);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--bg-surface);
+  padding-top: var(--space-md);
+  padding-bottom: var(--space-md);
+  margin-top: calc(var(--space-md) * -1);
 }
 
-.titleRow {
+.titleSection {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-xs);
+}
+
+.actions {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
+}
+
+.headingRow {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
 }
 
 .title {
@@ -25,16 +45,56 @@
   margin: 0;
 }
 
-.card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-md);
+.subtitle {
+  font: var(--text-caption);
+  color: var(--text-muted);
+  margin: 0;
 }
 
-/* Form Styles */
-.form {
+.pill {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 2px var(--space-sm);
+  border-radius: var(--radius-sm);
+  font: var(--text-caption);
+  font-weight: 600;
+  text-transform: uppercase;
+  background: color-mix(in srgb, var(--accent-primary), transparent 90%);
+  color: var(--accent-primary);
+  white-space: nowrap;
+}
+
+.pillDanger {
+  background: color-mix(in srgb, var(--state-error) 12%, transparent);
+  color: var(--state-error);
+}
+
+.pillNeutral {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  width: fit-content;
+  align-self: flex-start;
+  padding: 2px var(--space-sm);
+  border-radius: var(--radius-sm);
+  font: var(--text-caption);
+  font-weight: 600;
+  text-transform: uppercase;
+  background: var(--bg-muted);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.fields {
   display: flex;
   flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: var(--space-md);
 }
 
@@ -44,101 +104,19 @@
   gap: var(--space-xs);
 }
 
-.label {
+.detailLabel {
   font: var(--text-label);
-  color: var(--text-secondary);
+  color: var(--text-muted);
+}
+
+.detailValue {
+  font: var(--text-body);
+  color: var(--text-primary);
   font-weight: 500;
 }
 
-.input,
-.select {
-  font: var(--text-body);
-  color: var(--text-primary);
-  background: var(--bg-muted);
-  border: 1.5px solid var(--border-default);
-  border-radius: var(--radius-md);
-  padding: var(--space-sm) var(--space-md);
-  width: 100%;
-  box-sizing: border-box;
-  transition: border-color var(--duration-fast), box-shadow var(--duration-fast);
-}
-
-.input:focus,
-.select:focus {
-  outline: none;
-  border-color: var(--accent-primary);
-  box-shadow: var(--focus-ring);
-}
-
-.grid2 {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-md);
-}
-
-.checkboxLabel {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  cursor: pointer;
-  font: var(--text-body);
-  color: var(--text-primary);
-  user-select: none;
-}
-
-.checkbox {
-  width: 18px;
-  height: 18px;
-  border: 1.5px solid var(--border-default);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-}
-
-.actions {
-  display: flex;
-  gap: var(--space-sm);
-  margin-top: var(--space-sm);
-}
-
-.btnPrimary {
-  flex: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 10px var(--space-lg);
-  border-radius: var(--radius-md);
-  background: var(--accent-primary);
-  color: #fff;
-  border: none;
-  font: var(--text-body);
-  font-weight: 500;
-  cursor: pointer;
-  transition: opacity var(--duration-fast);
-}
-
-.btnPrimary:hover:not(:disabled) {
-  opacity: 0.9;
-}
-
-.btnPrimary:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.btnDanger {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 10px var(--space-md);
-  border-radius: var(--radius-md);
-  background: var(--status-danger, #e74c3c);
-  color: #fff;
-  border: none;
-  cursor: pointer;
-  transition: opacity var(--duration-fast);
-}
-
-.btnDanger:hover {
-  opacity: 0.9;
+@media (max-width: 640px) {
+  .row {
+    grid-template-columns: 1fr;
+  }
 }

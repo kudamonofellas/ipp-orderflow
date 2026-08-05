@@ -7,12 +7,10 @@ import { IntakeModal } from '../../components/IntakeModal/IntakeModal';
 import { MetricCard } from '../../components/MetricCard/MetricCard';
 import { NotificationsPopover } from '../../components/NotificationsPopover/NotificationsPopover';
 import { StagePill } from '../../components/StagePill/StagePill';
-import {
-  attentionItems,
-  intakeMessages,
-} from '../../data/mockDashboard';
+import { intakeMessages } from '../../data/mockDashboard';
 import { useCan, useCurrentUserName, useRole } from '../../hooks/useAuth';
 import { ADMIN_HIGHLIGHT_STAGES, PIPELINE_STAGES, RETURN_STAGES } from '../../lib/pipeline';
+import { useAttentionItems } from '../../hooks/useAttentionItems';
 import { useDashboardCounts, type RangeWithLabel } from '../../hooks/useDashboardCounts';
 import { useOpenOrders } from '../../hooks/useOpenOrders';
 import { AttentionPanel } from './sections/AttentionPanel';
@@ -43,6 +41,7 @@ export function Dashboard() {
     deliveredRange,
     cancelledRange,
   );
+  const { items: attentionItems, loading: attentionLoading } = useAttentionItems();
   const canCreateOrders = useCan()('createOrders');
   const currentUserName = useCurrentUserName();
   const role = useRole();
@@ -68,7 +67,7 @@ export function Dashboard() {
     navigate('/orders/new', { state: { prefill: draft, rawText, attachments } });
   }
 
-  const isLoading = ordersLoading || countsLoading;
+  const isLoading = ordersLoading || countsLoading || attentionLoading;
 
   const currentPipeline = stageCounts.filter((stage) =>
     PIPELINE_STAGES.some((pipeline) => pipeline.key === stage.stage),
@@ -151,7 +150,10 @@ export function Dashboard() {
                 stages={returnsWorkflow}
                 onStageClick={(key) => navigate('/orders', { state: { stage: key } })}
               />
-              <AttentionPanel items={attentionItems} />
+              <AttentionPanel
+                items={attentionItems}
+                onItemClick={(stageKey) => navigate('/orders', { state: { stage: stageKey } })}
+              />
               {isAdminOrOwner && <IntakePanel messages={intakeMessages} />}
             </div>
 

@@ -96,7 +96,7 @@
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-md);
   z-index: 20;
-  min-width: 180px;
+  max-width: 160px;
   display: flex;
   flex-direction: column;
   padding: var(--space-md) var(--space-sm);

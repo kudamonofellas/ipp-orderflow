@@ -15,6 +15,7 @@ import { OrderDetail } from './pages/OrderDetail/OrderDetail';
 import { OrderEdit } from './pages/OrderEdit/OrderEdit';
 import { Products } from './pages/Products/Products';
 import { ProductDetail } from './pages/ProductDetail/ProductDetail';
+import { ProductEdit } from './pages/ProductEdit/ProductEdit';
 import { Placeholder } from './pages/Placeholder/Placeholder';
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
@@ -65,6 +66,7 @@ export default function App() {
             <Route path="customers/:id/edit" element={<CustomerEdit />} />
             <Route path="products" element={<Products />} />
             <Route path="products/:id" element={<ProductDetail />} />
+            <Route path="products/:id/edit" element={<ProductEdit />} />
             <Route path="reports" element={<Placeholder title="Reports" />} />
             <Route path="settings" element={<Placeholder title="Settings" />} />
             <Route path="*" element={<Navigate to="/" replace />} />

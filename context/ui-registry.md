@@ -5,6 +5,31 @@
 > Token source of truth: `context/ui-context.md` + `context/ui-tokens.md`.
 > CSS implementation: `src/styles/tokens.css`.
 
+## Update — 2026-08-05 Notification bell: unread badge + mark-as-read
+
+- **Unread-count bell badge** (replaces a plain "has-unread" dot): small pill at the icon-button's top-right corner, slightly overlapping the edge (`top:-4px; right:-4px`) rather than inset. `background: var(--accent-primary)`, `color: var(--text-on-accent)`, `border: 2px solid var(--bg-surface)` (the border punches the "cutout" look against whatever the button sits on). Caps its number at `99+` — cap the display, never the underlying count used for logic. Renders only when count > 0; a badge that shows "0" defeats the point of a *count* badge (vs. a dot, where presence alone was the signal).
+- **Popover header, count next to the heading + a bulk action on the right**: `<div class="titleRow">{heading}{badgePill}</div>` on the left, a `variant="ghost" size="sm"` `Button` bulk-action (e.g. "Mark as read") on the right of the same flex header — don't put a count pill and an action button on opposite ends fighting for the same row without grouping the heading+count first.
+- **Read vs. unread list-item text**: unread = `--text-primary`, read = `--text-muted` via an additive modifier class (`.text` base + `.textMuted` appended), not a separate full style block — keeps the two states visually identical apart from color.
+- **Local "last read" cursor instead of per-item read tracking**: when a feed has no server-side read/seen field and adding one is out of scope, use a single timestamp cursor in `localStorage` (bump-to-now on "mark as read", compare-string-timestamps for unread) rather than persisting a growing set of read IDs. See `useNotificationReadState.ts` for the pattern and the architecture-invariant reasoning (Session Notes in `progress-tracker.md`).
+
+## Update — 2026-08-05 Needs Attention + Notifications real data
+
+- **Clickable panel row with a count pill**: `AttentionPanel`'s rows changed from `justify-content: flex-start` (icon+label only) to `justify-content: space-between`, with `.content { flex: 1; min-width: 0; }` so the label truncates with an ellipsis instead of pushing the count off-screen. The count itself is the same `.countBadge` pill convention as the Orders/Products page header counts (`--text-caption`/`--text-muted`, `--bg-surface` fill, `1px solid var(--border-default)`, `--radius-xl`, `2px 10px` padding) — this is now the third place using that exact pill (Orders header, Products header, Needs Attention rows), so treat it as the standard "count badge" pattern, not a one-off.
+- **Bucket-list panel empty state**: when a "needs attention"-style panel's buckets can legitimately all be zero, filter zero-count buckets out entirely (don't render a "0" row) and show a single muted `<p>` in the list's place ("Nothing needs attention right now.") rather than an empty `<div>`.
+- **Panel-row click reuses the stage-filter id**: like `StagePill`/`ReturnWorkflowsPanel`, a clickable dashboard row's `id`/`key` doubles as the literal Orders-page filter value passed to `navigate('/orders', { state: { stage: id } })`. Don't invent a separate "filter key" field on the item type — keep the id semantically meaningful so one value does both jobs (React key + navigation target).
+
+## Update — 2026-08-05 Product Detail/Edit split
+
+- **Dossier Detail page (no side panel)**: for a record type without an order-history-style side panel (Product, vs. Customer/Order which have one), the Detail page's `.header` is just Back (left) + action buttons (right) — no title in the header. The record's name + subtitle live *inside* the first `Card` instead, followed by a plain `<hr class="divider">` (`border-top: 1px solid var(--border-subtle)`) before the field grid. See `ProductDetail.tsx` / `ProductDetail.module.css`.
+- **Detail-page Delete + Edit pair**: when a record type supports hard delete (Products do; Customers/Orders don't), both buttons live in the header's `.actions` group, `variant="secondary"`, Delete (`icon="trash"`) before Edit (`icon="edit"`), both gated behind the same capability check. Delete confirms via `window.confirm` and is blocked with an alert if the record is referenced elsewhere (e.g. a product used by existing `order_lines`) — check this before the confirm dialog, not after.
+- **Edit-page Delete kept alongside Cancel/Save**: when the Edit page (not just Detail) also needs to support delete, add it as a third button in the header `.actions` row, ahead of Cancel/Save: `[Delete] [Cancel] [Save Changes]`. Same guard logic as the Detail page's Delete.
+- **Boolean/status fields as pills on a Detail page** (supersedes "read-only checkboxes" below for `ProductDetail`): a view-only boolean is a pill, not a disabled checkbox — checkboxes read as interactive even when they're not. Two shapes:
+  - **Binary status pill** (e.g. in-stock/out-of-stock): always rendered, positioned top-right of the record's name/subtitle heading row (`.headingRow`, `justify-content: space-between`, inside the first `Card`, above the divider). Default state uses the Badge/Pill baseline (`--bg-badge`/`--text-badge`); the "bad" state swaps to an error-tinted variant (`color-mix(in srgb, var(--state-error) 12%, transparent)` background, `var(--state-error)` text) and its own label text (not just a color swap — e.g. "In-stock" → "Out of stock").
+  - **Presence-flag pill** (e.g. catch-weight): renders only when true — `{flag && <span className={styles.pill}>Label</span>}` — it disappears entirely when false, it does not render in a muted/unchecked state.
+  - Shared `.pill` class: `padding: 2px var(--space-sm)`, `border-radius: var(--radius-sm)`, `font: var(--text-caption)`, `font-weight: 600`, `text-transform: uppercase`.
+
+- **Read-only checkboxes for boolean fields** (still applies elsewhere, e.g. non-pill contexts): render as `<input type="checkbox" checked={value} disabled readOnly />` next to its label. `readOnly` is required alongside `disabled` to avoid the React controlled-input console warning.
+
 ## Update — 2026-08-04 Shared OrderRows + Orders count badge
 
 ### OrderRows (shared expandable order table row)

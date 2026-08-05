@@ -47,16 +47,10 @@ export function Products() {
         _or: [
           { oos: { _eq: false } },
           { oos: { _null: true } },
-          { active: { _eq: true } },
         ],
       });
     } else if (activeFilter === 'oos') {
-      parts.push({
-        _or: [
-          { oos: { _eq: true } },
-          { active: { _eq: false } },
-        ],
-      });
+      parts.push({ oos: { _eq: true } });
     }
 
     return parts.length === 0 ? {} : parts.length === 1 ? parts[0] : { _and: parts };
@@ -75,7 +69,7 @@ export function Products() {
           limit: PAGE_SIZE,
           offset: (page - 1) * PAGE_SIZE,
           sort: ['name'],
-          fields: ['id', 'name', 'accurate_name', 'category', 'brand', 'form', 'pack', 'active', 'oos'],
+          fields: ['id', 'name', 'accurate_name', 'category', 'grade', 'brand', 'form', 'pack', 'oos'],
         }),
         aggregateProducts({
           aggregate: { count: '*' },
@@ -122,20 +116,18 @@ export function Products() {
     e.stopPropagation();
     if (!canToggleOOS) return;
     setTogglingId(product.id);
-    const currentlyActive = product.active ?? !product.oos;
-    const newActive = !currentlyActive;
-    const newOos = !newActive;
+    const newOos = !product.oos;
 
     // Optimistic update
     setProducts((prev) =>
-      prev.map((p) => (p.id === product.id ? { ...p, active: newActive, oos: newOos } : p)),
+      prev.map((p) => (p.id === product.id ? { ...p, oos: newOos } : p)),
     );
 
-    const res = await updateProduct(product.id, { active: newActive, oos: newOos });
+    const res = await updateProduct(product.id, { oos: newOos });
     if (res.error) {
       // Revert on failure
       setProducts((prev) =>
-        prev.map((p) => (p.id === product.id ? { ...p, active: product.active, oos: product.oos } : p)),
+        prev.map((p) => (p.id === product.id ? { ...p, oos: product.oos } : p)),
       );
     }
     setTogglingId(null);
@@ -205,6 +197,7 @@ export function Products() {
               <tr>
                 <th className={styles.th}>Name</th>
                 <th className={styles.th}>Category</th>
+                <th className={styles.th}>Grade</th>
                 <th className={styles.th}>Brand</th>
                 <th className={styles.th}>Form / Pack</th>
                 {canToggleOOS && (
@@ -215,19 +208,19 @@ export function Products() {
             <tbody>
               {loading ? (
                 <tr className={styles.stateRow}>
-                  <td colSpan={canToggleOOS ? 5 : 4}>Loading products…</td>
+                  <td colSpan={canToggleOOS ? 6 : 5}>Loading products…</td>
                 </tr>
               ) : error ? (
                 <tr className={styles.stateRow}>
-                  <td colSpan={canToggleOOS ? 5 : 4}>Error: {error}</td>
+                  <td colSpan={canToggleOOS ? 6 : 5}>Error: {error}</td>
                 </tr>
               ) : products.length === 0 ? (
                 <tr className={styles.stateRow}>
-                  <td colSpan={canToggleOOS ? 5 : 4}>No products found</td>
+                  <td colSpan={canToggleOOS ? 6 : 5}>No products found</td>
                 </tr>
               ) : (
                 products.map((p) => {
-                  const isActive = p.active ?? !p.oos;
+                  const isActive = !p.oos;
                   return (
                     <tr
                       key={p.id}
@@ -250,6 +243,7 @@ export function Products() {
                           '—'
                         )}
                       </td>
+                      <td className={styles.td}>{p.grade ?? '—'}</td>
                       <td className={styles.td}>{p.brand ?? '—'}</td>
                       <td className={styles.td}>
                         {[p.form, p.pack].filter(Boolean).join(' / ') || '—'}

@@ -9,7 +9,7 @@
  * derived from the schemas so there's a single source of truth.
  */
 
-import { z } from 'zod';
+import { z } from "zod";
 
 /**
  * Directus `orders` collection row.
@@ -50,6 +50,7 @@ export const OrdersCollectionSchema = z.object({
   pickup: z.boolean().nullable().optional(),
   third_party: z.boolean().nullable().optional(),
   payment_confirmed: z.boolean().nullable().optional(),
+  docs_returned: z.boolean().nullable().optional(),
   return_received: z.boolean().nullable().optional(),
   return_settle: z.string().nullable().optional(),
   return_doc: z.string().nullable().optional(),
@@ -181,7 +182,9 @@ export const LineWeighingsCollectionSchema = z.object({
   photo_id: z.string().nullable().optional(),
   created_at: z.string().nullable().optional(),
 });
-export const LineWeighingsCollectionArraySchema = z.array(LineWeighingsCollectionSchema);
+export const LineWeighingsCollectionArraySchema = z.array(
+  LineWeighingsCollectionSchema,
+);
 
 /** Directus `line_photos` collection row — general item photos on non-weighed lines. */
 export const LinePhotosCollectionSchema = z.object({
@@ -190,7 +193,9 @@ export const LinePhotosCollectionSchema = z.object({
   photo_id: z.string(),
   sort_order: z.number().nullable().optional(),
 });
-export const LinePhotosCollectionArraySchema = z.array(LinePhotosCollectionSchema);
+export const LinePhotosCollectionArraySchema = z.array(
+  LinePhotosCollectionSchema,
+);
 
 /** Directus `line_cuts` collection row — cutting instructions per order line. */
 export const LineCutsCollectionSchema = z.object({
@@ -208,7 +213,9 @@ export const LineWeighingPhotosCollectionSchema = z.object({
   photo_id: z.string(),
   sort_order: z.number().nullable().optional(),
 });
-export const LineWeighingPhotosCollectionArraySchema = z.array(LineWeighingPhotosCollectionSchema);
+export const LineWeighingPhotosCollectionArraySchema = z.array(
+  LineWeighingPhotosCollectionSchema,
+);
 
 /** Directus `corrections` collection row (learned product-match corrections). */
 export const CorrectionsCollectionSchema = z.object({
@@ -233,9 +240,19 @@ export const UserBriefArraySchema = z.array(UserBriefSchema);
 /** Array validators for list responses. */
 export const OrdersCollectionArraySchema = z.array(OrdersCollectionSchema);
 export const MessagesCollectionArraySchema = z.array(MessagesCollectionSchema);
-export const CustomersCollectionArraySchema = z.array(CustomersCollectionSchema);
+export const CustomersCollectionArraySchema = z.array(
+  CustomersCollectionSchema,
+);
 export const ProductsCollectionArraySchema = z.array(ProductsCollectionSchema);
-export const OrderLinesCollectionArraySchema = z.array(OrderLinesCollectionSchema);
-export const CorrectionsCollectionArraySchema = z.array(CorrectionsCollectionSchema);
-export const OrderHistoryCollectionArraySchema = z.array(OrderHistoryCollectionSchema);
-export const AttachmentsCollectionArraySchema = z.array(AttachmentsCollectionSchema);
+export const OrderLinesCollectionArraySchema = z.array(
+  OrderLinesCollectionSchema,
+);
+export const CorrectionsCollectionArraySchema = z.array(
+  CorrectionsCollectionSchema,
+);
+export const OrderHistoryCollectionArraySchema = z.array(
+  OrderHistoryCollectionSchema,
+);
+export const AttachmentsCollectionArraySchema = z.array(
+  AttachmentsCollectionSchema,
+);

@@ -9,9 +9,9 @@
  * tuples and validates responses with zod at the boundary.
  */
 
-import { useCallback, useEffect, useState } from 'react';
-import { aggregateOrders, readOrderLines, readOrders } from '../lib/directus';
-import type { OpenOrder, OpenOrderLine } from '../types/dashboard';
+import { useCallback, useEffect, useState } from "react";
+import { aggregateOrders, readOrderLines, readOrders } from "../lib/directus";
+import type { OpenOrder, OpenOrderLine } from "../types/dashboard";
 
 /** Max orders per page in the Orders list. */
 export const ORDERS_PAGE_SIZE = 20;
@@ -29,16 +29,23 @@ interface UseOrdersResult {
 
 /** Format an ISO date string as "July 1st, 2026". */
 function formatDate(iso: string | null | undefined): string {
-  if (!iso) return '—';
+  if (!iso) return "—";
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '—';
+  if (Number.isNaN(d.getTime())) return "—";
   const day = d.getDate();
   const suffix =
-    day % 10 === 1 && day !== 11 ? 'st' : day % 10 === 2 && day !== 12 ? 'nd' : day % 10 === 3 && day !== 13 ? 'rd' : 'th';
-  return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric' }).replace(
-    /\d+$/,
-    `${day}${suffix}`,
-  ) + `, ${d.getFullYear()}`;
+    day % 10 === 1 && day !== 11
+      ? "st"
+      : day % 10 === 2 && day !== 12
+        ? "nd"
+        : day % 10 === 3 && day !== 13
+          ? "rd"
+          : "th";
+  return (
+    d
+      .toLocaleDateString("en-US", { month: "long", day: "numeric" })
+      .replace(/\d+$/, `${day}${suffix}`) + `, ${d.getFullYear()}`
+  );
 }
 
 function toOpenOrderLine(row: {
@@ -49,8 +56,9 @@ function toOpenOrderLine(row: {
   price?: number | string | null;
   sort_order?: number | string | null;
 }): OpenOrderLine {
-  const qtyNum = typeof row.qty === 'string' ? parseFloat(row.qty) : row.qty;
-  const priceNum = typeof row.price === 'string' ? parseFloat(row.price) : row.price;
+  const qtyNum = typeof row.qty === "string" ? parseFloat(row.qty) : row.qty;
+  const priceNum =
+    typeof row.price === "string" ? parseFloat(row.price) : row.price;
   return {
     id: row.id,
     name: row.name,
@@ -62,7 +70,15 @@ function toOpenOrderLine(row: {
 }
 
 function groupLinesByOrderId(
-  lines: { id: string; order_id?: string | null; name: string; qty?: number | string | null; unit?: string | null; price?: number | string | null; sort_order?: number | string | null }[],
+  lines: {
+    id: string;
+    order_id?: string | null;
+    name: string;
+    qty?: number | string | null;
+    unit?: string | null;
+    price?: number | string | null;
+    sort_order?: number | string | null;
+  }[],
 ): Map<string, OpenOrderLine[]> {
   const map = new Map<string, OpenOrderLine[]>();
   for (const line of lines) {
@@ -91,13 +107,13 @@ function toOpenOrder(
 ): OpenOrder {
   return {
     id: row.id,
-    no: row.no ?? row.order_id ?? '—',
-    orderId: row.order_id ?? '—',
-    status: row.stage ?? row.status ?? 'Draft',
+    no: row.no ?? row.order_id ?? "—",
+    orderId: row.order_id ?? "—",
+    status: row.stage ?? row.status ?? "Draft",
     orderDate: formatDate(row.order_date ?? row.created_at),
     deliveryDate: formatDate(row.delivery_date),
-    salesRep: row.sales_rep ?? '—',
-    customerName: row.customer_name ?? '—',
+    salesRep: row.sales_rep ?? "—",
+    customerName: row.customer_name ?? "—",
     lines: linesByOrderId.get(row.id) ?? [],
   };
 }
@@ -107,7 +123,11 @@ function toOpenOrder(
  * @param search       Free-text search on order number or customer name.
  * @param sort         Directus sort order string (e.g. '-order_id').
  */
-export function useOrders(stageFilter: string = 'all', search: string = '', sort: string = '-order_id'): UseOrdersResult {
+export function useOrders(
+  stageFilter: string = "all",
+  search: string = "",
+  sort: string = "-order_id",
+): UseOrdersResult {
   const [orders, setOrders] = useState<OpenOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -126,38 +146,52 @@ export function useOrders(stageFilter: string = 'all', search: string = '', sort
 
       const filter: Record<string, unknown> = {};
 
-      if (stageFilter === 'active') {
+      if (stageFilter === "active") {
         filter._and = [
           { cancelled: { _neq: true } },
-          { stage: { _nin: ['delivered', 'cancelled', 'returned'] } },
+          { stage: { _nin: ["delivered", "cancelled", "returned"] } },
         ];
-      } else if (stageFilter === 'pending-docs') {
+      } else if (stageFilter === "pending-docs") {
         filter._and = [
-          { stage: { _eq: 'delivered' } },
+          { stage: { _eq: "delivered" } },
           { docs_returned: { _neq: true } },
         ];
-      } else if (stageFilter === 'completed') {
+      } else if (stageFilter === "completed") {
         filter._and = [
-          { stage: { _eq: 'delivered' } },
+          { stage: { _eq: "delivered" } },
           { docs_returned: { _eq: true } },
         ];
-      } else if (stageFilter === 'finance') {
+      } else if (stageFilter === "finance") {
         filter._or = [
-          { stage: { _eq: 'finance' } },
+          { stage: { _eq: "finance" } },
           {
             _and: [
-              { stage: { _eq: 'cold' } },
+              { stage: { _eq: "cold" } },
               { hold: { _neq: true } },
               { payment_confirmed: { _neq: true } },
             ],
           },
         ];
-      } else if (stageFilter === 'cancelled') {
+      } else if (stageFilter === "cancelled") {
         filter._or = [
           { cancelled: { _eq: true } },
-          { stage: { _eq: 'cancelled' } },
+          { stage: { _eq: "cancelled" } },
         ];
-      } else if (stageFilter !== 'all') {
+      } else if (stageFilter === "late") {
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+        const cutoff = todayStart.toISOString();
+        filter._and = [
+          { stage: { _nin: ["delivered", "cancelled", "returned"] } },
+          { cancelled: { _neq: true } },
+          {
+            _or: [
+              { delivery_date: { _lt: cutoff } },
+              { deliver_at: { _lt: cutoff } },
+            ],
+          },
+        ];
+      } else if (stageFilter !== "all") {
         // Try the `stage` field first; fall back to legacy `status` for old rows.
         filter._or = [
           { stage: { _eq: stageFilter } },
@@ -182,16 +216,16 @@ export function useOrders(stageFilter: string = 'all', search: string = '', sort
         readOrders({
           filter,
           fields: [
-            'id',
-            'order_id',
-            'no',
-            'stage',
-            'status',
-            'order_date',
-            'delivery_date',
-            'sales_rep',
-            'customer_name',
-            'created_at',
+            "id",
+            "order_id",
+            "no",
+            "stage",
+            "status",
+            "order_date",
+            "delivery_date",
+            "sales_rep",
+            "customer_name",
+            "created_at",
           ],
           sort: [sort],
           limit: ORDERS_PAGE_SIZE,
@@ -199,7 +233,7 @@ export function useOrders(stageFilter: string = 'all', search: string = '', sort
         }),
         aggregateOrders({
           filter,
-          aggregate: { count: ['*'] },
+          aggregate: { count: ["*"] },
         }),
       ]);
 
@@ -218,8 +252,16 @@ export function useOrders(stageFilter: string = 'all', search: string = '', sort
       if (orderIds.length > 0) {
         const linesResult = await readOrderLines({
           filter: { order_id: { _in: orderIds } },
-          fields: ['id', 'order_id', 'name', 'qty', 'unit', 'price', 'sort_order'],
-          sort: ['sort_order'],
+          fields: [
+            "id",
+            "order_id",
+            "name",
+            "qty",
+            "unit",
+            "price",
+            "sort_order",
+          ],
+          sort: ["sort_order"],
           limit: -1,
         });
         if (linesResult.error === null && linesResult.data) {
@@ -232,7 +274,14 @@ export function useOrders(stageFilter: string = 'all', search: string = '', sort
       setOrders(pageOrders.map((row) => toOpenOrder(row, linesByOrderId)));
 
       if (countResult.error === null && countResult.data.length > 0) {
-        setTotal(Number(countResult.data[0].count ?? 0));
+        const raw = countResult.data[0].count;
+        const val =
+          raw && typeof raw === "object"
+            ? ((raw as Record<string, unknown>)["*"] ??
+              Object.values(raw as Record<string, unknown>)[0])
+            : raw;
+        const n = typeof val === "string" ? parseInt(val, 10) : (val as number);
+        setTotal(Number.isNaN(n) ? 0 : n);
       }
 
       setLoading(false);
@@ -244,5 +293,14 @@ export function useOrders(stageFilter: string = 'all', search: string = '', sort
     };
   }, [page, nonce, stageFilter, search, sort]);
 
-  return { orders, loading, error, total, page, pageSize: ORDERS_PAGE_SIZE, setPage, refetch };
+  return {
+    orders,
+    loading,
+    error,
+    total,
+    page,
+    pageSize: ORDERS_PAGE_SIZE,
+    setPage,
+    refetch,
+  };
 }

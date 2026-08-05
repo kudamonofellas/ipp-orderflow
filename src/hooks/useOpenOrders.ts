@@ -11,13 +11,13 @@
  * tuples and validates responses with zod at the boundary.
  */
 
-import { useCallback, useEffect, useState } from 'react';
-import { aggregateOrders, readOrderLines, readOrders } from '../lib/directus';
-import type { OpenOrder, OpenOrderLine } from '../types/dashboard';
+import { useCallback, useEffect, useState } from "react";
+import { aggregateOrders, readOrderLines, readOrders } from "../lib/directus";
+import type { OpenOrder, OpenOrderLine } from "../types/dashboard";
 
 /** Orders considered "open" — only the explicit 'Open' status (legacy field).
  *  TODO: migrate to `stage` enum in a separate unit per ai-workflow-rules.md. */
-const OPEN_STATUSES = ['Open'];
+const OPEN_STATUSES = ["Open"];
 
 /** Max orders per page in the Open Orders panel. */
 export const OPEN_ORDERS_PAGE_SIZE = 20;
@@ -35,16 +35,23 @@ interface UseOpenOrdersResult {
 
 /** Format an ISO date string as "July 1st, 2026" (matches the mock format). */
 function formatDate(iso: string | null | undefined): string {
-  if (!iso) return '—';
+  if (!iso) return "—";
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '—';
+  if (Number.isNaN(d.getTime())) return "—";
   const day = d.getDate();
   const suffix =
-    day % 10 === 1 && day !== 11 ? 'st' : day % 10 === 2 && day !== 12 ? 'nd' : day % 10 === 3 && day !== 13 ? 'rd' : 'th';
-  return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric' }).replace(
-    /\d+$/,
-    `${day}${suffix}`,
-  ) + `, ${d.getFullYear()}`;
+    day % 10 === 1 && day !== 11
+      ? "st"
+      : day % 10 === 2 && day !== 12
+        ? "nd"
+        : day % 10 === 3 && day !== 13
+          ? "rd"
+          : "th";
+  return (
+    d
+      .toLocaleDateString("en-US", { month: "long", day: "numeric" })
+      .replace(/\d+$/, `${day}${suffix}`) + `, ${d.getFullYear()}`
+  );
 }
 
 /** Map a raw order_lines row → OpenOrderLine view-model. */
@@ -56,8 +63,9 @@ function toOpenOrderLine(row: {
   price?: number | string | null;
   sort_order?: number | string | null;
 }): OpenOrderLine {
-  const qtyNum = typeof row.qty === 'string' ? parseFloat(row.qty) : row.qty;
-  const priceNum = typeof row.price === 'string' ? parseFloat(row.price) : row.price;
+  const qtyNum = typeof row.qty === "string" ? parseFloat(row.qty) : row.qty;
+  const priceNum =
+    typeof row.price === "string" ? parseFloat(row.price) : row.price;
   return {
     id: row.id,
     name: row.name,
@@ -70,7 +78,15 @@ function toOpenOrderLine(row: {
 
 /** Group order_lines by their order_id so we can attach them to each order. */
 function groupLinesByOrderId(
-  lines: { id: string; order_id?: string | null; name: string; qty?: number | string | null; unit?: string | null; price?: number | string | null; sort_order?: number | string | null }[],
+  lines: {
+    id: string;
+    order_id?: string | null;
+    name: string;
+    qty?: number | string | null;
+    unit?: string | null;
+    price?: number | string | null;
+    sort_order?: number | string | null;
+  }[],
 ): Map<string, OpenOrderLine[]> {
   const map = new Map<string, OpenOrderLine[]>();
   for (const line of lines) {
@@ -104,18 +120,18 @@ function toOpenOrder(
 ): OpenOrder {
   return {
     id: row.id,
-    no: row.no ?? row.order_id ?? '—',
-    orderId: row.order_id ?? '—',
-    status: row.stage ?? row.status ?? 'Draft',
+    no: row.no ?? row.order_id ?? "—",
+    orderId: row.order_id ?? "—",
+    status: row.stage ?? row.status ?? "Draft",
     orderDate: formatDate(row.order_date ?? row.created_at),
     deliveryDate: formatDate(row.delivery_date),
-    salesRep: row.sales_rep ?? '—',
-    customerName: row.customer_name ?? '—',
+    salesRep: row.sales_rep ?? "—",
+    customerName: row.customer_name ?? "—",
     lines: linesByOrderId.get(row.id) ?? [],
   };
 }
 
-export function useOpenOrders(sort: string = '-order_id'): UseOpenOrdersResult {
+export function useOpenOrders(sort: string = "-order_id"): UseOpenOrdersResult {
   const [orders, setOrders] = useState<OpenOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -139,16 +155,16 @@ export function useOpenOrders(sort: string = '-order_id'): UseOpenOrdersResult {
         readOrders({
           filter,
           fields: [
-            'id',
-            'order_id',
-            'no',
-            'stage',
-            'status',
-            'order_date',
-            'delivery_date',
-            'sales_rep',
-            'customer_name',
-            'created_at',
+            "id",
+            "order_id",
+            "no",
+            "stage",
+            "status",
+            "order_date",
+            "delivery_date",
+            "sales_rep",
+            "customer_name",
+            "created_at",
           ],
           sort: [sort],
           limit: OPEN_ORDERS_PAGE_SIZE,
@@ -156,7 +172,7 @@ export function useOpenOrders(sort: string = '-order_id'): UseOpenOrdersResult {
         }),
         aggregateOrders({
           filter,
-          aggregate: { count: ['*'] },
+          aggregate: { count: ["*"] },
         }),
       ]);
 
@@ -176,8 +192,16 @@ export function useOpenOrders(sort: string = '-order_id'): UseOpenOrdersResult {
       if (orderIds.length > 0) {
         const linesResult = await readOrderLines({
           filter: { order_id: { _in: orderIds } },
-          fields: ['id', 'order_id', 'name', 'qty', 'unit', 'price', 'sort_order'],
-          sort: ['sort_order'],
+          fields: [
+            "id",
+            "order_id",
+            "name",
+            "qty",
+            "unit",
+            "price",
+            "sort_order",
+          ],
+          sort: ["sort_order"],
           limit: -1,
         });
         if (linesResult.error === null && linesResult.data) {
@@ -190,7 +214,14 @@ export function useOpenOrders(sort: string = '-order_id'): UseOpenOrdersResult {
       setOrders(pageOrders.map((row) => toOpenOrder(row, linesByOrderId)));
 
       if (countResult.error === null && countResult.data.length > 0) {
-        setTotal(Number(countResult.data[0].count ?? 0));
+        const raw = countResult.data[0].count;
+        const val =
+          raw && typeof raw === "object"
+            ? ((raw as Record<string, unknown>)["*"] ??
+              Object.values(raw as Record<string, unknown>)[0])
+            : raw;
+        const n = typeof val === "string" ? parseInt(val, 10) : (val as number);
+        setTotal(Number.isNaN(n) ? 0 : n);
       }
 
       setLoading(false);
@@ -202,5 +233,14 @@ export function useOpenOrders(sort: string = '-order_id'): UseOpenOrdersResult {
     };
   }, [page, nonce, sort]);
 
-  return { orders, loading, error, total, page, pageSize: OPEN_ORDERS_PAGE_SIZE, setPage, refetch };
+  return {
+    orders,
+    loading,
+    error,
+    total,
+    page,
+    pageSize: OPEN_ORDERS_PAGE_SIZE,
+    setPage,
+    refetch,
+  };
 }

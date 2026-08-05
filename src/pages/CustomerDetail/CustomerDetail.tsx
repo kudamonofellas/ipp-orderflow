@@ -201,7 +201,6 @@ export function CustomerDetail() {
 
           <Card>
             <div className={styles.fields}>
-
               <div className={styles.row}>
                 <div className={styles.field}>
                   <span className={styles.detailLabel}>
@@ -213,7 +212,9 @@ export function CustomerDetail() {
                   <label className={styles.detailLabel}>
                     Company Name (PT / CV for Invoice)
                   </label>
-                  <span className={styles.detailValue}>{companyName || "—"}</span>
+                  <span className={styles.detailValue}>
+                    {companyName || "—"}
+                  </span>
                 </div>
               </div>
 
@@ -239,7 +240,6 @@ export function CustomerDetail() {
           <Card>
             <div className={styles.heading}>Finance</div>
             <div className={styles.fields}>
-
               <div className={styles.row}>
                 <div className={styles.field}>
                   <label className={styles.detailLabel}>Sales Rep</label>
@@ -256,8 +256,12 @@ export function CustomerDetail() {
               </div>
               <div className={styles.row}>
                 <div className={styles.field}>
-                  <label className={styles.detailLabel}>Credit Limit (IDR)</label>
-                  <span className={styles.detailValue}>{creditLimit || "—"}</span>
+                  <label className={styles.detailLabel}>
+                    Credit Limit (IDR)
+                  </label>
+                  <span className={styles.detailValue}>
+                    {creditLimit || "—"}
+                  </span>
                 </div>
                 <div className={styles.field}>
                   <label className={styles.detailLabel}>Terms (days)</label>
@@ -335,13 +339,13 @@ export function CustomerDetail() {
                         <td>
                           {o.order_date
                             ? new Date(o.order_date).toLocaleDateString(
-                              "en-US",
-                              {
-                                month: "short",
-                                day: "numeric",
-                                year: "numeric",
-                              },
-                            )
+                                "en-US",
+                                {
+                                  month: "short",
+                                  day: "numeric",
+                                  year: "numeric",
+                                },
+                              )
                             : "—"}
                         </td>
                         <td>{currency.format(getOrderValue(o.id))}</td>
@@ -356,6 +360,6 @@ export function CustomerDetail() {
           </div>
         </aside>
       </div>
-    </div >
+    </div>
   );
 }

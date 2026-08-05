@@ -74,6 +74,7 @@
   grid-template-columns: minmax(280px, 1fr) minmax(0, 1.5fr) minmax(0, 1.5fr);
   gap: var(--space-lg);
   align-items: stretch;
+  height: fit-content;
 }
 
 .panelsGridTwo {
@@ -84,14 +85,14 @@
 }
 
 /* First child (ReturnWorkflowsPanel) determines the row height */
-.panelsGrid> :first-child,
-.panelsGridTwo> :first-child {
-  height: auto;
+.panelsGrid > :first-child,
+.panelsGridTwo > :first-child {
+  height: fit-content;
 }
 
 /* Other panels adjust to ReturnWorkflowsPanel height and scroll internally */
-.panelsGrid> :not(:first-child),
-.panelsGridTwo> :not(:first-child) {
+.panelsGrid > :not(:first-child),
+.panelsGridTwo > :not(:first-child) {
   height: 0;
   min-height: 100%;
   max-height: 100%;
@@ -117,6 +118,11 @@
   .panelsGridTwo {
     grid-template-columns: 1fr;
   }
+  .panelsGrid > :not(:first-child),
+  .panelsGridTwo > :not(:first-child) {
+    min-height: 320px;
+    max-height: 100%;
+  }
 }
 
 @media (max-width: 640px) {
@@ -131,5 +137,11 @@
 
   .currentStages {
     grid-template-columns: 1fr;
+  }
+
+  .panelsGrid > :not(:first-child),
+  .panelsGridTwo > :not(:first-child) {
+    min-height: 320px;
+    max-height: 100%;
   }
 }

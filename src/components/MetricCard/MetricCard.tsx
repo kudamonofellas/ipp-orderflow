@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
-import { Button } from '../Button/Button';
-import { Icon } from '../Icon/Icon';
-import type { IconName } from '../Icon/icons';
-import type { DateRangeVal } from '../../types/dashboard';
-import styles from './MetricCard.module.css';
+import { useEffect, useRef, useState } from "react";
+import { Button } from "../Button/Button";
+import { Icon } from "../Icon/Icon";
+import type { IconName } from "../Icon/icons";
+import type { DateRangeVal } from "../../types/dashboard";
+import styles from "./MetricCard.module.css";
 
 interface MetricCardProps {
   icon: IconName;
@@ -14,7 +14,13 @@ interface MetricCardProps {
 }
 
 /** Top-row metric card: icon + range dropdown, big number, label. */
-export function MetricCard({ icon, value, label, rangeLabel, onRangeChange }: MetricCardProps) {
+export function MetricCard({
+  icon,
+  value,
+  label,
+  rangeLabel,
+  onRangeChange,
+}: MetricCardProps) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -28,14 +34,14 @@ export function MetricCard({ icon, value, label, rangeLabel, onRangeChange }: Me
     }
 
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') setOpen(false);
+      if (event.key === "Escape") setOpen(false);
     }
 
-    document.addEventListener('mousedown', handlePointerDown);
-    document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
     return () => {
-      document.removeEventListener('mousedown', handlePointerDown);
-      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
     };
   }, [open]);
 
@@ -54,6 +60,10 @@ export function MetricCard({ icon, value, label, rangeLabel, onRangeChange }: Me
               aria-expanded={open}
               icon="chevronDown"
               iconPosition="right"
+              style={{
+                minWidth: "160px",
+                justifyContent: "space-between",
+              }}
               isActive={open}
               onClick={() => setOpen((prev) => !prev)}
             >
@@ -64,12 +74,16 @@ export function MetricCard({ icon, value, label, rangeLabel, onRangeChange }: Me
           )}
 
           {onRangeChange && open && (
-            <div className={styles.dropdown} role="dialog" aria-label="Select Date Range">
+            <div
+              className={styles.dropdown}
+              role="dialog"
+              aria-label="Select Date Range"
+            >
               <Button
                 type="button"
                 variant="ghost"
                 onClick={() => {
-                  onRangeChange?.({ type: 'today' }, 'Today');
+                  onRangeChange?.({ type: "today" }, "Today");
                   setOpen(false);
                 }}
               >
@@ -79,7 +93,7 @@ export function MetricCard({ icon, value, label, rangeLabel, onRangeChange }: Me
                 type="button"
                 variant="ghost"
                 onClick={() => {
-                  onRangeChange?.({ type: 'week' }, 'This Week');
+                  onRangeChange?.({ type: "week" }, "This Week");
                   setOpen(false);
                 }}
               >
@@ -92,10 +106,20 @@ export function MetricCard({ icon, value, label, rangeLabel, onRangeChange }: Me
                   aria-label="Select Month"
                   onChange={(e) => {
                     if (e.target.value) {
-                      const [y, m] = e.target.value.split('-');
-                      const date = new Date(parseInt(y, 10), parseInt(m, 10) - 1, 1);
-                      const monthName = date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-                      onRangeChange?.({ type: 'month', month: e.target.value }, monthName);
+                      const [y, m] = e.target.value.split("-");
+                      const date = new Date(
+                        parseInt(y, 10),
+                        parseInt(m, 10) - 1,
+                        1,
+                      );
+                      const monthName = date.toLocaleDateString("en-US", {
+                        month: "long",
+                        year: "numeric",
+                      });
+                      onRangeChange?.(
+                        { type: "month", month: e.target.value },
+                        monthName,
+                      );
                       setOpen(false);
                     }
                   }}
@@ -110,10 +134,16 @@ export function MetricCard({ icon, value, label, rangeLabel, onRangeChange }: Me
                   placeholder="e.g. 2026"
                   aria-label="Select Year"
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      const val = parseInt((e.target as HTMLInputElement).value, 10);
+                    if (e.key === "Enter") {
+                      const val = parseInt(
+                        (e.target as HTMLInputElement).value,
+                        10,
+                      );
                       if (val >= 2020 && val <= 2100) {
-                        onRangeChange?.({ type: 'year', year: val }, String(val));
+                        onRangeChange?.(
+                          { type: "year", year: val },
+                          String(val),
+                        );
                         setOpen(false);
                       }
                     }
@@ -127,7 +157,10 @@ export function MetricCard({ icon, value, label, rangeLabel, onRangeChange }: Me
                   aria-label="Select Specific Date"
                   onChange={(e) => {
                     if (e.target.value) {
-                      onRangeChange?.({ type: 'specific', date: e.target.value }, e.target.value);
+                      onRangeChange?.(
+                        { type: "specific", date: e.target.value },
+                        e.target.value,
+                      );
                       setOpen(false);
                     }
                   }}

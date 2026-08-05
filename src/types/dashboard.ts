@@ -83,8 +83,13 @@ export interface OpenOrder {
 /** A notification entry, grouped by date. */
 export interface NotificationEntry {
   id: string;
+  /** Raw ISO timestamp (for read/unread comparison — `time` below is display-only). */
+  at: string;
   time: string;
+  /** Human-readable order number, for display. */
   orderId: string;
+  /** Directus order `id` (UUID), for navigating to `/orders/:id`. Empty if unresolved. */
+  orderUuid: string;
   action: string;
 }
 

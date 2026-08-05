@@ -1,9 +1,9 @@
-import { useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../../hooks/useAuth';
-import { Button } from '../../components/Button/Button';
-import logo from '../../assets/logo.svg';
-import styles from './Login.module.css';
+import { useState, type FormEvent } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../../hooks/useAuth";
+import { Button } from "../../components/Button/Button";
+import logo from "../../assets/logo.svg";
+import styles from "./Login.module.css";
 
 /**
  * Directus email/password login. On success → redirect to the page the user
@@ -12,8 +12,8 @@ import styles from './Login.module.css';
 export function Login() {
   const { login, loginError, loading } = useAuth();
   const navigate = useNavigate();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   async function handleSubmit(e: FormEvent) {
@@ -22,7 +22,7 @@ export function Login() {
     const ok = await login(email.trim(), password);
     setSubmitting(false);
     if (ok) {
-      navigate('/', { replace: true });
+      navigate("/", { replace: true });
     }
   }
 
@@ -38,8 +38,8 @@ export function Login() {
           </span>
         </div>
 
-        <h1 className={styles.title}>Sign in to IPP-OrderFlow</h1>
-        <p className={styles.subtitle}>Enter your Directus account credentials.</p>
+        <h1 className={styles.title}>Sign in</h1>
+        <p className={styles.subtitle}>Enter your account credentials.</p>
 
         <form className={styles.form} onSubmit={handleSubmit}>
           <label className={styles.field}>
@@ -81,7 +81,7 @@ export function Login() {
             size="lg"
             disabled={submitting || loading || !email || !password}
           >
-            {submitting || loading ? 'Signing in…' : 'Sign in'}
+            {submitting || loading ? "Signing in…" : "Sign in"}
           </Button>
         </form>
       </div>

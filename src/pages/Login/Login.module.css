@@ -46,7 +46,7 @@
 
 .subtitle {
   font: var(--text-body);
-  color: var(--text-secondary);
+  color: var(--text-primary);
   margin: 0;
   margin-top: calc(var(--space-md) * -1);
 }

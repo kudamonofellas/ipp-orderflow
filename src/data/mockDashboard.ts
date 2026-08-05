@@ -8,10 +8,8 @@
  */
 
 import type {
-  AttentionItem,
   DashboardMetric,
   IntakeMessage,
-  NotificationGroup,
   OpenOrder,
   StageCount,
 } from '../types/dashboard';
@@ -54,29 +52,6 @@ export const intakeMessages: IntakeMessage[] = [
   },
 ];
 
-export const attentionItems: AttentionItem[] = [
-  {
-    id: 'att-01',
-    label: '#260707-09 Munro Resto - return coming back - warehouse to receive & verify',
-    count: 1,
-  },
-  {
-    id: 'att-02',
-    label: '#260707-09 Munro Resto - return - admin to update Accurate & decide (can run before goods arrive)',
-    count: 1,
-  },
-  {
-    id: 'att-03',
-    label: '#260629-01 Saffron Kitchen - past its delivery date',
-    count: 1,
-  },
-  {
-    id: 'att-04',
-    label: '#260708-02 Ducking Setiabudi - past its delivery date',
-    count: 1,
-  },
-];
-
 export const openOrders: OpenOrder[] = [
   {
     id: 'o1',
@@ -103,36 +78,6 @@ export const openOrders: OpenOrder[] = [
     salesRep: 'Teza',
     customerName: 'Agora Dining',
     lines: [],
-  },
-];
-
-export const notificationGroups: NotificationGroup[] = [
-  {
-    date: 'Kamis, 02 July 2026',
-    entries: [
-      { id: 'n1', time: '11.22', orderId: '260701019', action: 'ditambahkan' },
-      { id: 'n2', time: '11.22', orderId: '260701019', action: 'ditambahkan' },
-      { id: 'n3', time: '13.21', orderId: '260701019', action: 'ditambahkan' },
-    ],
-  },
-  {
-    date: 'Jumat, 03 July 2026',
-    entries: [
-      { id: 'n4', time: '07.17', orderId: '260701019', action: 'ditambahkan' },
-      { id: 'n5', time: '11.22', orderId: '260701019', action: 'ditambahkan' },
-      { id: 'n6', time: '11.22', orderId: '260701019', action: 'ditambahkan' },
-      { id: 'n7', time: '11.22', orderId: '260701019', action: 'ditambahkan' },
-      { id: 'n8', time: '11.22', orderId: '260701019', action: 'ditambahkan' },
-      { id: 'n9', time: '13.21', orderId: '260701019', action: 'ditambahkan' },
-      { id: 'n10', time: '13.21', orderId: '260701019', action: 'ditambahkan' },
-      { id: 'n11', time: '13.21', orderId: '260701019', action: 'ditambahkan' },
-    ],
-  },
-  {
-    date: 'Sabtu, 04 July 2026',
-    entries: [
-      { id: 'n12', time: '07.17', orderId: '260701019', action: 'ditambahkan' },
-    ],
   },
 ];
 

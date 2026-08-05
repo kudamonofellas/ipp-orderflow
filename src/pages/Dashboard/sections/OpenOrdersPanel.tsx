@@ -78,6 +78,10 @@ export function OpenOrdersPanel({
               icon="chevronDown"
               size="md"
               iconPosition="right"
+              style={{
+                minWidth: "180px",
+                justifyContent: "space-between",
+              }}
               isActive={sortOpen}
               onClick={() => setSortOpen((prev) => !prev)}
             >
