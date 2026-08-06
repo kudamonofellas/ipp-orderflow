@@ -9,7 +9,6 @@
 
 import type {
   DashboardMetric,
-  IntakeMessage,
   OpenOrder,
   StageCount,
 } from '../types/dashboard';
@@ -40,17 +39,6 @@ const MOCK_STAGE_COUNTS: Record<string, number> = {
 export const stageCounts: StageCount[] = [...PIPELINE_STAGES, ...RETURN_STAGES].map(
   ({ key, label }) => ({ stage: key, label, count: MOCK_STAGE_COUNTS[key] ?? 0 }),
 );
-
-export const intakeMessages: IntakeMessage[] = [
-  { id: 'm1', preview: 'Teza june...', customer: 'Tezalonica' },
-  { id: 'm2', preview: 'Teza june...', customer: 'Tezalonica' },
-  {
-    id: 'm3',
-    preview: 'Teza june',
-    customer: 'Tezalonica',
-    body: '3 july 26\nJumat\n\n7) en dining agora\n\nOrder :...',
-  },
-];
 
 export const openOrders: OpenOrder[] = [
   {

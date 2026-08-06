@@ -175,6 +175,35 @@ export function useOrders(
           { cancelled: { _eq: true } },
           { stage: { _eq: "cancelled" } },
         ];
+      } else if (stageFilter === "awaiting_return") {
+        // Return-workflow buckets are parallel hand-offs, not stage values —
+        // `stage` stays 'returned' throughout (see returnBucketsForOrder in pipeline.ts).
+        filter._and = [
+          { stage: { _eq: "returned" } },
+          {
+            _or: [
+              { return_received: { _neq: true } },
+              { return_inbound: { _eq: true } },
+            ],
+          },
+          { return_settle: { _neq: "done" } },
+        ];
+      } else if (stageFilter === "admin_action") {
+        filter._and = [
+          { stage: { _eq: "returned" } },
+          { return_settle: { _null: true } },
+          { return_doc: { _null: true } },
+        ];
+      } else if (stageFilter === "awaiting_signed_doc") {
+        filter._and = [
+          { stage: { _eq: "returned" } },
+          { return_settle: { _eq: "sign" } },
+        ];
+      } else if (stageFilter === "replacement_transit") {
+        filter._and = [
+          { is_replacement: { _eq: true } },
+          { stage: { _nin: ["delivered", "cancelled"] } },
+        ];
       } else if (stageFilter === "late") {
         const todayStart = new Date();
         todayStart.setHours(0, 0, 0, 0);

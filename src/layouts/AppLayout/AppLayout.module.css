@@ -1,6 +1,6 @@
 .shell {
   min-height: 100vh;
-  background: var(--bg-base);
+  background: var(--bg-surface);
   display: flex;
   flex-direction: row;
   align-items: flex-start;

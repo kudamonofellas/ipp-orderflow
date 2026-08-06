@@ -63,6 +63,22 @@ const STAGE_COPY: Record<string, { headline: string; empty: string }> = {
   delivered: { headline: "Delivered", empty: "No delivered orders." },
   cancelled: { headline: "Cancelled", empty: "No cancelled orders." },
   returned: { headline: "Returned", empty: "No returned orders." },
+  awaiting_return: {
+    headline: "Awaiting Return",
+    empty: "No orders awaiting return.",
+  },
+  admin_action: {
+    headline: "Admin Action Required",
+    empty: "No returns need admin action.",
+  },
+  awaiting_signed_doc: {
+    headline: "Awaiting Signed DO/SI",
+    empty: "No returns awaiting a signed DO/SI.",
+  },
+  replacement_transit: {
+    headline: "Replacement in Transit",
+    empty: "No replacements in transit.",
+  },
   outstanding: { headline: "Outstanding", empty: "No outstanding orders." },
   awaiting: { headline: "Awaiting Stock", empty: "No orders awaiting stock." },
 };

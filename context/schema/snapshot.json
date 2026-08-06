@@ -5260,44 +5260,6 @@ fields:
       foreign_key_table: null
       foreign_key_column: null
   - collection: orders
-    field: order_id
-    type: string
-    meta:
-      collection: orders
-      conditions: null
-      display: null
-      display_options: null
-      field: order_id
-      group: null
-      hidden: false
-      interface: null
-      note: null
-      options: null
-      readonly: false
-      required: false
-      sort: 2
-      special: null
-      translations: null
-      validation: null
-      validation_message: null
-      width: full
-    schema:
-      name: order_id
-      table: orders
-      data_type: character varying
-      default_value: null
-      max_length: 50
-      numeric_precision: null
-      numeric_scale: null
-      is_nullable: true
-      is_unique: false
-      is_primary_key: false
-      is_generated: false
-      generation_expression: null
-      has_auto_increment: false
-      foreign_key_table: null
-      foreign_key_column: null
-  - collection: orders
     field: id
     type: uuid
     meta:

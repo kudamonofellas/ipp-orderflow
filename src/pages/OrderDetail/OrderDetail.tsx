@@ -30,6 +30,10 @@ import {
   readLineWeighingPhotos,
   createLineWeighingPhoto,
   deleteLineWeighingPhoto,
+  updateOrderLine,
+  createLineReturnPhoto,
+  readReturnDocuments,
+  createReturnDocument,
 } from "../../lib/directus";
 import type {
   OrdersCollection,
@@ -39,9 +43,23 @@ import type {
   CustomersCollection,
   UserBrief,
   LineCutsCollection,
+  ReturnDocumentsCollection,
 } from "../../types/directus";
+import { returnBucketsForOrder, type ReturnStage } from "../../lib/pipeline";
 import { ImageDetailsModal } from "../../components/ImageDetailsModal/ImageDetailsModal";
 import styles from "./OrderDetail.module.css";
+
+/**
+ * How a customer return is settled in Accurate. The choice drives whether a
+ * replacement re-enters the pipeline (→ Cold Storage) or the return simply
+ * closes. Ported from the prototype's RETURN_DOC_OPTIONS (OrderDetail.jsx).
+ */
+const RETURN_DOC_OPTIONS = [
+  { key: "return-note", label: "Sales Return Note (no replacement)", replacement: false },
+  { key: "revise-return", label: "Revise DO/SI — return only", replacement: false },
+  { key: "single-replace", label: "Revised DO/SI — return + replacement", replacement: true },
+  { key: "separate-replace", label: "Sales Return Note + replacement with new DO/SI", replacement: true },
+] as const;
 
 /* ─────────────────────────────────────── pipeline definition ── */
 
@@ -210,6 +228,22 @@ export function OrderDetail() {
   const [noteText, setNoteText] = useState("");
   const [savingNote, setSavingNote] = useState(false);
 
+  /* ── returns sub-flow state ── */
+  const [returnDocs, setReturnDocs] = useState<ReturnDocumentsCollection[]>([]);
+  const [showRefuseForm, setShowRefuseForm] = useState(false);
+  const [refuseReason, setRefuseReason] = useState("");
+  const [refuseQtyMap, setRefuseQtyMap] = useState<Record<string, string>>({});
+  const [refusePhotosMap, setRefusePhotosMap] = useState<
+    Record<string, { id: string; fileId: string; url: string }[]>
+  >({});
+  const [submittingRefusal, setSubmittingRefusal] = useState(false);
+  const [receiveQtyMap, setReceiveQtyMap] = useState<Record<string, string>>({});
+  const [confirmingReceive, setConfirmingReceive] = useState(false);
+  const [selectedDocType, setSelectedDocType] = useState<string>("");
+  const [confirmingSettle, setConfirmingSettle] = useState(false);
+  const [signedDocFileId, setSignedDocFileId] = useState<string | null>(null);
+  const [closingSigned, setClosingSigned] = useState(false);
+
   /* ── document form ── */
   const [docType, setDocType] = useState<string>("DO");
   const [docNumber, setDocNumber] = useState("");
@@ -250,6 +284,7 @@ export function OrderDetail() {
         attachmentsRes,
         customersRes,
         usersRes,
+        returnDocsRes,
       ] = await Promise.all([
         readOrder(orderId),
         readOrderLines({ filter: { order_id: { _eq: orderId } } }),
@@ -257,6 +292,7 @@ export function OrderDetail() {
         readAttachments(orderId),
         readCustomers(),
         readAllUsers(),
+        readReturnDocuments(orderId),
       ]);
 
       if (cancelled) return;
@@ -279,6 +315,7 @@ export function OrderDetail() {
       setAttachments(attachmentsRes.data ?? []);
       setCustomers(customersRes.data ?? []);
       setUsers(usersRes.data ?? []);
+      setReturnDocs(returnDocsRes.data ?? []);
       setLines(loadedLines);
 
       // initialize sending qty state for lines
@@ -379,15 +416,36 @@ export function OrderDetail() {
   const isCancelled = order.cancelled === true || stage === "cancelled";
   const isOutstanding = stage === "outstanding";
   const isDelivered = stage === "delivered";
+  const isReturned = stage === "returned";
 
   const canEdit = auth.can("editOrderLines") && !isCancelled && !isDelivered;
   const canAdvance = flow ? auth.can(flow.capability) : false;
   const canSendBack = flow?.prev ? auth.can(flow.capability) : false;
-  const canCancel = auth.can("cancelOrders") && !isCancelled && !isDelivered;
+  const canCancel =
+    auth.can("cancelOrders") && !isCancelled && !isDelivered && !isReturned;
   const canHold =
-    auth.can("advanceStage") && !isOutstanding && !isCancelled && !isDelivered;
+    auth.can("advanceStage") &&
+    !isOutstanding &&
+    !isCancelled &&
+    !isDelivered &&
+    !isReturned;
   const canRestore = (isCancelled || isOutstanding) && auth.can("advanceStage");
   const canAddDocs = auth.can("printDocuments");
+  const canProcessReturns = auth.can("processReturns");
+
+  /* ────────────── Returns sub-flow: which parallel bucket(s) is this order in? ── */
+  const returnBuckets: ReturnStage[] = returnBucketsForOrder({
+    stage: order.stage,
+    return_received: order.return_received,
+    return_settle: order.return_settle,
+    return_doc: order.return_doc,
+    return_inbound: order.return_inbound,
+    is_replacement: order.is_replacement,
+  });
+  const inReceiveBucket = returnBuckets.includes("awaiting_return");
+  const inSettleBucket = returnBuckets.includes("admin_action");
+  const inSignBucket = returnBuckets.includes("awaiting_signed_doc");
+  const latestSignedDoc = returnDocs.find((d) => d.kind === "signed_doc");
 
   const directusFileUrl = getAssetUrl;
 
@@ -791,6 +849,281 @@ export function OrderDetail() {
     }
   }
 
+  /* ────────────── Returns Sub-Flow ── */
+
+  /** Opens the refusal form, defaulting each line's refused qty to its full qty. */
+  function openRefuseForm() {
+    const defaults: Record<string, string> = {};
+    lines.forEach((l) => {
+      defaults[l.id] = String(
+        typeof l.qty === "string" ? parseFloat(l.qty) || 0 : (l.qty ?? 0),
+      );
+    });
+    setRefuseQtyMap(defaults);
+    setRefuseReason("");
+    setRefusePhotosMap({});
+    setShowRefuseForm(true);
+  }
+
+  async function handleUploadRefusePhoto(
+    lineId: string,
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const uploadRes = await uploadFile(file);
+    if (uploadRes.error || !uploadRes.data) {
+      window.alert(`Photo upload failed: ${uploadRes.error}`);
+      e.target.value = "";
+      return;
+    }
+    const fileId = uploadRes.data.id;
+    const current = refusePhotosMap[lineId] ?? [];
+    const createRes = await createLineReturnPhoto({
+      line_id: lineId,
+      photo_id: fileId,
+      sort_order: current.length,
+    });
+    if (createRes.error || !createRes.data) {
+      window.alert(`Failed to save photo: ${createRes.error}`);
+      e.target.value = "";
+      return;
+    }
+    setRefusePhotosMap((prev) => ({
+      ...prev,
+      [lineId]: [
+        ...(prev[lineId] ?? []),
+        { id: createRes.data!.id, fileId, url: getAssetUrl(fileId) },
+      ],
+    }));
+    e.target.value = "";
+  }
+
+  /** STEP 0 — courier records what the customer refused/returned at delivery. */
+  async function handleConfirmRefusal() {
+    if (!id || submittingRefusal) return;
+    const refusedLines = lines.filter(
+      (l) => (parseFloat(refuseQtyMap[l.id] ?? "0") || 0) > 0,
+    );
+    if (refusedLines.length === 0) {
+      window.alert("Enter a returned quantity for at least one item.");
+      return;
+    }
+    setSubmittingRefusal(true);
+    for (const l of refusedLines) {
+      const qty = parseFloat(refuseQtyMap[l.id] ?? "0") || 0;
+      const res = await updateOrderLine(l.id, { returned: qty });
+      if (res.error) {
+        window.alert(`Failed to record return on "${l.name}": ${res.error}`);
+        setSubmittingRefusal(false);
+        return;
+      }
+    }
+    const summary = refusedLines
+      .map((l) => `"${l.name}" (${refuseQtyMap[l.id]} ${l.unit ?? ""})`)
+      .join(", ");
+    const res = await updateOrder(id, {
+      stage: "returned",
+      returned_reason: refuseReason.trim() || null,
+    });
+    if (!res.error && res.data) {
+      setOrder(res.data);
+      const linesRes = await readOrderLines({ filter: { order_id: { _eq: id } } });
+      if (!linesRes.error) setLines(linesRes.data ?? []);
+      await appendOrderHistory({
+        order_id: id,
+        what: `Return — ${summary} coming back to warehouse${refuseReason.trim() ? ` (${refuseReason.trim()})` : ""}`,
+        who: userId,
+        stage: "returned",
+      });
+      const hRes = await readOrderHistory(id);
+      if (!hRes.error) setHistory(hRes.data ?? []);
+      setShowRefuseForm(false);
+    } else {
+      window.alert(`Failed to record the return: ${res.error}`);
+    }
+    setSubmittingRefusal(false);
+  }
+
+  /** RECEIVE bucket — warehouse weighs the goods back in, per line, with a scale photo. */
+  async function handleUploadReceiveWeighPhoto(
+    lineId: string,
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const uploadRes = await uploadFile(file);
+    if (uploadRes.error || !uploadRes.data) {
+      window.alert(`Photo upload failed: ${uploadRes.error}`);
+      e.target.value = "";
+      return;
+    }
+    const res = await updateOrderLine(lineId, {
+      returned_weigh_photo: uploadRes.data.id,
+    });
+    if (res.error || !res.data) {
+      window.alert(`Failed to save weigh-back photo: ${res.error}`);
+      e.target.value = "";
+      return;
+    }
+    setLines((prev) => prev.map((l) => (l.id === lineId ? res.data! : l)));
+    e.target.value = "";
+  }
+
+  async function handleConfirmReceive() {
+    if (!id || confirmingReceive) return;
+    setConfirmingReceive(true);
+    const returnedLines = lines.filter((l) => Number(l.returned) > 0);
+    for (const l of returnedLines) {
+      const verifiedRaw = receiveQtyMap[l.id];
+      if (verifiedRaw == null) continue;
+      const verified = parseFloat(verifiedRaw) || 0;
+      if (verified === Number(l.returned)) continue;
+      const res = await updateOrderLine(l.id, { returned: verified });
+      if (res.error) {
+        window.alert(`Failed to update "${l.name}": ${res.error}`);
+        setConfirmingReceive(false);
+        return;
+      }
+    }
+    const res = await updateOrder(id, { return_received: true, return_inbound: false });
+    if (!res.error && res.data) {
+      setOrder(res.data);
+      const linesRes = await readOrderLines({ filter: { order_id: { _eq: id } } });
+      if (!linesRes.error) setLines(linesRes.data ?? []);
+      await appendOrderHistory({
+        order_id: id,
+        what: "Returned goods received & weighed at the warehouse",
+        who: userId,
+        stage: "returned",
+      });
+      const hRes = await readOrderHistory(id);
+      if (!hRes.error) setHistory(hRes.data ?? []);
+    } else {
+      window.alert(`Failed to confirm receipt: ${res.error}`);
+    }
+    setConfirmingReceive(false);
+  }
+
+  /** SETTLE bucket — admin picks the Accurate document type, branching to close or replacement. */
+  async function handleConfirmSettle() {
+    if (!id || !order || confirmingSettle) return;
+    const doc = RETURN_DOC_OPTIONS.find((d) => d.key === selectedDocType);
+    if (!doc) return;
+    setConfirmingSettle(true);
+
+    if (doc.replacement) {
+      const returnedLines = lines.filter((l) => Number(l.returned) > 0);
+      for (const l of returnedLines) {
+        const res = await updateOrderLine(l.id, { returned: 0, delivered: 0 });
+        if (res.error) {
+          window.alert(`Failed to reset "${l.name}": ${res.error}`);
+          setConfirmingSettle(false);
+          return;
+        }
+      }
+      const res = await updateOrder(id, {
+        stage: "cold",
+        is_replacement: true,
+        return_doc: doc.label,
+        return_settle: null,
+      });
+      if (!res.error && res.data) {
+        setOrder(res.data);
+        const linesRes = await readOrderLines({ filter: { order_id: { _eq: id } } });
+        if (!linesRes.error) setLines(linesRes.data ?? []);
+        await appendOrderHistory({
+          order_id: id,
+          what: `Return + replacement (${doc.label}) — back to Cold Storage`,
+          who: userId,
+          stage: "cold",
+        });
+        const hRes = await readOrderHistory(id);
+        if (!hRes.error) setHistory(hRes.data ?? []);
+      } else {
+        window.alert(`Failed to process the replacement: ${res.error}`);
+      }
+    } else if (doc.key === "revise-return") {
+      const res = await updateOrder(id, { return_doc: doc.label, return_settle: "sign" });
+      if (!res.error && res.data) {
+        setOrder(res.data);
+        await appendOrderHistory({
+          order_id: id,
+          what: "Revised DO/SI issued — awaiting the signed copy back",
+          who: userId,
+          stage: "returned",
+        });
+        const hRes = await readOrderHistory(id);
+        if (!hRes.error) setHistory(hRes.data ?? []);
+      } else {
+        window.alert(`Failed to issue the revised DO/SI: ${res.error}`);
+      }
+    } else {
+      // return-note: nothing physical goes out — closes immediately.
+      const res = await updateOrder(id, { return_doc: doc.label, return_settle: "done" });
+      if (!res.error && res.data) {
+        setOrder(res.data);
+        await appendOrderHistory({
+          order_id: id,
+          what: `Return closed — ${doc.label}`,
+          who: userId,
+          stage: "returned",
+        });
+        const hRes = await readOrderHistory(id);
+        if (!hRes.error) setHistory(hRes.data ?? []);
+      } else {
+        window.alert(`Failed to close the return: ${res.error}`);
+      }
+    }
+    setConfirmingSettle(false);
+  }
+
+  /** SIGN bucket — upload the customer-signed revised DO/SI, then close. */
+  async function handleUploadSignedDoc(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const uploadRes = await uploadFile(file);
+    if (uploadRes.error || !uploadRes.data) {
+      window.alert(`Upload failed: ${uploadRes.error}`);
+      e.target.value = "";
+      return;
+    }
+    setSignedDocFileId(uploadRes.data.id);
+    e.target.value = "";
+  }
+
+  async function handleMarkSignedAndClose() {
+    if (!id || !signedDocFileId || closingSigned) return;
+    setClosingSigned(true);
+    const docRes = await createReturnDocument({
+      order_id: id,
+      kind: "signed_doc",
+      photo_id: signedDocFileId,
+    });
+    if (docRes.error) {
+      window.alert(`Failed to save the signed document: ${docRes.error}`);
+      setClosingSigned(false);
+      return;
+    }
+    setReturnDocs((prev) => [docRes.data!, ...prev]);
+    const res = await updateOrder(id, { return_settle: "done" });
+    if (!res.error && res.data) {
+      setOrder(res.data);
+      await appendOrderHistory({
+        order_id: id,
+        what: "Revised DO/SI signed & returned — order closed",
+        who: userId,
+        stage: "returned",
+      });
+      const hRes = await readOrderHistory(id);
+      if (!hRes.error) setHistory(hRes.data ?? []);
+      setSignedDocFileId(null);
+    } else {
+      window.alert(`Failed to close the return: ${res.error}`);
+    }
+    setClosingSigned(false);
+  }
+
   async function submitNote() {
     if (!noteText.trim() || savingNote || !id) return;
     setSavingNote(true);
@@ -915,6 +1248,28 @@ export function OrderDetail() {
                     }}
                   >
                     ON HOLD
+                  </span>
+                )}
+                {isReturned && (
+                  <span
+                    style={{
+                      color: "var(--state-error)",
+                      fontSize: "0.8rem",
+                      fontWeight: 600,
+                    }}
+                  >
+                    RETURNED
+                  </span>
+                )}
+                {order.is_replacement && (
+                  <span
+                    style={{
+                      color: "var(--accent-primary)",
+                      fontSize: "0.8rem",
+                      fontWeight: 600,
+                    }}
+                  >
+                    REPLACEMENT
                   </span>
                 )}
               </div>
@@ -1537,8 +1892,259 @@ export function OrderDetail() {
                     {flow.sendBackLabel ?? "Send Back"}
                   </Button>
                 )}
+                {stage === "dispatch" && canAdvance && !showRefuseForm && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="lg"
+                    onClick={openRefuseForm}
+                    className={styles.actionBtn}
+                    style={{ color: "var(--state-error)" }}
+                  >
+                    Customer refused / returned
+                  </Button>
+                )}
               </div>
+
+              {showRefuseForm && (
+                <Card style={{ marginTop: "0.75rem" }}>
+                  <div className={styles.heading}>
+                    <span>Customer refused / returned</span>
+                  </div>
+                  {lines.map((l) => (
+                    <div
+                      key={l.id}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.75rem",
+                        marginBottom: "0.5rem",
+                      }}
+                    >
+                      <span style={{ flex: 1 }}>{l.name}</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        className={styles.editInput}
+                        style={{ width: 90 }}
+                        value={refuseQtyMap[l.id] ?? ""}
+                        onChange={(e) =>
+                          setRefuseQtyMap((prev) => ({
+                            ...prev,
+                            [l.id]: e.target.value,
+                          }))
+                        }
+                      />
+                      <span className="tiny muted">{l.unit}</span>
+                      <label className={styles.actionBtn} style={{ cursor: "pointer" }}>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          style={{ display: "none" }}
+                          onChange={(e) => handleUploadRefusePhoto(l.id, e)}
+                        />
+                        <Icon name="camera" size={16} />
+                      </label>
+                      {(refusePhotosMap[l.id] ?? []).map((p) => (
+                        <img
+                          key={p.id}
+                          src={p.url}
+                          alt=""
+                          className={styles.thumbnailImg}
+                          style={{ width: 32, height: 32 }}
+                        />
+                      ))}
+                    </div>
+                  ))}
+                  <textarea
+                    className={styles.editInput}
+                    placeholder="Reason for return"
+                    value={refuseReason}
+                    onChange={(e) => setRefuseReason(e.target.value)}
+                    style={{ width: "100%", minHeight: 60, marginTop: "0.5rem" }}
+                  />
+                  <div style={{ display: "flex", gap: "0.75rem", marginTop: "0.75rem" }}>
+                    <Button
+                      type="button"
+                      variant="primary"
+                      onClick={handleConfirmRefusal}
+                      disabled={submittingRefusal}
+                    >
+                      {submittingRefusal ? "Saving…" : "Confirm return"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => setShowRefuseForm(false)}
+                      disabled={submittingRefusal}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </Card>
+              )}
             </div>
+          )}
+
+          {/* Returns Sub-Flow — parallel buckets (receive / settle / sign) */}
+          {isReturned && !isCancelled && (
+            <Card style={{ marginTop: "0.75rem" }}>
+              <div className={styles.heading}>
+                <span>Customer Return</span>
+              </div>
+              {order.returned_reason && (
+                <p className="tiny muted">Reason: {order.returned_reason}</p>
+              )}
+
+              {inReceiveBucket && (
+                <div style={{ marginBottom: "1rem" }}>
+                  <h4 style={{ margin: "0.5rem 0" }}>Awaiting Return</h4>
+                  {lines
+                    .filter((l) => Number(l.returned) > 0)
+                    .map((l) => (
+                      <div
+                        key={l.id}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "0.75rem",
+                          marginBottom: "0.5rem",
+                        }}
+                      >
+                        <span style={{ flex: 1 }}>{l.name}</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="any"
+                          className={styles.editInput}
+                          style={{ width: 90 }}
+                          value={receiveQtyMap[l.id] ?? String(l.returned ?? 0)}
+                          disabled={!canProcessReturns}
+                          onChange={(e) =>
+                            setReceiveQtyMap((prev) => ({
+                              ...prev,
+                              [l.id]: e.target.value,
+                            }))
+                          }
+                        />
+                        <span className="tiny muted">{l.unit}</span>
+                        {canProcessReturns && (
+                          <label className={styles.actionBtn} style={{ cursor: "pointer" }}>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              style={{ display: "none" }}
+                              onChange={(e) => handleUploadReceiveWeighPhoto(l.id, e)}
+                            />
+                            <Icon name="camera" size={16} />
+                          </label>
+                        )}
+                        {l.returned_weigh_photo && (
+                          <img
+                            src={getAssetUrl(l.returned_weigh_photo)}
+                            alt=""
+                            className={styles.thumbnailImg}
+                            style={{ width: 32, height: 32 }}
+                          />
+                        )}
+                      </div>
+                    ))}
+                  {canProcessReturns && (
+                    <Button
+                      type="button"
+                      variant="primary"
+                      onClick={handleConfirmReceive}
+                      disabled={confirmingReceive}
+                    >
+                      {confirmingReceive ? "Saving…" : "Confirm received & weighed"}
+                    </Button>
+                  )}
+                </div>
+              )}
+
+              {inSettleBucket && (
+                <div style={{ marginBottom: "1rem" }}>
+                  <h4 style={{ margin: "0.5rem 0" }}>Admin Action Required</h4>
+                  {canProcessReturns ? (
+                    <>
+                      {RETURN_DOC_OPTIONS.map((opt) => (
+                        <label
+                          key={opt.key}
+                          style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.375rem" }}
+                        >
+                          <input
+                            type="radio"
+                            name="returnDocType"
+                            value={opt.key}
+                            checked={selectedDocType === opt.key}
+                            onChange={() => setSelectedDocType(opt.key)}
+                          />
+                          {opt.label}
+                        </label>
+                      ))}
+                      <Button
+                        type="button"
+                        variant="primary"
+                        onClick={handleConfirmSettle}
+                        disabled={!selectedDocType || confirmingSettle}
+                      >
+                        {confirmingSettle ? "Saving…" : "Confirm"}
+                      </Button>
+                    </>
+                  ) : (
+                    <p className="tiny muted">
+                      Waiting for an admin to update Accurate & decide.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {inSignBucket && (
+                <div style={{ marginBottom: "1rem" }}>
+                  <h4 style={{ margin: "0.5rem 0" }}>Awaiting Signed DO/SI</h4>
+                  {latestSignedDoc ? (
+                    <p className="tiny muted">
+                      Signed document on file — order closes once received.
+                    </p>
+                  ) : canProcessReturns ? (
+                    <>
+                      <label className={styles.actionBtn} style={{ cursor: "pointer", display: "inline-block" }}>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          style={{ display: "none" }}
+                          onChange={handleUploadSignedDoc}
+                        />
+                        {signedDocFileId ? "Photo attached ✓" : "Attach signed document"}
+                      </label>
+                      <div style={{ marginTop: "0.5rem" }}>
+                        <Button
+                          type="button"
+                          variant="primary"
+                          onClick={handleMarkSignedAndClose}
+                          disabled={!signedDocFileId || closingSigned}
+                        >
+                          {closingSigned ? "Saving…" : "Mark signed & close"}
+                        </Button>
+                      </div>
+                    </>
+                  ) : (
+                    <p className="tiny muted">Revised DO/SI is out with the customer to sign.</p>
+                  )}
+                </div>
+              )}
+
+              {order.is_replacement && !isDelivered && (
+                <p className="tiny muted">
+                  Replacement re-entered the pipeline and is currently at{" "}
+                  <strong>
+                    {PIPELINE_STAGES.find((s) => s.key === stage)?.label ?? stage}
+                  </strong>
+                  .
+                </p>
+              )}
+            </Card>
           )}
 
           {/* Order Actions (Hold / Cancel / Restore) */}

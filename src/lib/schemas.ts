@@ -219,6 +219,29 @@ export const LineWeighingPhotosCollectionArraySchema = z.array(
   LineWeighingPhotosCollectionSchema,
 );
 
+/** Directus `line_return_photos` collection row — courier's refusal-evidence photos per line. */
+export const LineReturnPhotosCollectionSchema = z.object({
+  id: z.string(),
+  line_id: z.string(),
+  photo_id: z.string(),
+  sort_order: z.number().nullable().optional(),
+});
+export const LineReturnPhotosCollectionArraySchema = z.array(
+  LineReturnPhotosCollectionSchema,
+);
+
+/** Directus `return_documents` collection row — Accurate return-note / signed DO/SI evidence. */
+export const ReturnDocumentsCollectionSchema = z.object({
+  id: z.string(),
+  order_id: z.string(),
+  kind: z.string(),
+  photo_id: z.string().nullable().optional(),
+  created_at: z.string().nullable().optional(),
+});
+export const ReturnDocumentsCollectionArraySchema = z.array(
+  ReturnDocumentsCollectionSchema,
+);
+
 /** Directus `corrections` collection row (learned product-match corrections). */
 export const CorrectionsCollectionSchema = z.object({
   id: z.string(),

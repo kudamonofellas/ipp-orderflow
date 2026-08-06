@@ -5,6 +5,13 @@
 > Token source of truth: `context/ui-context.md` + `context/ui-tokens.md`.
 > CSS implementation: `src/styles/tokens.css`.
 
+## Update — 2026-08-06 Returns sub-flow + Intake panel real data
+
+- **Parallel-bucket action panel, not a single next/prev button pair**: `STAGE_FLOW`'s generic advance/send-back button pair (one `next`, one `prev`) only fits a linear stage. Where a state can have *multiple independent things simultaneously needing action* (returns: receive AND settle AND sign can all be true at once), render one `<Card>` with a sub-section per active bucket instead of trying to force it through the single advance-button pattern. Compute which buckets are active via a pure function (`returnBucketsForOrder()` in `pipeline.ts`) operating on the record's field state — never by comparing the record's single `stage` field against a bucket key, since a bucket isn't a stage value here.
+- **Secondary "alternate outcome" button next to a stage's primary action**: e.g. "Customer refused / returned" sits beside "Mark as Delivered" at the dispatch stage, same capability gate as the primary action (it's an alternate outcome of the same courier action, not a new permission), `variant="secondary"` with an inline `color: var(--state-error)` override to visually distinguish it as the "something went wrong" path without a whole new Button variant.
+- **Per-line refuse/receive qty + evidence photo row**: `flex` row of `{name} {qty input, width 90} {unit} {camera-icon file-input label} {uploaded thumbnails}` — reused identically for both the courier's refusal capture and the warehouse's receive/re-weigh step. The camera trigger is a `<label>` wrapping a visually-hidden `<input type="file">` styled as the existing `.actionBtn` button class, not a separate custom file-picker component.
+- **WhatsApp Intake panel loading/error/empty**: same three-state pattern as `AttentionPanel`/`NotificationsPopover` (`.empty` paragraph class, `--text-secondary`). Sender shown as the raw phone number when no reliable customer-name join exists — don't fuzzy-match a free-text field to fake a name.
+
 ## Update — 2026-08-05 Dark mode toggle + themed logo
 
 - **Theme toggle button**: lives in the Sidebar, immediately after the collapse-toggle button — same `variant="tertiary" size="md" iconOnly` `Button` shape, same inline-style centering block. Icon flips: moon (`hugeicons:moon-02`) shown in light mode (offers to switch to dark), sun (`hugeicons:sun-01`) shown in dark mode (offers to switch to light) — the icon always represents the mode you'd switch *to*, not the current mode.

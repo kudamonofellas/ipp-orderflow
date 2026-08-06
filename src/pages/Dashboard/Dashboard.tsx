@@ -7,11 +7,11 @@ import { IntakeModal } from '../../components/IntakeModal/IntakeModal';
 import { MetricCard } from '../../components/MetricCard/MetricCard';
 import { NotificationsPopover } from '../../components/NotificationsPopover/NotificationsPopover';
 import { StagePill } from '../../components/StagePill/StagePill';
-import { intakeMessages } from '../../data/mockDashboard';
 import { useCan, useCurrentUserName, useRole } from '../../hooks/useAuth';
 import { ADMIN_HIGHLIGHT_STAGES, PIPELINE_STAGES, RETURN_STAGES } from '../../lib/pipeline';
 import { useAttentionItems } from '../../hooks/useAttentionItems';
 import { useDashboardCounts, type RangeWithLabel } from '../../hooks/useDashboardCounts';
+import { useIntakeMessages } from '../../hooks/useIntakeMessages';
 import { useOpenOrders } from '../../hooks/useOpenOrders';
 import { AttentionPanel } from './sections/AttentionPanel';
 import { IntakePanel } from './sections/IntakePanel';
@@ -42,6 +42,7 @@ export function Dashboard() {
     cancelledRange,
   );
   const { items: attentionItems, loading: attentionLoading } = useAttentionItems();
+  const { messages: intakeMessages, loading: intakeLoading, error: intakeError } = useIntakeMessages();
   const canCreateOrders = useCan()('createOrders');
   const currentUserName = useCurrentUserName();
   const role = useRole();
@@ -154,7 +155,9 @@ export function Dashboard() {
                 items={attentionItems}
                 onItemClick={(stageKey) => navigate('/orders', { state: { stage: stageKey } })}
               />
-              {isAdminOrOwner && <IntakePanel messages={intakeMessages} />}
+              {isAdminOrOwner && (
+                <IntakePanel messages={intakeMessages} loading={intakeLoading} error={intakeError} />
+              )}
             </div>
 
             <OpenOrdersPanel
