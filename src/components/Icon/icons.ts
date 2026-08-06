@@ -48,6 +48,8 @@ export const ICONS = {
   document: 'hugeicons:file-01',
   save: 'hugeicons:floppy-disk',
   ai: 'hugeicons:ai-magic',
+  sun: 'hugeicons:sun-01',
+  moon: 'hugeicons:moon-02',
 } as const;
 
 export type IconName = keyof typeof ICONS;

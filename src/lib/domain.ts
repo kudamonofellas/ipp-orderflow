@@ -67,6 +67,10 @@ export const ALLOW: Record<Exclude<Role, 'Owner'>, Partial<Record<Capability, bo
     packWarehouse: true,
     advanceStage: true,
     manage_products: true,
+    // Warehouse completes the "receive" bucket of a return (weigh the goods
+    // back in) — no Owner Settings page exists yet to grant this per-role,
+    // so it defaults on rather than blocking the workflow.
+    processReturns: true,
   },
   Production: {
     cutProduction: true,

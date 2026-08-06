@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Icon } from "../Icon/Icon";
 import { StatusPill } from "../StatusPill/StatusPill";
 import { useCan } from "../../hooks/useAuth";
@@ -19,6 +19,7 @@ const currency = new Intl.NumberFormat("id-ID", {
  */
 export function OrderRows({ order }: { order: OpenOrder }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const [expanded, setExpanded] = useState(false);
   const canSeePrices = useCan()("seePrices");
   const lines = order.lines ?? [];
@@ -31,7 +32,7 @@ export function OrderRows({ order }: { order: OpenOrder }) {
   }
 
   function handleRowClick() {
-    navigate(`/orders/${order.id}`);
+    navigate(`/orders/${order.id}`, { state: { from: location.pathname } });
   }
 
   return (
@@ -52,7 +53,7 @@ export function OrderRows({ order }: { order: OpenOrder }) {
             />
           )}
         </td>
-        <td className={styles.orderId}>{order.orderId}</td>
+        <td className={styles.orderId}>{order.no}</td>
         <td>
           <StatusPill status={order.status} />
         </td>

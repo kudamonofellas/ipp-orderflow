@@ -34,7 +34,10 @@ function extractCount(val: unknown): number {
 function statusToStage(status: string | null | undefined): Stage | null {
   if (!status) return null;
   const s = status.toLowerCase().trim();
-  // Exact stage key matches
+  // Exact stage key matches (main pipeline only — return-workflow counts are
+  // computed separately below via returnBucketsForOrder-equivalent filters,
+  // since `stage` stays 'returned' the whole time; it never equals these
+  // return-bucket keys).
   if (s === 'intake') return 'intake';
   if (s === 'cold') return 'cold';
   if (s === 'finance') return 'finance';
@@ -43,10 +46,6 @@ function statusToStage(status: string | null | undefined): Stage | null {
   if (s === 'finalise' || s === 'finalize') return 'finalise';
   if (s === 'dispatch') return 'dispatch';
   if (s === 'delivered') return 'delivered';
-  if (s === 'awaiting_return') return 'awaiting_return';
-  if (s === 'admin_action') return 'admin_action';
-  if (s === 'awaiting_signed_doc') return 'awaiting_signed_doc';
-  if (s === 'replacement_transit') return 'replacement_transit';
 
   // Direct mappings for legacy status values in DB
   if (s === 'open' || s === 'draft' || s === 'new orders') return 'intake';
@@ -54,10 +53,6 @@ function statusToStage(status: string | null | undefined): Stage | null {
   if (s === 'finance gate' || s === 'finance review') return 'finance';
   if (s === 'cutting' || s === 'processing') return 'production';
   if (s === 'print do/si' || s === 'print do') return 'finalise';
-  if (s === 'awaiting return') return 'awaiting_return';
-  if (s === 'admin action required' || s === 'admin action') return 'admin_action';
-  if (s === 'awaiting signed do/si' || s === 'awaiting signed doc') return 'awaiting_signed_doc';
-  if (s === 'replacement in transit' || s === 'replacement transit') return 'replacement_transit';
   return null;
 }
 
@@ -208,6 +203,45 @@ export function useDashboardCounts(
         aggregate: { count: ['*'] },
       });
 
+      // Return-workflow buckets are parallel hand-offs, not sequential stage
+      // values — `stage` stays 'returned' throughout, so each bucket needs
+      // its own field-based filter (mirrors returnBucketsForOrder in pipeline.ts).
+      const awaitingReturnPromise = aggregateOrders({
+        filter: {
+          _and: [
+            { stage: { _eq: 'returned' } },
+            { _or: [{ return_received: { _neq: true } }, { return_inbound: { _eq: true } }] },
+            { return_settle: { _neq: 'done' } },
+          ],
+        },
+        aggregate: { count: ['*'] },
+      });
+      const adminActionPromise = aggregateOrders({
+        filter: {
+          _and: [
+            { stage: { _eq: 'returned' } },
+            { return_settle: { _null: true } },
+            { return_doc: { _null: true } },
+          ],
+        },
+        aggregate: { count: ['*'] },
+      });
+      const awaitingSignedDocPromise = aggregateOrders({
+        filter: {
+          _and: [{ stage: { _eq: 'returned' } }, { return_settle: { _eq: 'sign' } }],
+        },
+        aggregate: { count: ['*'] },
+      });
+      const replacementTransitPromise = aggregateOrders({
+        filter: {
+          _and: [
+            { is_replacement: { _eq: true } },
+            { stage: { _nin: ['delivered', 'cancelled'] } },
+          ],
+        },
+        aggregate: { count: ['*'] },
+      });
+
       // 2. Metrics
       // Open Orders: exclude terminal stages ('delivered', 'cancelled', 'returned')
       const openFilter = {
@@ -241,9 +275,24 @@ export function useDashboardCounts(
         ],
       };
 
-      const [stageRes, financeRes, openRes, totalRes, deliveredRes, cancelledRes] = await Promise.all([
+      const [
+        stageRes,
+        financeRes,
+        awaitingReturnRes,
+        adminActionRes,
+        awaitingSignedDocRes,
+        replacementTransitRes,
+        openRes,
+        totalRes,
+        deliveredRes,
+        cancelledRes,
+      ] = await Promise.all([
         stageResultPromise,
         financeParallelPromise,
+        awaitingReturnPromise,
+        adminActionPromise,
+        awaitingSignedDocPromise,
+        replacementTransitPromise,
         aggregateOrders({ filter: openFilter, aggregate: { count: ['*'] } }),
         aggregateOrders({ filter: totalFilter, aggregate: { count: ['*'] } }),
         aggregateOrders({ filter: deliveredFilter, aggregate: { count: ['*'] } }),
@@ -288,6 +337,25 @@ export function useDashboardCounts(
       if (financeExtra > 0) {
         stageMap.set('finance', (stageMap.get('finance') ?? 0) + financeExtra);
       }
+
+      // Return-workflow buckets: parallel hand-offs, not stage values — set
+      // directly from their own field-based aggregate queries (see above).
+      stageMap.set(
+        'awaiting_return',
+        awaitingReturnRes.data ? extractCount(awaitingReturnRes.data[0]?.count) : 0,
+      );
+      stageMap.set(
+        'admin_action',
+        adminActionRes.data ? extractCount(adminActionRes.data[0]?.count) : 0,
+      );
+      stageMap.set(
+        'awaiting_signed_doc',
+        awaitingSignedDocRes.data ? extractCount(awaitingSignedDocRes.data[0]?.count) : 0,
+      );
+      stageMap.set(
+        'replacement_transit',
+        replacementTransitRes.data ? extractCount(replacementTransitRes.data[0]?.count) : 0,
+      );
 
       setStageCounts(
         STAGE_ORDER.map((stage) => ({

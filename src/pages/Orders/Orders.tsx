@@ -28,8 +28,8 @@ const STAGE_OPTIONS = [
 ];
 
 const SORT_OPTIONS = [
-  { key: "-order_id", label: "Order ID (Desc)" },
-  { key: "order_id", label: "Order ID (Asc)" },
+  { key: "-no", label: "Order ID (Desc)" },
+  { key: "no", label: "Order ID (Asc)" },
   { key: "-delivery_date", label: "Delivery Date (Desc)" },
   { key: "delivery_date", label: "Delivery Date (Asc)" },
 ];
@@ -63,6 +63,22 @@ const STAGE_COPY: Record<string, { headline: string; empty: string }> = {
   delivered: { headline: "Delivered", empty: "No delivered orders." },
   cancelled: { headline: "Cancelled", empty: "No cancelled orders." },
   returned: { headline: "Returned", empty: "No returned orders." },
+  awaiting_return: {
+    headline: "Awaiting Return",
+    empty: "No orders awaiting return.",
+  },
+  admin_action: {
+    headline: "Admin Action Required",
+    empty: "No returns need admin action.",
+  },
+  awaiting_signed_doc: {
+    headline: "Awaiting Signed DO/SI",
+    empty: "No returns awaiting a signed DO/SI.",
+  },
+  replacement_transit: {
+    headline: "Replacement in Transit",
+    empty: "No replacements in transit.",
+  },
   outstanding: { headline: "Outstanding", empty: "No outstanding orders." },
   awaiting: { headline: "Awaiting Stock", empty: "No orders awaiting stock." },
 };
@@ -75,7 +91,7 @@ export function Orders() {
 
   const [stage, setStage] = useState(location.state?.stage || "all");
   const [search, setSearch] = useState("");
-  const [sortBy, setSortBy] = useState("-order_id");
+  const [sortBy, setSortBy] = useState("-no");
   const [stageOpen, setStageOpen] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
   const stageDropdownRef = useRef<HTMLDivElement>(null);
@@ -101,7 +117,7 @@ export function Orders() {
   ) {
     setOrderStep(0);
     navigate("/orders/new", {
-      state: { prefill: draft, rawText, attachments },
+      state: { prefill: draft, rawText, attachments, from: location.pathname },
     });
   }
 

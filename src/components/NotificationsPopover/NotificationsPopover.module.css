@@ -99,8 +99,8 @@
   padding: var(--space-xs) var(--space-sm);
   border-radius: var(--radius-sm);
   background: var(--bg-surface-hover);
-  font: var(--text-label);
-  color: var(--text-muted);
+  font: var(--text-caption);
+  color: var(--accent-primary);
   width: fit-content;
   align-self: center;
 }
@@ -118,6 +118,7 @@
 }
 
 .notificationItem {
+  position: relative;
   display: flex;
   flex-direction: column;
   padding: var(--space-md) var(--space-sm);
@@ -126,6 +127,16 @@
   border-bottom: 1px solid var(--border-subtle);
   cursor: pointer;
   transition: background-color var(--duration-fast) var(--ease-default);
+}
+
+.unreadDot {
+  position: absolute;
+  top: 4px;
+  right: 2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent-primary);
 }
 
 .notificationItem:hover {
@@ -143,7 +154,13 @@
 }
 
 .orderId {
-  font-weight: 500;
+  font-weight: 600;
+  color: var(--accent-primary);
+}
+
+.orderIdRead {
+  font-weight: 400;
+  color: var(--text-muted);
 }
 
 .time {
@@ -152,13 +169,13 @@
 }
 
 .text {
-  font: var(--text-body);
+  font: var(--text-caption);
   color: var(--text-primary);
 }
 
 .textRead {
-  color: var(--text-secondary);
-  opacity: 0.5;
+  font: var(--text-caption);
+  color: var(--text-muted);
 }
 
 /* ===== Reduced motion ===== */

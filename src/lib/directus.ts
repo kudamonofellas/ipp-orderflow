@@ -56,6 +56,10 @@ import {
   LinePhotosCollectionArraySchema,
   LineWeighingPhotosCollectionSchema,
   LineWeighingPhotosCollectionArraySchema,
+  LineReturnPhotosCollectionSchema,
+  LineReturnPhotosCollectionArraySchema,
+  ReturnDocumentsCollectionSchema,
+  ReturnDocumentsCollectionArraySchema,
 } from "./schemas";
 import type {
   CorrectionsCollection,
@@ -71,6 +75,8 @@ import type {
   LineWeighingsCollection,
   LinePhotosCollection,
   LineWeighingPhotosCollection,
+  LineReturnPhotosCollection,
+  ReturnDocumentsCollection,
 } from "../types/directus";
 import { buildOrderNo, parseOrderNo } from "./orderNo";
 
@@ -548,7 +554,6 @@ export async function getNextOrderNo(
 /** Shape for creating a new order row (mirrors the target schema). */
 export interface CreateOrderInput {
   no: string;
-  order_id: string;
   customer_id: string;
   customer_name?: string | null;
   customer_contact?: string | null;
@@ -1185,6 +1190,111 @@ export async function deleteLineWeighingPhoto(
   try {
     await getClient().request(deleteItem("line_weighing_photos", id));
     return { data: undefined, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+/** Courier's refusal-evidence photos per line, captured when an order is returned. */
+export async function readLineReturnPhotos(
+  lineIds: string[],
+): Promise<DirectusResult<LineReturnPhotosCollection[]>> {
+  if (lineIds.length === 0) return { data: [], error: null };
+  try {
+    const raw = await getClient().request(
+      readItems("line_return_photos", {
+        filter: { line_id: { _in: lineIds } } as never,
+        sort: ["sort_order"] as never,
+        limit: -1,
+      }),
+    );
+    const parsed = LineReturnPhotosCollectionArraySchema.safeParse(raw);
+    if (!parsed.success)
+      return {
+        data: null,
+        error: `Invalid line_return_photos response: ${parsed.error.message}`,
+      };
+    return { data: parsed.data, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+export async function createLineReturnPhoto(input: {
+  line_id: string;
+  photo_id: string;
+  sort_order?: number;
+}): Promise<DirectusResult<LineReturnPhotosCollection>> {
+  try {
+    const raw = await getClient().request(
+      createItem("line_return_photos", input as never),
+    );
+    const parsed = LineReturnPhotosCollectionSchema.safeParse(raw);
+    if (!parsed.success)
+      return {
+        data: null,
+        error: `Invalid line_return_photos response: ${parsed.error.message}`,
+      };
+    return { data: parsed.data, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+export async function deleteLineReturnPhoto(
+  id: string,
+): Promise<DirectusResult<void>> {
+  try {
+    await getClient().request(deleteItem("line_return_photos", id));
+    return { data: undefined, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+/**
+ * Accurate return-note / signed-DO/SI evidence. Append-only — never update
+ * or delete an evidence record (architecture.md), same posture as order_history.
+ */
+export async function readReturnDocuments(
+  orderId: string,
+): Promise<DirectusResult<ReturnDocumentsCollection[]>> {
+  try {
+    const raw = await getClient().request(
+      readItems("return_documents", {
+        filter: { order_id: { _eq: orderId } } as never,
+        sort: ["-created_at"] as never,
+        limit: -1,
+      }),
+    );
+    const parsed = ReturnDocumentsCollectionArraySchema.safeParse(raw);
+    if (!parsed.success)
+      return {
+        data: null,
+        error: `Invalid return_documents response: ${parsed.error.message}`,
+      };
+    return { data: parsed.data, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+export async function createReturnDocument(input: {
+  order_id: string;
+  kind: string;
+  photo_id?: string | null;
+}): Promise<DirectusResult<ReturnDocumentsCollection>> {
+  try {
+    const raw = await getClient().request(
+      createItem("return_documents", input as never),
+    );
+    const parsed = ReturnDocumentsCollectionSchema.safeParse(raw);
+    if (!parsed.success)
+      return {
+        data: null,
+        error: `Invalid return_documents response: ${parsed.error.message}`,
+      };
+    return { data: parsed.data, error: null };
   } catch (err) {
     return { data: null, error: errMsg(err) };
   }

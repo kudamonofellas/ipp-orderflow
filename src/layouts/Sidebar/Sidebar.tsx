@@ -7,21 +7,22 @@
  * Pushes the main content area (no overlay) via the SidebarContext.
  */
 
-import { Link } from 'react-router-dom';
-import { useCallback, useMemo, useState, type ReactNode } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
-import { Icon } from '../../components/Icon/Icon';
-import type { IconName } from '../../components/Icon/icons';
-import { Avatar } from '../../components/Avatar/Avatar';
-import { Button } from '../../components/Button/Button';
-import { getInitials } from '../../lib/initials';
-import { useAuth, useCurrentUserName } from '../../hooks/useAuth';
-import { SidebarContext, type SidebarState } from './sidebar-context';
-import { useSidebar } from './useSidebar';
-import logo from '../../assets/logo.svg';
-import styles from './Sidebar.module.css';
+import { Link } from "react-router-dom";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
+import { NavLink, useNavigate } from "react-router-dom";
+import { Icon } from "../../components/Icon/Icon";
+import type { IconName } from "../../components/Icon/icons";
+import { Avatar } from "../../components/Avatar/Avatar";
+import { Button } from "../../components/Button/Button";
+import { getInitials } from "../../lib/initials";
+import { useAuth, useCurrentUserName } from "../../hooks/useAuth";
+import { useTheme } from "../../hooks/useTheme";
+import { SidebarContext, type SidebarState } from "./sidebar-context";
+import { useSidebar } from "./useSidebar";
+import { Logo } from "../../components/Logo/Logo";
+import styles from "./Sidebar.module.css";
 
-const STORAGE_KEY = 'ipp_sidebar_collapsed';
+const STORAGE_KEY = "ipp_sidebar_collapsed";
 
 interface NavItem {
   to: string;
@@ -30,18 +31,18 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { to: '/', label: 'Dashboard', icon: 'dashboard' },
-  { to: '/orders', label: 'Orders', icon: 'orders' },
-  { to: '/customers', label: 'Customers', icon: 'customers' },
-  { to: '/products', label: 'Products', icon: 'products' },
-  { to: '/reports', label: 'Reports', icon: 'reports' },
-  { to: '/settings', label: 'Settings', icon: 'settings' },
+  { to: "/", label: "Dashboard", icon: "dashboard" },
+  { to: "/orders", label: "Orders", icon: "orders" },
+  { to: "/customers", label: "Customers", icon: "customers" },
+  { to: "/products", label: "Products", icon: "products" },
+  { to: "/reports", label: "Reports", icon: "reports" },
+  { to: "/settings", label: "Settings", icon: "settings" },
 ];
 
 export function SidebarProvider({ children }: { children: ReactNode }) {
   const [collapsed, setCollapsed] = useState<boolean>(() => {
     try {
-      return localStorage.getItem(STORAGE_KEY) === 'true';
+      return localStorage.getItem(STORAGE_KEY) === "true";
     } catch {
       return false;
     }
@@ -59,30 +60,40 @@ export function SidebarProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const value = useMemo<SidebarState>(() => ({ collapsed, toggle }), [collapsed, toggle]);
+  const value = useMemo<SidebarState>(
+    () => ({ collapsed, toggle }),
+    [collapsed, toggle],
+  );
 
-  return <SidebarContext.Provider value={value}>{children}</SidebarContext.Provider>;
+  return (
+    <SidebarContext.Provider value={value}>{children}</SidebarContext.Provider>
+  );
 }
 
 export function Sidebar() {
   const { collapsed, toggle } = useSidebar();
+  const { theme, toggle: toggleTheme } = useTheme();
   const { user, role, logout } = useAuth();
   const navigate = useNavigate();
   const name = useCurrentUserName();
 
   async function handleLogout() {
     await logout();
-    navigate('/login', { replace: true });
+    navigate("/login", { replace: true });
   }
 
   return (
-    <aside className={[styles.sidebar, collapsed ? styles.collapsed : ''].filter(Boolean).join(' ')}>
+    <aside
+      className={[styles.sidebar, collapsed ? styles.collapsed : ""]
+        .filter(Boolean)
+        .join(" ")}
+    >
       <Link
         to="/"
         className={styles.logoSection}
         aria-label="Inti Pangan Perkasa - Home"
       >
-        <img src={logo} alt="" className={styles.logo} aria-hidden="true" />
+        <Logo className={styles.logo} />
         {!collapsed && (
           <span className={styles.brandName}>
             Inti Pangan
@@ -97,9 +108,11 @@ export function Sidebar() {
           <NavLink
             key={to}
             to={to}
-            end={to === '/'}
+            end={to === "/"}
             className={({ isActive }) =>
-              [styles.link, isActive ? styles.linkActive : ''].filter(Boolean).join(' ')
+              [styles.link, isActive ? styles.linkActive : ""]
+                .filter(Boolean)
+                .join(" ")
             }
             title={collapsed ? label : undefined}
           >
@@ -108,52 +121,72 @@ export function Sidebar() {
           </NavLink>
         ))}
       </nav>
-      <Button
-        type="button"
-        variant="tertiary"
-        size="md"
-        icon={collapsed ? 'chevronRight' : 'chevronLeft'}
-        iconOnly
-        style={{
-          backgroundColor: "transparent",
-          display: "inline-flex",
-          alignItems: "center",
-          justifyContent: "center",
-          margin: "var(--space-sm) auto",
-        }}
-        onClick={toggle}
-        aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        title={collapsed ? 'Expand' : 'Collapse'}
-      />
-      <Button
-        variant="tertiary"
-        size="md"
-        onClick={handleLogout}
-        icon="logout"
-        style={{
-          backgroundColor: "transparent",
-          width: "100%",
-        }}
-        aria-label="Sign out"
-        title="Sign out"
-        className={styles.logoutBtn}
-      >
-        {!collapsed && <span>Sign out</span>}
-      </Button>
+      <div className={styles.separator} />
+      <div className={styles.bottomControls}>
+        <Button
+          type="button"
+          variant="tertiary"
+          size="md"
+          icon={collapsed ? "chevronRight" : "chevronLeft"}
+          style={{
+            backgroundColor: "transparent",
+            gap: "var(--space-md)",
+          }}
+          onClick={toggle}
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          title={collapsed ? "Expand" : "Collapse"}
+        >
+          {!collapsed && <span>Collapse</span>}
+        </Button>
+
+        <Button
+          type="button"
+          variant="tertiary"
+          size="md"
+          icon={theme === "dark" ? "sun" : "moon"}
+          style={{
+            backgroundColor: "transparent",
+            gap: "var(--space-md)",
+          }}
+          onClick={toggleTheme}
+          aria-label={
+            theme === "dark" ? "Switch to light mode" : "Switch to dark mode"
+          }
+          title={theme === "dark" ? "Light mode" : "Dark mode"}
+        >
+          {!collapsed && (
+            <span>{theme === "dark" ? "Light mode" : "Dark mode"}</span>
+          )}
+        </Button>
+        <Button
+          variant="tertiary"
+          size="md"
+          onClick={handleLogout}
+          icon="logout"
+          style={{
+            backgroundColor: "transparent",
+            gap: "var(--space-md)",
+          }}
+          aria-label="Sign out"
+          title="Sign out"
+        >
+          {!collapsed && <span>Sign out</span>}
+        </Button>
+      </div>
 
       <div className={styles.separator} />
 
       <div className={styles.bottomSection}>
         <div className={styles.userBlock} title={name || user?.email}>
           <Avatar
-          initials={getInitials(name) || '??'}
-          label={name || (user?.email ?? '')}
-          size="md"
-           />
+            initials={getInitials(name) || "??"}
+            label={name || (user?.email ?? "")}
+            size="md"
+          />
           {!collapsed && (
             <span className={styles.userMeta}>
               <span className={styles.userName}>{name || user?.email}</span>
-              <span className={styles.userRole}>{role ?? ''}</span>
+              <span className={styles.userRole}>{role ?? ""}</span>
             </span>
           )}
         </div>

@@ -66,6 +66,40 @@ export const STAGE_LABELS: Record<Stage, string> = {
 } as Record<Stage, string>;
 
 /**
+ * Which return-workflow bucket(s) an order currently sits in. A return isn't
+ * a forward pipeline stage - it's an off-pipeline loop with parallel
+ * hand-offs (the same principle as Finance running alongside Cold Storage):
+ * warehouse receives & weighs, admin settles the Accurate document, and
+ * (depending on the document chosen) a signed doc comes back and/or a
+ * replacement re-enters the main pipeline - any of these can be true at once.
+ *
+ * Ported from the prototype's returnBuckets() (domain.js) onto the Directus
+ * field names (return_received, return_settle, return_doc, return_inbound,
+ * is_replacement).
+ */
+export function returnBucketsForOrder(o: {
+  stage?: string | null;
+  return_received?: boolean | null;
+  return_settle?: string | null;
+  return_doc?: string | null;
+  return_inbound?: boolean | null;
+  is_replacement?: boolean | null;
+}): ReturnStage[] {
+  const buckets: ReturnStage[] = [];
+  if (o.stage === 'returned') {
+    if (!o.return_received || o.return_inbound) buckets.push('awaiting_return');
+    if (o.return_settle === 'sign') buckets.push('awaiting_signed_doc');
+    else if (!o.return_settle && !o.return_doc) buckets.push('admin_action');
+  } else if (o.return_inbound) {
+    buckets.push('awaiting_return');
+  }
+  if (o.is_replacement && !['delivered', 'cancelled'].includes(o.stage ?? '')) {
+    buckets.push('replacement_transit');
+  }
+  return buckets;
+}
+
+/**
  * Stages the current role "owns" — rendered with the main blue accent on the
  * dashboard so a user sees at a glance which buckets need their action.
  *

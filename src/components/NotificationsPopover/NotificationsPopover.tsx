@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Button } from "../Button/Button";
 import { useNotifications } from "../../hooks/useNotifications";
 import { useNotificationReadState } from "../../hooks/useNotificationReadState";
@@ -20,8 +20,9 @@ export function NotificationsPopover() {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
+  const location = useLocation();
   const { groups: notificationGroups, loading, error } = useNotifications();
-  const { isUnread, markAllRead } = useNotificationReadState();
+  const { isUnread, markAllRead, markRead } = useNotificationReadState();
 
   useEffect(() => {
     if (!open) return;
@@ -45,22 +46,26 @@ export function NotificationsPopover() {
   }, [open]);
 
   const unreadCount = notificationGroups.reduce(
-    (total, group) =>
-      total + group.entries.filter((e) => isUnread(e.at)).length,
+    (total, group) => total + group.entries.filter((e) => isUnread(e)).length,
     0,
   );
 
   const latestEntryAt = notificationGroups.reduce(
     (latest, group) =>
-      group.entries.reduce((groupLatest, e) => (e.at > groupLatest ? e.at : groupLatest), latest),
-    '',
+      group.entries.reduce(
+        (groupLatest, e) => (e.at > groupLatest ? e.at : groupLatest),
+        latest,
+      ),
+    "",
   );
 
   function handleEntryClick(entry: NotificationEntry) {
-    alert(`entry click fired: orderId=${entry.orderId} orderUuid=${entry.orderUuid || "(empty)"}`);
     if (!entry.orderUuid) return;
+    markRead(entry.id);
     setOpen(false);
-    navigate(`/orders/${entry.orderUuid}`);
+    navigate(`/orders/${entry.orderUuid}`, {
+      state: { from: location.pathname },
+    });
   }
 
   return (
@@ -121,39 +126,31 @@ export function NotificationsPopover() {
                   <p className={styles.date}>{group.date}</p>
                   <ul className={styles.list}>
                     {group.entries.map((entry) => {
-                      const unread = isUnread(entry.at);
+                      const unread = isUnread(entry);
                       return (
                         <li
                           key={entry.id}
                           className={styles.notificationItem}
                           onClick={() => handleEntryClick(entry)}
                         >
+                          {unread && (
+                            <span
+                              className={styles.unreadDot}
+                              aria-label="Unread"
+                            />
+                          )}
                           <div className={styles.notificationHeader}>
                             <span
                               className={
-                                unread
-                                  ? styles.orderId
-                                  : `${styles.orderId} ${styles.textRead}`
+                                unread ? styles.orderId : styles.orderIdRead
                               }
                             >
                               Order {entry.orderId}
                             </span>
-                            <span
-                              className={
-                                unread
-                                  ? styles.time
-                                  : `${styles.time} ${styles.textRead}`
-                              }
-                            >
-                              {entry.time}
-                            </span>
+                            <span className={styles.time}>{entry.time}</span>
                           </div>
                           <span
-                            className={
-                              unread
-                                ? styles.text
-                                : `${styles.text} ${styles.textRead}`
-                            }
+                            className={unread ? styles.text : styles.textRead}
                           >
                             {entry.action}
                           </span>

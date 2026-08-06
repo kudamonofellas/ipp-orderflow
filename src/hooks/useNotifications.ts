@@ -78,12 +78,12 @@ export function useNotifications(): UseNotificationsResult {
       if (orderIds.length > 0) {
         const ordersRes = await readOrders({
           filter: { id: { _in: orderIds } },
-          fields: ['id', 'no', 'order_id'],
+          fields: ['id', 'no'],
           limit: -1,
         });
         if (!cancelled && ordersRes.data) {
           labelByOrderId = new Map(
-            ordersRes.data.map((o) => [o.id, o.no || o.order_id || o.id.slice(0, 8)]),
+            ordersRes.data.map((o) => [o.id, o.no || o.id.slice(0, 8)]),
           );
         }
       }

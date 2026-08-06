@@ -7,11 +7,11 @@ import { IntakeModal } from '../../components/IntakeModal/IntakeModal';
 import { MetricCard } from '../../components/MetricCard/MetricCard';
 import { NotificationsPopover } from '../../components/NotificationsPopover/NotificationsPopover';
 import { StagePill } from '../../components/StagePill/StagePill';
-import { intakeMessages } from '../../data/mockDashboard';
 import { useCan, useCurrentUserName, useRole } from '../../hooks/useAuth';
 import { ADMIN_HIGHLIGHT_STAGES, PIPELINE_STAGES, RETURN_STAGES } from '../../lib/pipeline';
 import { useAttentionItems } from '../../hooks/useAttentionItems';
 import { useDashboardCounts, type RangeWithLabel } from '../../hooks/useDashboardCounts';
+import { useIntakeMessages } from '../../hooks/useIntakeMessages';
 import { useOpenOrders } from '../../hooks/useOpenOrders';
 import { AttentionPanel } from './sections/AttentionPanel';
 import { IntakePanel } from './sections/IntakePanel';
@@ -30,7 +30,7 @@ const METRIC_ICONS: Record<string, IconName> = {
 /** Admin dashboard — mirrors context/designs/Dashboard.png. */
 export function Dashboard() {
   const navigate = useNavigate();
-  const [sortBy, setSortBy] = useState('-order_id');
+  const [sortBy, setSortBy] = useState('-no');
   const [totalRange, setTotalRange] = useState<RangeWithLabel>({ val: { type: 'today' }, label: 'Today' });
   const [deliveredRange, setDeliveredRange] = useState<RangeWithLabel>({ val: { type: 'today' }, label: 'Today' });
   const [cancelledRange, setCancelledRange] = useState<RangeWithLabel>({ val: { type: 'today' }, label: 'Today' });
@@ -42,6 +42,7 @@ export function Dashboard() {
     cancelledRange,
   );
   const { items: attentionItems, loading: attentionLoading } = useAttentionItems();
+  const { messages: intakeMessages, loading: intakeLoading, error: intakeError } = useIntakeMessages();
   const canCreateOrders = useCan()('createOrders');
   const currentUserName = useCurrentUserName();
   const role = useRole();
@@ -64,7 +65,7 @@ export function Dashboard() {
 
   function handleParsed(draft: ParsedOrderDraft, rawText: string, attachments: File[]) {
     setOrderStep(0); // close the intake modal
-    navigate('/orders/new', { state: { prefill: draft, rawText, attachments } });
+    navigate('/orders/new', { state: { prefill: draft, rawText, attachments, from: '/' } });
   }
 
   const isLoading = ordersLoading || countsLoading || attentionLoading;
@@ -154,7 +155,9 @@ export function Dashboard() {
                 items={attentionItems}
                 onItemClick={(stageKey) => navigate('/orders', { state: { stage: stageKey } })}
               />
-              {isAdminOrOwner && <IntakePanel messages={intakeMessages} />}
+              {isAdminOrOwner && (
+                <IntakePanel messages={intakeMessages} loading={intakeLoading} error={intakeError} />
+              )}
             </div>
 
             <OpenOrdersPanel
