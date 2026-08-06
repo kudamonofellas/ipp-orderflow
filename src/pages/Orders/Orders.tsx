@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { Card } from "../../components/Card/Card";
 import { Icon } from "../../components/Icon/Icon";
 import { Button } from "../../components/Button/Button";
@@ -89,8 +89,37 @@ export function Orders() {
   const location = useLocation();
   const canCreateOrders = useCan()("createOrders");
 
-  const [stage, setStage] = useState(location.state?.stage || "all");
-  const [search, setSearch] = useState("");
+  // Stage + search are the single source of truth in the URL (not component
+  // state) — so a dashboard deep-link, the stage dropdown, a bookmark, and
+  // browser Back/Forward all stay in sync. Ported from the prototype's
+  // `Dev-Orders.jsx:17` pattern (prototype-audit.md calls this out as the
+  // strongest architectural idea in the prototype).
+  const [searchParams, setSearchParams] = useSearchParams();
+  const stage = searchParams.get("stage") || "all";
+  const search = searchParams.get("search") || "";
+
+  function setStage(next: string) {
+    setSearchParams((prev) => {
+      const params = new URLSearchParams(prev);
+      if (next === "all") params.delete("stage");
+      else params.set("stage", next);
+      return params;
+    });
+  }
+
+  function setSearch(next: string) {
+    setSearchParams(
+      (prev) => {
+        const params = new URLSearchParams(prev);
+        if (next) params.set("search", next);
+        else params.delete("search");
+        return params;
+      },
+      // Every keystroke would otherwise push a new history entry.
+      { replace: true },
+    );
+  }
+
   const [sortBy, setSortBy] = useState("-no");
   const [stageOpen, setStageOpen] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
@@ -174,12 +203,6 @@ export function Orders() {
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [sortOpen]);
-
-  const [prevLocKey, setPrevLocKey] = useState(location.key);
-  if (location.key !== prevLocKey) {
-    setPrevLocKey(location.key);
-    setStage(location.state?.stage || "all");
-  }
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const currentPage = Math.min(page, totalPages);

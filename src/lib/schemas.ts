@@ -252,6 +252,33 @@ export const CorrectionsCollectionSchema = z.object({
   times_used: z.number().nullable().optional(),
 });
 
+/** Directus `delivery_proofs` collection row — courier's 3-photo proof set + COD flag. */
+export const DeliveryProofsCollectionSchema = z.object({
+  id: z.string(),
+  order_id: z.string().nullable().optional(),
+  cond_photo: z.string().nullable().optional(),
+  recv_photo: z.string().nullable().optional(),
+  signed_photo: z.string().nullable().optional(),
+  cod: z.boolean().nullable().optional(),
+  name: z.string().nullable().optional(),
+  archived: z.boolean().nullable().optional(),
+  created_at: z.string().nullable().optional(),
+});
+export const DeliveryProofsCollectionArraySchema = z.array(
+  DeliveryProofsCollectionSchema,
+);
+
+/** Directus `settings` collection row — singleton operational settings (id is always 1). */
+export const SettingsCollectionSchema = z.object({
+  id: z.number(),
+  require_photo: z.boolean().nullable().optional(),
+  tol_below_pct: z.number().nullable().optional(),
+  tol_above_pct: z.number().nullable().optional(),
+  dispatch_proof_required: z.boolean().nullable().optional(),
+  lang: z.string().nullable().optional(),
+  updated_at: z.string().nullable().optional(),
+});
+
 /** Directus `directus_users` row — only the fields OrderDetail needs to
  *  resolve order_history.who / created_by UUIDs into display names. */
 export const UserBriefSchema = z.object({

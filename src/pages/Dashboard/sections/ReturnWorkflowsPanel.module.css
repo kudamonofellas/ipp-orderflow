@@ -30,6 +30,18 @@
   border-color: var(--accent-primary);
 }
 
+/* Role-owned return bucket: main blue accent, same treatment as StagePill's .pillHighlight. */
+.pillHighlight {
+  background-color: var(--bg-surface-hover-dark);
+  border-color: var(--accent-primary);
+}
+
+.pillHighlight .count,
+.pillHighlight .countActive,
+.pillHighlight .label {
+  color: var(--accent-primary);
+}
+
 .count {
   font: 700 16px/1.2 var(--font-sans);
   color: var(--text-primary);

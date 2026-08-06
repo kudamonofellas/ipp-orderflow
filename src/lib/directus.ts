@@ -60,6 +60,8 @@ import {
   LineReturnPhotosCollectionArraySchema,
   ReturnDocumentsCollectionSchema,
   ReturnDocumentsCollectionArraySchema,
+  DeliveryProofsCollectionArraySchema,
+  SettingsCollectionSchema,
 } from "./schemas";
 import type {
   CorrectionsCollection,
@@ -77,6 +79,8 @@ import type {
   LineWeighingPhotosCollection,
   LineReturnPhotosCollection,
   ReturnDocumentsCollection,
+  DeliveryProofsCollection,
+  SettingsCollection,
 } from "../types/directus";
 import { buildOrderNo, parseOrderNo } from "./orderNo";
 
@@ -1317,6 +1321,97 @@ export async function updateProduct(
       };
     }
     return { data: parsed.data, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+/**
+ * Read delivery proofs for a batch of orders (the courier's 3-photo proof set
+ * + COD flag). Excludes archived (superseded) runs by default.
+ */
+export async function readDeliveryProofs(
+  orderIds: string[],
+): Promise<DirectusResult<DeliveryProofsCollection[]>> {
+  if (orderIds.length === 0) return { data: [], error: null };
+  try {
+    const raw = await getClient().request(
+      readItems("delivery_proofs", {
+        filter: {
+          _and: [{ order_id: { _in: orderIds } }, { archived: { _neq: true } }],
+        } as never,
+        limit: -1,
+      }),
+    );
+    const parsed = DeliveryProofsCollectionArraySchema.safeParse(raw);
+    if (!parsed.success) {
+      return {
+        data: null,
+        error: `Invalid delivery_proofs response: ${parsed.error.message}`,
+      };
+    }
+    return { data: parsed.data, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+/**
+ * Read the `settings` singleton (always the one row with id 1). Returns
+ * `null` data (no error) if the row doesn't exist yet rather than failing.
+ */
+export async function readSettings(): Promise<DirectusResult<SettingsCollection | null>> {
+  try {
+    const raw = await getClient().request(
+      readItems("settings", { limit: 1 } as never),
+    );
+    const rows = Array.isArray(raw) ? raw : [];
+    if (rows.length === 0) return { data: null, error: null };
+    const parsed = SettingsCollectionSchema.safeParse(rows[0]);
+    if (!parsed.success) {
+      return {
+        data: null,
+        error: `Invalid settings response: ${parsed.error.message}`,
+      };
+    }
+    return { data: parsed.data, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+/** Update the `settings` singleton row. */
+export async function updateSettings(
+  id: number,
+  patch: Record<string, unknown>,
+): Promise<DirectusResult<SettingsCollection>> {
+  try {
+    const raw = await getClient().request(
+      updateItem("settings", id, patch as never),
+    );
+    const parsed = SettingsCollectionSchema.safeParse(raw);
+    if (!parsed.success) {
+      return {
+        data: null,
+        error: `Invalid settings response: ${parsed.error.message}`,
+      };
+    }
+    return { data: parsed.data, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+/** Aggregate `corrections` row count (e.g. the Settings page's "N learned matches" stat). */
+export async function aggregateCorrections(
+  query: DirectusQuery,
+): Promise<DirectusResult<AggregateCountRow[]>> {
+  try {
+    const raw = await getClient().request(
+      aggregate("corrections", query as never),
+    );
+    const rows = Array.isArray(raw) ? (raw as AggregateCountRow[]) : [];
+    return { data: rows, error: null };
   } catch (err) {
     return { data: null, error: errMsg(err) };
   }

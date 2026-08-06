@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { aggregateOrders } from '../lib/directus';
 import type { DashboardMetric, StageCount, DateRangeVal } from '../types/dashboard';
-import { PIPELINE_STAGES, RETURN_STAGES, STAGE_LABELS, type Stage } from '../lib/pipeline';
+import {
+  financeParallelQueueFilter,
+  PIPELINE_STAGES,
+  RETURN_STAGES,
+  STAGE_LABELS,
+  type Stage,
+} from '../lib/pipeline';
 
 /** Ordered stage keys for the grid: main pipeline then return workflow. */
 const STAGE_ORDER: Stage[] = [
@@ -193,13 +199,7 @@ export function useDashboardCounts(
 
       // Parallel query for Cold-stage unpaid orders that ALSO count toward Finance Review queue (per domain logic)
       const financeParallelPromise = aggregateOrders({
-        filter: {
-          _and: [
-            { stage: { _eq: 'cold' } },
-            { hold: { _neq: true } },
-            { payment_confirmed: { _neq: true } },
-          ],
-        },
+        filter: financeParallelQueueFilter(),
         aggregate: { count: ['*'] },
       });
 

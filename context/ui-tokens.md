@@ -10,19 +10,26 @@ Every color, radius, spacing, shadow, and font in a component MUST reference a C
 
 ## Colors (light theme — default)
 
+**Corrected 2026-08-07** — this table had drifted from the actual `tokens.css` since the 2026-07-13 theme
+refresh (page bg, surface hover, text secondary, accent, and both border tokens were all wrong). Values
+below are re-copied from `ui-context.md` / `tokens.css` directly.
+
 | Token            | Variable                     | Value     | Use for                     |
 | ---------------- | ---------------------------- | --------- | --------------------------- |
-| Page bg          | `var(--bg-base)`             | `#F5F6FA` | App background              |
+| Page bg          | `var(--bg-base)`             | `#FFFFFF` | App background              |
 | Surface          | `var(--bg-surface)`          | `#FFFFFF` | Cards, panels               |
-| Surface hover    | `var(--bg-surface-hover)`    | `#F9FAFB` | Hover state                 |
+| Surface hover    | `var(--bg-surface-hover)`    | `#F0F5F5` | Hover state                 |
+| Muted surface    | `var(--bg-muted)`            | `#E8EEEE` | Muted page/section backgrounds |
 | Text primary     | `var(--text-primary)`        | `#1A1D1F` | Headings, body              |
-| Text secondary   | `var(--text-secondary)`      | `#6C757D` | Labels, metadata            |
+| Text secondary   | `var(--text-secondary)`      | `#7C7C7C` | Labels, metadata            |
 | Text muted       | `var(--text-muted)`          | `#9CA3AF` | Timestamps, placeholders    |
-| Accent           | `var(--accent-primary)`      | `#1E4D5C` | Primary buttons, active nav |
-| Accent hover     | `var(--accent-primary-dark)` | `#163A47` | Button hover                |
+| Accent           | `var(--accent-primary)`      | `#0C4458` | Primary buttons, active nav |
+| Accent hover     | `var(--accent-primary-dark)` | `#082F3D` | Button hover                |
+| Accent light     | `var(--accent-primary-light)`| `#2291B9` | Lighter accent tint         |
+| Accent secondary | `var(--accent-secondary)`    | `#18295E` | Secondary brand accent      |
 | Text on accent   | `var(--text-on-accent)`      | `#FFFFFF` | Text on teal bg             |
-| Border           | `var(--border-default)`      | `#E5E7EB` | Card/input borders          |
-| Border subtle    | `var(--border-subtle)`       | `#F3F4F6` | Subtle dividers             |
+| Border           | `var(--border-default)`      | `#D6D6D6` | Card/input borders          |
+| Border subtle    | `var(--border-subtle)`       | `#F0F5F5` | Subtle dividers             |
 | Error            | `var(--state-error)`         | `#DC2626` | Errors, destructive         |
 | Success          | `var(--state-success)`       | `#10B981` | Confirmations               |
 | Warning          | `var(--state-warning)`       | `#F59E0B` | Warnings                    |
@@ -30,6 +37,10 @@ Every color, radius, spacing, shadow, and font in a component MUST reference a C
 | Badge bg         | `var(--bg-badge)`            | `#EEF2FF` | Pill backgrounds            |
 | Badge text       | `var(--text-badge)`          | `#4F46E5` | Text on badges              |
 | Notification dot | `var(--notification-accent)` | `#EF4444` | Unread indicator            |
+| Logo mark        | `var(--logo-mark)`           | `#030303` | Black parts of the inline brand-logo SVG |
+
+Every light-theme token above has a `[data-theme='dark']` override in `tokens.css` — see `ui-context.md`'s
+Dark Theme table for the dark values. Dark mode is built (toggle in the Sidebar), not just a future goal.
 
 ## Typography
 

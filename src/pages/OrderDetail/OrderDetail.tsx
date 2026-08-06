@@ -45,7 +45,7 @@ import type {
   LineCutsCollection,
   ReturnDocumentsCollection,
 } from "../../types/directus";
-import { returnBucketsForOrder, type ReturnStage } from "../../lib/pipeline";
+import { ACTOR, returnBucketsForOrder, type ReturnStage } from "../../lib/pipeline";
 import { ImageDetailsModal } from "../../components/ImageDetailsModal/ImageDetailsModal";
 import styles from "./OrderDetail.module.css";
 
@@ -432,6 +432,18 @@ export function OrderDetail() {
   const canRestore = (isCancelled || isOutstanding) && auth.can("advanceStage");
   const canAddDocs = auth.can("printDocuments");
   const canProcessReturns = auth.can("processReturns");
+  const canSeePrices = auth.can("seePrices");
+  const canSeeCustomerContact = auth.can("seeCustomerContact");
+
+  // Who currently "has the ball" for this stage (ported from the prototype's
+  // ACTOR — see F-04-adjacent "Stage → actor" gap in prototype-audit.md).
+  // Purely informational: doesn't gate any button (those already have their
+  // own capability checks) — just tells a non-actor role why they don't see
+  // an action here, instead of the screen silently having no buttons.
+  const stageActor = ACTOR[stage];
+  const isStageActor = auth.role === "Owner" || auth.role === stageActor;
+  const showActorNotice =
+    !!stageActor && !isStageActor && !canAdvance && !isCancelled && !isDelivered && !isReturned;
 
   /* ────────────── Returns sub-flow: which parallel bucket(s) is this order in? ── */
   const returnBuckets: ReturnStage[] = returnBucketsForOrder({
@@ -1406,19 +1418,23 @@ export function OrderDetail() {
                     : "—"}
                 </span>
               </div>
-              <div className={styles.detailItem}>
-                <span className={styles.detailLabel}>Sales Rep</span>
-                <span className={styles.detailValue}>
-                  {order.sales ?? order.sales_rep ?? "—"}
-                </span>
-              </div>
-              <div className={styles.detailItem}>
-                <span className={styles.detailLabel}>Contact</span>
-                <span className={styles.detailValue}>
-                  {order.customer_contact ?? "—"}
-                </span>
-              </div>
-              {order.customer_address && (
+              {canSeeCustomerContact && (
+                <div className={styles.detailItem}>
+                  <span className={styles.detailLabel}>Sales Rep</span>
+                  <span className={styles.detailValue}>
+                    {order.sales ?? order.sales_rep ?? "—"}
+                  </span>
+                </div>
+              )}
+              {canSeeCustomerContact && (
+                <div className={styles.detailItem}>
+                  <span className={styles.detailLabel}>Contact</span>
+                  <span className={styles.detailValue}>
+                    {order.customer_contact ?? "—"}
+                  </span>
+                </div>
+              )}
+              {canSeeCustomerContact && order.customer_address && (
                 <div
                   className={styles.detailItem}
                   style={{ gridColumn: "1 / -1" }}
@@ -1706,14 +1722,16 @@ export function OrderDetail() {
                           ? `${totalMeasuredWeight.toFixed(2)} kg`
                           : ""}
                       </span>
-                      <div className={styles.priceCalc}>
-                        <span>
-                          {currency.format(price)} x {qty}
-                        </span>
-                        <span className={styles.lineTotalPrice}>
-                          {currency.format(price * qty)}
-                        </span>
-                      </div>
+                      {canSeePrices && (
+                        <div className={styles.priceCalc}>
+                          <span>
+                            {currency.format(price)} x {qty}
+                          </span>
+                          <span className={styles.lineTotalPrice}>
+                            {currency.format(price * qty)}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
@@ -1730,12 +1748,14 @@ export function OrderDetail() {
               </div>
             )}
 
-            <div className={styles.totalRow}>
-              <span>Order value · from PO</span>
-              <span className={styles.totalValue}>
-                {currency.format(orderTotal)}
-              </span>
-            </div>
+            {canSeePrices && (
+              <div className={styles.totalRow}>
+                <span>Order value · from PO</span>
+                <span className={styles.totalValue}>
+                  {currency.format(orderTotal)}
+                </span>
+              </div>
+            )}
           </Card>
 
           {/* Documents Section */}
@@ -1861,6 +1881,12 @@ export function OrderDetail() {
               </form>
             )}
           </Card>
+
+          {showActorNotice && (
+            <div className={styles.actorNotice}>
+              This order is currently with <strong>{stageActor}</strong>.
+            </div>
+          )}
 
           {/* Stage Action Controls */}
           {!isCancelled && (

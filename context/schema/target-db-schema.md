@@ -36,6 +36,7 @@ Replaces `data/customers.js`. The Horeca account book.
 | -------------- | ------------------------------ | ---------------------------------------------------- |
 | `id`           | UUID PK                        |                                                      |
 | `name`         | TEXT NOT NULL                  |                                                      |
+| `company_name` | TEXT                           | **live but undocumented until 2026-08-07** — legal entity name, distinct from `name` |
 | `channel`      | TEXT NOT NULL DEFAULT 'horeca' | enum: `horeca`, (future: `retail`, `b2c`)            |
 | `contact`      | TEXT                           | phone / contact person                               |
 | `address`      | TEXT                           |                                                      |
@@ -102,6 +103,8 @@ The core pipeline record. Replaces the order objects in `store.jsx` → `seed()`
 | `returned_reason`   | TEXT                           |                                                                                                                                                     |
 | `created_at`        | TIMESTAMPTZ DEFAULT now()      |                                                                                                                                                     |
 | `updated_at`        | TIMESTAMPTZ DEFAULT now()      |                                                                                                                                                     |
+| `hold`              | BOOLEAN DEFAULT FALSE          | **live but undocumented until 2026-08-07** — freezes an order out of the Finance-parallel-queue count while at `cold` |
+| `docs_returned`     | BOOLEAN DEFAULT FALSE          | **live but undocumented until 2026-08-07** — signed DO/SI returned for a `delivered` order |
 
 ### `order_lines`
 

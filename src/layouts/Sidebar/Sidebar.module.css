@@ -22,6 +22,7 @@
 .logoSection {
   display: flex;
   align-items: center;
+  align-self: center;
   gap: var(--space-sm);
   padding: var(--space-lg) var(--space-md);
   min-height: 72px;
@@ -52,7 +53,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-xs);
-  padding: var(--space-sm);
+  padding: var(--space-md);
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
@@ -71,6 +72,7 @@
     background-color var(--duration-fast) var(--ease-default),
     color var(--duration-fast) var(--ease-default);
   white-space: nowrap;
+  max-height: 40px;
 }
 
 .bottomControls {
@@ -85,7 +87,7 @@
 /* When collapsed, center the icon in the link. */
 .collapsed .link {
   justify-content: center;
-  padding: var(--space-sm);
+  padding: var(--space-md);
 }
 
 .link:hover {

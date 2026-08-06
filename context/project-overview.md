@@ -101,9 +101,9 @@ IPP-OrderFlow is a B2B / Horeca order-management application for **PT Inti Panga
 
 ### Dashboard & Notifications
 
-- Top-bar navigation (redesign in progress)
+- Collapsible left Sidebar navigation (built 2026-07-20 — replaced the earlier horizontal top-bar nav entirely, not just a redesign-in-progress)
 - WhatsApp Intake panel (triage state per message)
-- Notifications panel (system events; collapsible if both Intake + Notifications shown)
+- Notifications bell popover (built — replaced the earlier page-column "panel" concept; toggled from the Sidebar/TopNav bell, closes on outside-click/Escape, unread-count badge + mark-as-read)
 - "Needs Attention" high-signal list: late deliveries, unpaid due today, missing weigh photo, return pending receive
 - Concrete action items: Finance approval, Print DO, Delivery proof missing — with counts + top 1-2 items inline
 - Consistent primary CTA location for "New Order"
@@ -131,7 +131,7 @@ IPP-OrderFlow is a B2B / Horeca order-management application for **PT Inti Panga
 - **Admin copy-paste order creation in-app** (paste raw text → auto-filled draft via the parsing service, reviewed before confirming)
 - Order pipeline UI for all 8 stages + returns sub-flow
 - Role-based access with configurable capability matrix
-- Dashboard redesign (top-bar nav, WhatsApp Intake, Needs Attention)
+- Dashboard redesign (Sidebar nav, WhatsApp Intake, Needs Attention)
 - Responsive, mobile-friendly web app + PWA installable (Phase 1)
 - EN/Bahasa i18n, light/dark theme
 - Live courier GPS tracking via Directus realtime

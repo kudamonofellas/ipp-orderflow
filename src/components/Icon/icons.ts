@@ -50,6 +50,20 @@ export const ICONS = {
   ai: 'hugeicons:ai-magic',
   sun: 'hugeicons:sun-01',
   moon: 'hugeicons:moon-02',
+  weight: 'hugeicons:weight-scale-01',
+  picklist: 'hugeicons:license-draft',
+  cash: 'hugeicons:cash-01',
+  tick: 'hugeicons:tick-02',
+  loaf: 'hugeicons:steak',
+  box: 'hugeicons:package',
+  pack: 'hugeicons:packaging',
+  language: 'hugeicons:language-square',
+  download: 'hugeicons:download-01',
+  export: 'hugeicons:file-export',
+  restore: 'hugeicons:file-sync',
+  calendar: 'hugeicons:calendar-04',
+  location: 'hugeicons:location-01',
+  navigation: 'hugeicons:navigation-03',
 } as const;
 
 export type IconName = keyof typeof ICONS;

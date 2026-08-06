@@ -1,0 +1,375 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
+.title {
+  font: var(--text-page-title);
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.rangeRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.inlinePicker {
+  width: auto;
+}
+
+.muted,
+.error,
+.noData {
+  font: var(--text-body);
+  color: var(--text-secondary);
+  padding: var(--space-md) 0;
+}
+
+.error {
+  color: var(--state-error);
+}
+
+.statsRow {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-lg);
+}
+
+.statsRowTwo {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-lg);
+}
+
+.sectionHeading {
+  font: var(--text-h3);
+  color: var(--text-primary);
+  margin: 0 0 var(--space-md);
+}
+
+.cardHeading {
+  font: var(--text-h3);
+  color: var(--text-primary);
+  margin: 0 0 var(--space-md);
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.twoCol {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-lg);
+  align-items: stretch;
+}
+
+/* ===== On-time delivery / weight variance stat ===== */
+.onTimeStat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.onTimeValue {
+  font: 700 40px/1.1 var(--font-sans);
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.onTimeLabel {
+  font: var(--text-body);
+  color: var(--text-secondary);
+}
+
+/* ===== Fulfillment donut ===== */
+.donutRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xl);
+  flex-wrap: wrap;
+}
+
+.donutWrap {
+  position: relative;
+  width: 160px;
+  height: 160px;
+  flex-shrink: 0;
+}
+
+.donutRing {
+  width: 100%;
+  height: 100%;
+  border-radius: var(--radius-full);
+}
+
+.donutHole {
+  position: absolute;
+  inset: 28px;
+  border-radius: var(--radius-full);
+  background: var(--bg-surface);
+}
+
+.legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.legend li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font: var(--text-body);
+  color: var(--text-primary);
+}
+
+.legendDot {
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+}
+
+.legendCount {
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  margin-left: var(--space-xs);
+}
+
+/* ===== Volume by customers ===== */
+.volumeHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+  margin-bottom: var(--space-lg);
+}
+
+.volumeControls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.search {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.searchIcon {
+  position: absolute;
+  left: var(--space-md);
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.searchInput {
+  width: 220px;
+  padding-left: calc(var(--space-md) + 18px + var(--space-sm));
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  font: var(--text-body);
+  color: var(--text-primary);
+}
+
+.searchInput:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: var(--focus-ring);
+}
+
+.sortWrapper {
+  position: relative;
+}
+
+.sortDropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: var(--space-sm);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  padding: var(--space-xs);
+  display: flex;
+  flex-direction: column;
+  z-index: 20;
+  min-width: 140px;
+}
+
+.sortItem {
+  text-align: left;
+  white-space: nowrap;
+}
+
+.volumeTable {
+  display: flex;
+  flex-direction: column;
+}
+
+.volumeHeadRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr) minmax(0, 1.5fr);
+  gap: var(--space-lg);
+  font: var(--text-label);
+  color: var(--text-secondary);
+  padding-bottom: var(--space-sm);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.volumeRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr) minmax(0, 1.5fr);
+  gap: var(--space-lg);
+  align-items: center;
+  padding: var(--space-sm) 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.volumeRow:last-child {
+  border-bottom: none;
+}
+
+.volumeName {
+  font: var(--text-body);
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.volumeBarCell {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.volumeBarTrack {
+  flex: 1;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--bg-muted);
+  overflow: hidden;
+}
+
+.volumeBarFillOrders {
+  height: 100%;
+  background: var(--accent-primary);
+  border-radius: var(--radius-full);
+}
+
+.volumeBarFillWeight {
+  height: 100%;
+  background: var(--state-success);
+  border-radius: var(--radius-full);
+}
+
+.volumeBarValue {
+  font: var(--text-body);
+  font-weight: 500;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+  min-width: 3ch;
+  text-align: right;
+}
+
+/* ===== Demand by product ===== */
+.demandGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-lg);
+}
+
+.demandHeading {
+  font: var(--text-h3);
+  color: var(--text-primary);
+  margin: 0 0 var(--space-md);
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.demandList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.demandRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.demandName {
+  font: var(--text-body);
+  color: var(--text-primary);
+  flex-shrink: 0;
+  width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.demandBarTrack {
+  flex: 1;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--bg-muted);
+  overflow: hidden;
+}
+
+.demandBarFill {
+  height: 100%;
+  background: var(--accent-primary);
+  border-radius: var(--radius-full);
+}
+
+.demandQty {
+  font: var(--text-body);
+  font-weight: 500;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+  min-width: 5ch;
+  text-align: right;
+}
+
+@media (max-width: 1024px) {
+  .statsRow {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .twoCol {
+    grid-template-columns: 1fr;
+  }
+
+  .demandGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .statsRow,
+  .statsRowTwo {
+    grid-template-columns: 1fr;
+  }
+
+  .volumeHeadRow,
+  .volumeRow {
+    grid-template-columns: 1fr;
+  }
+}

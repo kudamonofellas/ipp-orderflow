@@ -8,8 +8,12 @@
  * about each step. Keep keys stable; only labels change with the design.
  *
  * This is UI/domain metadata only — no Directus calls here. The capability
- * matrix (`can()`) will live in a separate `src/lib/domain.ts` unit.
+ * matrix (`can()`) lives in `src/lib/domain.ts`; `Role` is imported from
+ * there for `ROLE_FOCUS` below (no reverse import — domain.ts doesn't
+ * depend on this file).
  */
+
+import type { Role } from './domain';
 
 /** In-pipeline stage keys (stable enum — see architecture.md Invariant #4). */
 export type PipelineStage =
@@ -100,15 +104,67 @@ export function returnBucketsForOrder(o: {
 }
 
 /**
- * Stages the current role "owns" — rendered with the main blue accent on the
- * dashboard so a user sees at a glance which buckets need their action.
+ * Directus filter fragment matching orders in the Finance parallel queue: an
+ * order still sitting in Cold Storage that hasn't been held and hasn't had
+ * payment confirmed. Cold and Finance run in parallel — a cold, unpaid,
+ * un-held order counts toward both the Cold Storage and Finance Review
+ * tallies (asymmetric with the Cold tile, which counts held orders too).
  *
- * Admin owns: New Orders (intake), Print DO/SI (finalise), and the return
- * workflow's Admin Action Required. Per-role mappings for the other five
- * roles land with the domain/capability layer.
+ * Single source for this predicate — previously hand-rolled identically in
+ * both `useDashboardCounts.ts` and `useOrders.ts` (F-06 in
+ * prototype-audit.md: duplicated business predicates drift on the next
+ * change if copied instead of shared).
  */
-export const ADMIN_HIGHLIGHT_STAGES: Stage[] = [
-  'intake',
-  'finalise',
-  'admin_action',
-];
+export function financeParallelQueueFilter(): Record<string, unknown> {
+  return {
+    _and: [
+      { stage: { _eq: 'cold' } },
+      { hold: { _neq: true } },
+      { payment_confirmed: { _neq: true } },
+    ],
+  };
+}
+
+/**
+ * Stages each role "owns" — rendered with the main blue accent on the
+ * dashboard (both the pipeline strip and the returns panel) so a user sees
+ * at a glance which buckets need their action. One shared map drives both
+ * strips so "yours" looks and means the same thing in either place — ported
+ * from the prototype's `ROLE_FOCUS` (pipeline stages) merged with
+ * `RETURN_BUCKETS[].roles` (return buckets), onto this app's stage/role
+ * vocabulary. Owner intentionally maps to `[]` — they oversee everything,
+ * so nothing is "theirs" specifically (matches the prototype's empty
+ * `ROLE_FOCUS.Owner`, which avoids a role !== 'Owner' special case at every
+ * call site).
+ */
+export const ROLE_FOCUS: Record<Role, Stage[]> = {
+  Admin: ['intake', 'finalise', 'admin_action', 'awaiting_signed_doc', 'replacement_transit'],
+  Warehouse: ['cold', 'packing', 'awaiting_return', 'replacement_transit'],
+  Production: ['production', 'replacement_transit'],
+  Finance: ['finance'],
+  Courier: ['dispatch', 'awaiting_signed_doc', 'replacement_transit'],
+  Owner: [],
+};
+
+/**
+ * Which role is responsible for an order sitting at a given pipeline stage —
+ * "who has the ball right now." Ported from the prototype's `ACTOR`
+ * (`Dev-domain.js:143`). `delivered`, `cancelled`, and `returned` are
+ * intentionally absent — they're terminal/off-pipeline states with no single
+ * owning role (the prototype excludes them from its equivalent `canAct`
+ * guard for the same reason). Keyed by plain `string` (not `PipelineStage`)
+ * to match how `order.stage` is read off the Directus record elsewhere in
+ * this codebase (e.g. `OrderDetail.tsx`'s `STAGE_FLOW`) — index with the raw
+ * stage string and treat a `undefined` result as "no single owner."
+ */
+export const ACTOR: Record<string, Role> = {
+  intake: 'Admin',
+  cold: 'Warehouse',
+  finance: 'Finance',
+  production: 'Production',
+  packing: 'Warehouse',
+  finalise: 'Admin',
+  dispatch: 'Courier',
+  outstanding: 'Admin',
+  awaiting: 'Admin',
+};

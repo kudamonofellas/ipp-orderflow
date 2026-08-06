@@ -25,7 +25,9 @@ import type {
   LinePhotosCollectionSchema,
   LineWeighingPhotosCollectionSchema,
   LineReturnPhotosCollectionSchema,
-  ReturnDocumentsCollectionSchema
+  ReturnDocumentsCollectionSchema,
+  DeliveryProofsCollectionSchema,
+  SettingsCollectionSchema
 } from '../lib/schemas';
 
 export type OrdersCollection = z.infer<typeof OrdersCollectionSchema>;
@@ -43,3 +45,5 @@ export type LinePhotosCollection = z.infer<typeof LinePhotosCollectionSchema>;
 export type LineWeighingPhotosCollection = z.infer<typeof LineWeighingPhotosCollectionSchema>;
 export type LineReturnPhotosCollection = z.infer<typeof LineReturnPhotosCollectionSchema>;
 export type ReturnDocumentsCollection = z.infer<typeof ReturnDocumentsCollectionSchema>;
+export type DeliveryProofsCollection = z.infer<typeof DeliveryProofsCollectionSchema>;
+export type SettingsCollection = z.infer<typeof SettingsCollectionSchema>;

@@ -11,6 +11,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { aggregateOrders, readOrderLines, readOrders } from "../lib/directus";
+import { financeParallelQueueFilter } from "../lib/pipeline";
 import type { OpenOrder, OpenOrderLine } from "../types/dashboard";
 
 /** Max orders per page in the Orders list. */
@@ -162,13 +163,7 @@ export function useOrders(
       } else if (stageFilter === "finance") {
         filter._or = [
           { stage: { _eq: "finance" } },
-          {
-            _and: [
-              { stage: { _eq: "cold" } },
-              { hold: { _neq: true } },
-              { payment_confirmed: { _neq: true } },
-            ],
-          },
+          financeParallelQueueFilter(),
         ];
       } else if (stageFilter === "cancelled") {
         filter._or = [
