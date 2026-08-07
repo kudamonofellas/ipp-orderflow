@@ -71,7 +71,6 @@ export interface OpenOrderLine {
 export interface OpenOrder {
   id: string;
   no: string;
-  orderId: string;
   status: string;
   orderDate: string;
   deliveryDate: string;

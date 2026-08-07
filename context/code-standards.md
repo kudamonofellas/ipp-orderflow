@@ -81,7 +81,7 @@
 
 - `src/components/` — Reusable UI components (Button, Card, Badge, Avatar, etc.). Each component in its own folder with `.tsx` + `.module.css`.
 - `src/pages/` — Route-level components (Dashboard, Orders, Customers, Settings, Login). One folder per route.
-- `src/layouts/` — Layout wrappers (TopNav, AuthLayout).
+- `src/layouts/` — Layout wrappers (`AppLayout` — main authenticated shell; `Sidebar` — collapsible left nav, replaced the earlier horizontal TopNav on 2026-07-20).
 - `src/lib/` — Infrastructure: `directus.ts` (SDK client), `domain.ts` (pipeline + capabilities), `format.ts` (order numbers, dates), `live.ts` (realtime subscriptions).
 - `src/hooks/` — Custom React hooks (`useOrders`, `useRealtime`, `useCapabilities`, `useTheme`).
 - `src/types/` — TypeScript interfaces mirroring the Directus collections (`Order`, `OrderLine`, `Customer`, `Product`, `Message`, `Attachment`, etc.).

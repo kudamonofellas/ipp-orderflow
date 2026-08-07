@@ -42,7 +42,12 @@ export type Capability =
   | 'manage_products'
   | 'manage_customers'
   | 'cancelOrders'
-  | 'seePrices';
+  | 'seePrices'
+  | 'seeCustomerContact'
+  | 'viewIntakePanel'
+  | 'viewPickList'
+  | 'viewDeliveryRun'
+  | 'reconcileCOD';
 
 /**
  * Coded defaults — the fallback when `role_permissions` has no row for a
@@ -61,12 +66,22 @@ export const ALLOW: Record<Exclude<Role, 'Owner'>, Partial<Record<Capability, bo
     manage_customers: true,
     cancelOrders: true,
     seePrices: true,
+    seeCustomerContact: true,
+    viewIntakePanel: true,
+    viewPickList: true,
+    viewDeliveryRun: true,
+    reconcileCOD: true,
   },
   Warehouse: {
     weighColdStorage: true,
     packWarehouse: true,
     advanceStage: true,
     manage_products: true,
+    // Warehouse completes the "receive" bucket of a return (weigh the goods
+    // back in) — no Owner Settings page exists yet to grant this per-role,
+    // so it defaults on rather than blocking the workflow.
+    processReturns: true,
+    viewPickList: true,
   },
   Production: {
     cutProduction: true,
@@ -75,11 +90,17 @@ export const ALLOW: Record<Exclude<Role, 'Owner'>, Partial<Record<Capability, bo
   Finance: {
     approveFinance: true,
     seePrices: true,
+    seeCustomerContact: true,
+    reconcileCOD: true,
   },
   Courier: {
     dispatch: true,
     uploadDeliveryProof: true,
     advanceStage: true,
+    // Courier needs the delivery contact/address to complete the drop-off —
+    // matches the prototype's default (Dev-domain.js ALLOW.Courier.seeCustomerContact).
+    seeCustomerContact: true,
+    viewDeliveryRun: true,
   },
 };
 
@@ -102,6 +123,11 @@ export const CAPABILITIES: Capability[] = [
   'manageRoles',
   'manageSettings',
   'seePrices',
+  'seeCustomerContact',
+  'viewIntakePanel',
+  'viewPickList',
+  'viewDeliveryRun',
+  'reconcileCOD',
 ];
 
 /**

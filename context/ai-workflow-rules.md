@@ -41,7 +41,7 @@ Do not modify the following unless explicitly instructed:
 - `.agents/memories/` — imported session notes and project context. Read-only reference.
 - `context/schema/snapshot.json` — the live Directus schema snapshot. Reflects the actual DB, not a target.
 - Any file under `node_modules/`, `dist/`, or `.vite/`
-- `package.json` dependencies — only add when a feature genuinely requires it, and prefer the libraries already in the stack (React, React Router, Vite, lucide-react, `@directus/sdk`, zod)
+- `package.json` dependencies — only add when a feature genuinely requires it, and prefer the libraries already in the stack (React, React Router, Vite, `@iconify/react` + `@iconify-json/hugeicons`, `@directus/sdk`, zod)
 
 ## Filesystem Safety
 

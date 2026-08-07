@@ -5,12 +5,15 @@
  * proof missing — with counts").
  *
  * Each bucket's `id` doubles as the Orders-page stage filter key so a click
- * can `navigate('/orders', { state: { stage: item.id } })` — same pattern as
- * the Dashboard's StagePill / ReturnWorkflowsPanel clicks.
+ * can `navigate(\`/orders?stage=${item.id}\`)` — same pattern as the
+ * Dashboard's StagePill / ReturnWorkflowsPanel clicks.
  */
 
 import { useEffect, useState } from 'react';
 import { aggregateOrders } from '../lib/directus';
+import { useCan } from './useAuth';
+import type { Capability } from '../lib/domain';
+import { financeParallelQueueFilter } from '../lib/pipeline';
 import type { AttentionItem } from '../types/dashboard';
 
 function extractCount(val: unknown): number {
@@ -31,6 +34,14 @@ interface Bucket {
   key: string;
   label: string;
   filter: Record<string, unknown>;
+  /**
+   * Capability that "owns" this bucket — used to surface the current role's
+   * own items first (see F-03 in prototype-audit.md: role-owned items were
+   * buried at a fixed list length). Buckets without one (e.g. `late`) are
+   * relevant to every role, matching the prototype's own attention list,
+   * where most entries are intentionally left unfiltered.
+   */
+  capability?: Capability;
 }
 
 /** Buckets with a static filter (the "late" bucket needs a fresh cutoff each load — see `lateBucket()`). */
@@ -39,37 +50,33 @@ const BUCKETS: Bucket[] = [
     key: 'pending-docs',
     label: 'Signed DO/SI not returned yet',
     filter: { _and: [{ stage: { _eq: 'delivered' } }, { docs_returned: { _neq: true } }] },
+    capability: 'printDocuments',
   },
   {
     key: 'finance',
     label: 'Orders awaiting finance approval',
     filter: {
-      _or: [
-        { stage: { _eq: 'finance' } },
-        {
-          _and: [
-            { stage: { _eq: 'cold' } },
-            { hold: { _neq: true } },
-            { payment_confirmed: { _neq: true } },
-          ],
-        },
-      ],
+      _or: [{ stage: { _eq: 'finance' } }, financeParallelQueueFilter()],
     },
+    capability: 'approveFinance',
   },
   {
     key: 'finalise',
     label: 'Orders ready to print DO/SI',
     filter: { stage: { _eq: 'finalise' } },
+    capability: 'printDocuments',
   },
   {
     key: 'awaiting_return',
     label: 'Returns awaiting warehouse receipt',
     filter: { stage: { _eq: 'awaiting_return' } },
+    capability: 'processReturns',
   },
   {
     key: 'admin_action',
     label: 'Returns needing admin action',
     filter: { stage: { _eq: 'admin_action' } },
+    capability: 'processReturns',
   },
 ];
 
@@ -93,6 +100,9 @@ function lateBucket(): Bucket {
         },
       ],
     },
+    // No capability — a past-due delivery is relevant to everyone coordinating
+    // the order, not one specific role (matches the prototype, where this
+    // exact bucket is also left unfiltered).
   };
 }
 
@@ -106,6 +116,7 @@ export function useAttentionItems(): UseAttentionItemsResult {
   const [items, setItems] = useState<AttentionItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const can = useCan();
 
   useEffect(() => {
     let cancelled = false;
@@ -135,10 +146,18 @@ export function useAttentionItems(): UseAttentionItemsResult {
           id: b.key,
           label: b.label,
           count: results[i].data ? extractCount(results[i].data[0]?.count) : 0,
+          mine: b.capability ? can(b.capability) : true,
         }))
         .filter((item) => item.count > 0);
 
-      setItems(built);
+      // Role-owned buckets (and role-agnostic ones like `late`) surface first;
+      // buckets another role owns sort after. `Array.prototype.sort` is
+      // stable, so relative order within each group is preserved. Fixes the
+      // role-blindness half of F-03 (prototype-audit.md) — previously every
+      // role saw the identical, unordered set of buckets.
+      built.sort((a, b) => Number(b.mine) - Number(a.mine));
+
+      setItems(built.map((item) => ({ id: item.id, label: item.label, count: item.count })));
       setLoading(false);
     }
 
@@ -146,7 +165,7 @@ export function useAttentionItems(): UseAttentionItemsResult {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [can]);
 
   return { items, loading, error };
 }

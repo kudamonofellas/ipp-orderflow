@@ -7,11 +7,11 @@ import { IntakeModal } from '../../components/IntakeModal/IntakeModal';
 import { MetricCard } from '../../components/MetricCard/MetricCard';
 import { NotificationsPopover } from '../../components/NotificationsPopover/NotificationsPopover';
 import { StagePill } from '../../components/StagePill/StagePill';
-import { intakeMessages } from '../../data/mockDashboard';
 import { useCan, useCurrentUserName, useRole } from '../../hooks/useAuth';
-import { ADMIN_HIGHLIGHT_STAGES, PIPELINE_STAGES, RETURN_STAGES } from '../../lib/pipeline';
+import { PIPELINE_STAGES, ROLE_FOCUS, RETURN_STAGES } from '../../lib/pipeline';
 import { useAttentionItems } from '../../hooks/useAttentionItems';
 import { useDashboardCounts, type RangeWithLabel } from '../../hooks/useDashboardCounts';
+import { useIntakeMessages } from '../../hooks/useIntakeMessages';
 import { useOpenOrders } from '../../hooks/useOpenOrders';
 import { AttentionPanel } from './sections/AttentionPanel';
 import { IntakePanel } from './sections/IntakePanel';
@@ -30,7 +30,7 @@ const METRIC_ICONS: Record<string, IconName> = {
 /** Admin dashboard — mirrors context/designs/Dashboard.png. */
 export function Dashboard() {
   const navigate = useNavigate();
-  const [sortBy, setSortBy] = useState('-order_id');
+  const [sortBy, setSortBy] = useState('-no');
   const [totalRange, setTotalRange] = useState<RangeWithLabel>({ val: { type: 'today' }, label: 'Today' });
   const [deliveredRange, setDeliveredRange] = useState<RangeWithLabel>({ val: { type: 'today' }, label: 'Today' });
   const [cancelledRange, setCancelledRange] = useState<RangeWithLabel>({ val: { type: 'today' }, label: 'Today' });
@@ -42,10 +42,16 @@ export function Dashboard() {
     cancelledRange,
   );
   const { items: attentionItems, loading: attentionLoading } = useAttentionItems();
-  const canCreateOrders = useCan()('createOrders');
+  const { messages: intakeMessages, loading: intakeLoading, error: intakeError } = useIntakeMessages();
+  const can = useCan();
+  const canCreateOrders = can('createOrders');
+  const canViewIntakePanel = can('viewIntakePanel');
+  const canViewPickList = can('viewPickList');
+  const canViewDeliveryRun = can('viewDeliveryRun');
+  const canReconcileCOD = can('reconcileCOD');
   const currentUserName = useCurrentUserName();
   const role = useRole();
-  const isAdminOrOwner = role === 'Admin' || role === 'Owner';
+  const focusStages = role ? ROLE_FOCUS[role] : [];
 
   // Multi-step "Add New Order" flow:
   // step 0: idle, step 1: channel selection, step 2: intake
@@ -64,7 +70,7 @@ export function Dashboard() {
 
   function handleParsed(draft: ParsedOrderDraft, rawText: string, attachments: File[]) {
     setOrderStep(0); // close the intake modal
-    navigate('/orders/new', { state: { prefill: draft, rawText, attachments } });
+    navigate('/orders/new', { state: { prefill: draft, rawText, attachments, from: '/' } });
   }
 
   const isLoading = ordersLoading || countsLoading || attentionLoading;
@@ -91,6 +97,39 @@ export function Dashboard() {
               </div>
 
               <div className={styles.topActions}>
+                {canViewDeliveryRun && (
+                  <Button
+                    variant="secondary"
+                    size="md"
+                    onClick={() => navigate('/deliveries')}
+                    title="See the delivery run-sheet"
+                    icon="delivered"
+                  >
+                    Deliveries
+                  </Button>
+                )}
+                {canViewPickList && (
+                  <Button
+                    variant="secondary"
+                    size="md"
+                    onClick={() => navigate('/picklist')}
+                    title="See the aggregate pick list"
+                    icon="picklist"
+                  >
+                    Pick list
+                  </Button>
+                )}
+                {canReconcileCOD && (
+                  <Button
+                    variant="secondary"
+                    size="md"
+                    onClick={() => navigate('/cashup')}
+                    title="Reconcile COD cash"
+                    icon="cash"
+                  >
+                    Cash Up
+                  </Button>
+                )}
                 <NotificationsPopover />
                 {canCreateOrders && (
                   <Button
@@ -138,23 +177,26 @@ export function Dashboard() {
                   key={stage.stage}
                   count={stage.count}
                   label={stage.label}
-                  highlight={ADMIN_HIGHLIGHT_STAGES.includes(stage.stage)}
-                  onClick={() => navigate('/orders', { state: { stage: stage.stage } })}
+                  highlight={focusStages.includes(stage.stage)}
+                  onClick={() => navigate(`/orders?stage=${stage.stage}`)}
                 />
               ))}
             </div>
 
-            {/* 3-column panels: Return Workflows | Needs Attention | WhatsApp Intake (admin/owner only). */}
-            <div className={isAdminOrOwner ? styles.panelsGrid : styles.panelsGridTwo}>
+            {/* 3-column panels: Return Workflows | Needs Attention | WhatsApp Intake (gated on viewIntakePanel). */}
+            <div className={canViewIntakePanel ? styles.panelsGrid : styles.panelsGridTwo}>
               <ReturnWorkflowsPanel
                 stages={returnsWorkflow}
-                onStageClick={(key) => navigate('/orders', { state: { stage: key } })}
+                focusStages={focusStages}
+                onStageClick={(key) => navigate(`/orders?stage=${key}`)}
               />
               <AttentionPanel
                 items={attentionItems}
-                onItemClick={(stageKey) => navigate('/orders', { state: { stage: stageKey } })}
+                onItemClick={(stageKey) => navigate(`/orders?stage=${stageKey}`)}
               />
-              {isAdminOrOwner && <IntakePanel messages={intakeMessages} />}
+              {canViewIntakePanel && (
+                <IntakePanel messages={intakeMessages} loading={intakeLoading} error={intakeError} />
+              )}
             </div>
 
             <OpenOrdersPanel

@@ -1,0 +1,16 @@
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.value {
+  font: 700 32px/1.2 var(--font-sans);
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.label {
+  font: var(--text-body);
+  color: var(--text-secondary);
+}

@@ -6,7 +6,7 @@
 | ----------- | ---------------------------------- | ----------------------------------------------------------------------------- |
 | Frontend    | React 18 + React Router 6 + Vite 5 | Responsive web app (Phase 1), PWA-installable. Ported from the prototype.     |
 | Language    | TypeScript                         | Type safety on the frontend (prototype was plain JS).                         |
-| UI          | lucide-react + plain CSS           | Icons + styling. No Tailwind. Light/dark theme, EN/Bahasa i18n.               |
+| UI          | HugeIcons via Iconify (`@iconify/react` + `@iconify-json/hugeicons`) + plain CSS | Icons + styling. No Tailwind. Light/dark theme (built), EN/Bahasa i18n (not yet built). |
 | Backend API | Directus 12.0.2 (headless CMS)     | REST/GraphQL API, auth, file storage, role ACLs, realtime. Replaces Firebase. |
 | Database    | PostgreSQL (`horeca_orders_dev` / `horeca_orders` db) | Dev vs Prod databases on Postgres. Single source of truth for all business data. |
 | Automation  | n8n (+ its own Postgres)           | WhatsApp intake workflow: parses group messages → draft orders in Directus.   |
@@ -37,7 +37,23 @@
 
 ### Current schema (from snapshot.json — Directus 12.0.2, postgres)
 
-Three collections. **Relations array is empty in the snapshot** even though FK columns exist — relations are declared at the DB column level but not yet registered as Directus M2O relations.
+**Updated 2026-08-07: the intake-only "3 collections" description below is stale.** Spot-checked directly
+against the live `context/schema/snapshot.json` this session — the target schema (see the collection list
+further down) is now almost entirely live: `orders` (full pipeline fields, plus `hold` and `docs_returned`
+which aren't yet in `target-db-schema.md` — add them there), `customers` (incl. `company_name`, also
+missing from the target doc), `products`, `order_lines`, `line_cuts`, `line_weighings`, `line_photos`,
+`line_return_photos`, `order_history`, `delivery_proofs`, `courier_locations`, `role_permissions`,
+`settings`, and `corrections` all exist and are read/written by `src/lib/directus.ts` today. Collections
+not yet confirmed wired up in the frontend: `draft_weighings`, `purchase_orders`, `return_documents` is
+partially wired (return flow reads/writes it). Treat `target-db-schema.md` as materially accurate for
+column-level detail; re-verify against `snapshot.json` before relying on any single field, since it has
+drifted from the target doc before (see the `products.active` vs `products.oos` incident,
+`progress-tracker.md` 2026-08-05).
+
+The paragraphs immediately below (the original 3-collection description) are kept for historical context
+only — they describe the schema's state early in the project, before the pipeline collections existed.
+
+Three collections, originally. **Relations array is empty in the snapshot** even though FK columns exist — relations are declared at the DB column level but not yet registered as Directus M2O relations.
 
 **`orders`** (PK: `id` uuid, default `gen_random_uuid()`)
 
@@ -74,17 +90,20 @@ Three collections. **Relations array is empty in the snapshot** even though FK c
 
 ### Schema gaps vs the prototype's needs
 
-The current schema is **intake-focused** (WhatsApp → order draft). It does not yet cover the full pipeline. The target schema below (extracted from the prototype's in-memory shapes in `store.jsx` / `domain.js` / `data/*.js`, normalized into proper collections) is what's needed to go live. Full column-level detail live in `context/schema/target-db-schema.md`; the summary here is the Directus-adapted version.
+**This section is largely resolved as of 2026-08-07** — see the note above. It's kept for the
+column-level rationale (why each field exists) and to spot anything still genuinely missing. Full
+column-level detail lives in `context/schema/target-db-schema.md`; the summary here is the
+Directus-adapted version.
 
 **Conventions:** `id` = UUID PK (Directus default), timestamps are `TIMESTAMPTZ`, monetary values are `NUMERIC(15,2)` (Rp), weights are `NUMERIC(10,3)` (kg). Directus auto-manages `date_created` / `date_updated` / `user_created` / `user_updated` on every collection, so those are omitted below unless they carry business meaning.
 
-#### Existing collections (intake — keep, extend)
+#### Existing collections (intake — kept, extended)
 
-- **`orders`** — extend with the pipeline fields below. Current `status` default `'Draft'` maps to the `intake` stage.
-- **`messages`** — keep as-is (WhatsApp intake log). `order_uuid` already links to `orders`.
-- **`attachments`** — keep as-is (per-message files). `order_uuid` + `message_id` already link out.
+- **`orders`** — extended with the pipeline fields below (done). `status` (legacy) coexists with `stage` (current); `stage`'s default maps to `intake`.
+- **`messages`** — kept as-is (WhatsApp intake log). `order_uuid` already links to `orders`.
+- **`attachments`** — kept as-is (per-message files). `order_uuid` + `message_id` already link out.
 
-#### New collections (pipeline — to create)
+#### Pipeline collections (built — see the 2026-08-07 note above for what's confirmed live)
 
 - **`customers`** — replaces denormalized customer fields on `orders`. Fields: `name`, `company_name` (legal entity name — equivalent to the current `orders.customer_legal_name`), `channel` (horeca/retail/b2c), `contact`, `address`, `area`, `sales`, `credit_limit` NUMERIC(15,2), `term_days` INT, `pay_timing` (upfront/cod/terms), `pay_method` (cash/transfer). `orders.customer_id` → `customers.id`.
 - **`products`** — the Accurate SKU catalog (auto-synced from Accurate exports). Fields: `name`, `accurate_name` (unique — the recognizer's matching key), `category`, `origin`, `grade`, `brand`, `form`, `pack`, `catch_weight` BOOL, `fixed_pack` BOOL, `ppn` (exempt/included/excluded), `active` BOOL.
@@ -103,9 +122,9 @@ The current schema is **intake-focused** (WhatsApp → order draft). It does not
 - **`settings`** — singleton operational settings (replaces `DEFAULT_SETTINGS`). Fields: `require_photo` BOOL, `tol_below_pct` INT, `tol_above_pct` INT, `dispatch_proof_required` BOOL, `lang` TEXT.
 - **`corrections`** — Learned product-matching corrections. When Admin manually assigns a product to a parser-unrecognized line, the correction is saved here so every future parse benefits from it. Fields: `id` UUID PK, `token_key` VARCHAR(500) UNIQUE (normalized token string from the raw line text), `product_id` UUID (→ `products`), `created_by` UUID (→ `directus_users`), `date_created` TIMESTAMPTZ, `times_used` INT. The shared parsing service reads this table before doing fuzzy matching.
 
-#### `orders` extensions (fields to add to the existing collection)
+#### `orders` extensions (done — live in `snapshot.json`)
 
-The current `orders` collection is intake-only. Add the pipeline-tracking fields from the target schema: `no` (unique human order number, e.g. `IPP-2026-0001`), `customer_id` → `customers`, `channel`, `stage` (replaces `status`; enum of the 12 pipeline states), `sales`, `deliver_at`, `delivered_at`, `cancelled` BOOL + `cancelled_from`, `cutting_started` BOOL, `taken_by`, `pickup` BOOL, `third_party` BOOL, `payment_confirmed` BOOL, `return_received` BOOL, `return_settle`, `return_doc`, `return_inbound` BOOL, `is_replacement` BOOL, `partial_return` BOOL, `returned_reason`. The existing denormalized customer fields (`customer_name`, `customer_legal_name`, etc.) become snapshots kept for historical orders; new orders reference `customer_id`.
+The pipeline-tracking fields are live: `no` (unique human order number, e.g. `IPP-2026-0001`), `customer_id` → `customers`, `channel`, `stage` (coexists with legacy `status`; enum of the 12 pipeline states), `sales`, `deliver_at`, `delivered_at`, `cancelled` BOOL + `cancelled_from`, `cutting_started` BOOL, `taken_by`, `pickup` BOOL, `third_party` BOOL, `payment_confirmed` BOOL, `return_received` BOOL, `return_settle`, `return_doc`, `return_inbound` BOOL, `is_replacement` BOOL, `partial_return` BOOL, `returned_reason`. **Two live fields aren't in this list or in `target-db-schema.md` yet — add them there**: `hold` BOOL (used by the finance-parallel-queue filter across `useDashboardCounts.ts`/`useOrders.ts`/`useAttentionItems.ts`) and `docs_returned` BOOL (used by the "pending-docs" attention bucket and Orders' `pending-docs`/`completed` filters). The existing denormalized customer fields (`customer_name`, `customer_legal_name`, etc.) remain as snapshots kept for historical orders; new orders reference `customer_id`.
 
 #### Relations to register in Directus
 
@@ -170,7 +189,7 @@ erDiagram
 1. **Directus is the only backend the frontend talks to.** The frontend never connects to Postgres, n8n, or Evolution API directly. All reads/writes go through `@directus/sdk`.
 2. **Postgres `horeca_orders` is the single source of truth.** No localStorage or IndexedDB as source of truth (the prototype's pattern is dropped). The frontend may cache for offline-tolerance, but Directus wins on conflict.
 3. **WhatsApp intake is asynchronous.** Evolution API → n8n → Directus is a one-way pipeline. The frontend polls/subscribes to Directus for new draft orders; it does not wait on n8n.
-4. **Every order has a status from the pipeline enum.** Stable keys: `intake → cold → finance → production → finalise → dispatch → delivered` (current UI labels: `New Orders`, `Cold Storage Picking`, `Finance Review`, `Processing`, `Print DO/SI`, `Dispatch`, `Delivered`). Return workflow stages are tracked separately: `awaiting_return`, `admin_action`, `awaiting_signed_doc`, `replacement_transit`. The current schema's default `'Draft'` maps to `intake`.
+4. **Every order has a status from the pipeline enum.** Stable keys: `intake → cold → finance → production → packing → finalise → dispatch → delivered` (current UI labels: `New Orders`, `Cold Storage Picking`, `Finance Review`, `Processing`, `Packing`, `Print DO/SI`, `Dispatch`, `Delivered`). Off-pipeline states: `outstanding`, `awaiting`, `cancelled`, `returned`. Return workflow stages (parallel buckets, not sequential) are tracked separately: `awaiting_return`, `admin_action`, `awaiting_signed_doc`, `replacement_transit` — see `src/lib/pipeline.ts`. The legacy schema's default `'Draft'` maps to `intake`.
 5. **Proof photos live in Directus Files, not on the device.** Warehouse weigh photos and courier delivery photos are uploaded to `directus_files` and referenced by UUID — visible to every role, every device. Replaces the prototype's separate `photos` table + IndexedDB `ipp-photos` store.
 6. **The target schema is normalized.** `order_items` is not a text blob — it's the `order_lines` collection. Customer fields are not denormalized on `orders` — they reference `customers.id`. The existing denormalized fields on `orders` are kept only as historical snapshots.
 7. **No destructive filesystem operations outside `IPP-OrderFlow/`.** (Process invariant — see `/memories/destructive-commands.md`.)

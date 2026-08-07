@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { AppLayout } from './layouts/AppLayout/AppLayout';
 import { SidebarProvider } from './layouts/Sidebar/Sidebar';
 import { AuthProvider } from './hooks/RoleContext';
+import { ThemeProvider } from './hooks/ThemeProvider';
 import { useAuth } from './hooks/useAuth';
 import { Customers } from './pages/Customers/Customers';
 import { CustomerDetail } from './pages/CustomerDetail/CustomerDetail';
@@ -16,7 +17,11 @@ import { OrderEdit } from './pages/OrderEdit/OrderEdit';
 import { Products } from './pages/Products/Products';
 import { ProductDetail } from './pages/ProductDetail/ProductDetail';
 import { ProductEdit } from './pages/ProductEdit/ProductEdit';
-import { Placeholder } from './pages/Placeholder/Placeholder';
+import { PickList } from './pages/PickList/PickList';
+import { CashUp } from './pages/CashUp/CashUp';
+import { Deliveries } from './pages/Deliveries/Deliveries';
+import { Reports } from './pages/Reports/Reports';
+import { Settings } from './pages/Settings/Settings';
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
@@ -43,6 +48,7 @@ function LoginRoute() {
 
 export default function App() {
   return (
+    <ThemeProvider>
     <AuthProvider>
       <BrowserRouter>
         <Routes>
@@ -67,13 +73,17 @@ export default function App() {
             <Route path="products" element={<Products />} />
             <Route path="products/:id" element={<ProductDetail />} />
             <Route path="products/:id/edit" element={<ProductEdit />} />
-            <Route path="reports" element={<Placeholder title="Reports" />} />
-            <Route path="settings" element={<Placeholder title="Settings" />} />
+            <Route path="reports" element={<Reports />} />
+            <Route path="settings" element={<Settings />} />
+            <Route path="picklist" element={<PickList />} />
+            <Route path="deliveries" element={<Deliveries />} />
+            <Route path="cashup" element={<CashUp />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>
       </BrowserRouter>
     </AuthProvider>
+    </ThemeProvider>
   );
 }
 

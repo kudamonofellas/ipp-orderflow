@@ -865,6 +865,18 @@
   flex: 1;
 }
 
+/* Read-only "who owns this stage" notice — shown to a role that isn't the
+   stage's actor and can't advance it (see ACTOR in lib/pipeline.ts). */
+.actorNotice {
+  border-radius: var(--radius-md);
+  padding: var(--space-sm) var(--space-md);
+  margin-bottom: var(--space-md);
+  font: var(--text-body);
+  color: var(--text-secondary);
+  background: var(--bg-surface-hover);
+  border: 1px solid var(--border-subtle);
+}
+
 /* Notes section */
 .noteItem {
   border-radius: var(--radius-md);

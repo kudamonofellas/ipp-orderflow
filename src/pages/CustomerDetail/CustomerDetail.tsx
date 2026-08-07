@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { Card } from "../../components/Card/Card";
 import { Button } from "../../components/Button/Button";
 import { Avatar } from "../../components/Avatar/Avatar";
@@ -16,6 +16,11 @@ import styles from "./CustomerDetail.module.css";
 export function CustomerDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  /** Where "Back" returns to — set by whoever linked here (e.g. an order's
+   *  customer-profile card). Falls back to the customers list, same pattern
+   *  as OrderDetail's Back button. */
+  const backTo = (location.state as { from?: string } | null)?.from ?? "/customers";
   const auth = useAuth();
 
   const isNew = id === "new";
@@ -167,7 +172,7 @@ export function CustomerDetail() {
                 type="button"
                 variant="tertiary"
                 icon="chevronLeft"
-                onClick={() => navigate("/customers")}
+                onClick={() => navigate(backTo)}
               >
                 Back
               </Button>
@@ -330,9 +335,13 @@ export function CustomerDetail() {
                       <tr
                         key={o.id}
                         className={styles.tr}
-                        onClick={() => navigate(`/orders/${o.id}`)}
+                        onClick={() =>
+                          navigate(`/orders/${o.id}`, {
+                            state: { from: `/customers/${id}` },
+                          })
+                        }
                       >
-                        <td>{o.no || o.order_id}</td>
+                        <td>{o.no}</td>
                         <td>
                           <StatusPill status={o.stage || o.status} />
                         </td>

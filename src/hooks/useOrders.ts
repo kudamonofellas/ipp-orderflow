@@ -11,6 +11,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { aggregateOrders, readOrderLines, readOrders } from "../lib/directus";
+import { financeParallelQueueFilter } from "../lib/pipeline";
 import type { OpenOrder, OpenOrderLine } from "../types/dashboard";
 
 /** Max orders per page in the Orders list. */
@@ -93,7 +94,6 @@ function groupLinesByOrderId(
 function toOpenOrder(
   row: {
     id: string;
-    order_id?: string | null;
     no?: string | null;
     stage?: string | null;
     status?: string | null;
@@ -107,8 +107,7 @@ function toOpenOrder(
 ): OpenOrder {
   return {
     id: row.id,
-    no: row.no ?? row.order_id ?? "—",
-    orderId: row.order_id ?? "—",
+    no: row.no ?? "—",
     status: row.stage ?? row.status ?? "Draft",
     orderDate: formatDate(row.order_date ?? row.created_at),
     deliveryDate: formatDate(row.delivery_date),
@@ -121,12 +120,12 @@ function toOpenOrder(
 /**
  * @param stageFilter  'all' = all orders, or a specific stage key from the pipeline enum.
  * @param search       Free-text search on order number or customer name.
- * @param sort         Directus sort order string (e.g. '-order_id').
+ * @param sort         Directus sort order string (e.g. '-no').
  */
 export function useOrders(
   stageFilter: string = "all",
   search: string = "",
-  sort: string = "-order_id",
+  sort: string = "-no",
 ): UseOrdersResult {
   const [orders, setOrders] = useState<OpenOrder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -164,18 +163,41 @@ export function useOrders(
       } else if (stageFilter === "finance") {
         filter._or = [
           { stage: { _eq: "finance" } },
-          {
-            _and: [
-              { stage: { _eq: "cold" } },
-              { hold: { _neq: true } },
-              { payment_confirmed: { _neq: true } },
-            ],
-          },
+          financeParallelQueueFilter(),
         ];
       } else if (stageFilter === "cancelled") {
         filter._or = [
           { cancelled: { _eq: true } },
           { stage: { _eq: "cancelled" } },
+        ];
+      } else if (stageFilter === "awaiting_return") {
+        // Return-workflow buckets are parallel hand-offs, not stage values —
+        // `stage` stays 'returned' throughout (see returnBucketsForOrder in pipeline.ts).
+        filter._and = [
+          { stage: { _eq: "returned" } },
+          {
+            _or: [
+              { return_received: { _neq: true } },
+              { return_inbound: { _eq: true } },
+            ],
+          },
+          { return_settle: { _neq: "done" } },
+        ];
+      } else if (stageFilter === "admin_action") {
+        filter._and = [
+          { stage: { _eq: "returned" } },
+          { return_settle: { _null: true } },
+          { return_doc: { _null: true } },
+        ];
+      } else if (stageFilter === "awaiting_signed_doc") {
+        filter._and = [
+          { stage: { _eq: "returned" } },
+          { return_settle: { _eq: "sign" } },
+        ];
+      } else if (stageFilter === "replacement_transit") {
+        filter._and = [
+          { is_replacement: { _eq: true } },
+          { stage: { _nin: ["delivered", "cancelled"] } },
         ];
       } else if (stageFilter === "late") {
         const todayStart = new Date();
@@ -205,7 +227,6 @@ export function useOrders(
           {
             _or: [
               { no: { _icontains: q } },
-              { order_id: { _icontains: q } },
               { customer_name: { _icontains: q } },
             ],
           },
@@ -217,7 +238,6 @@ export function useOrders(
           filter,
           fields: [
             "id",
-            "order_id",
             "no",
             "stage",
             "status",

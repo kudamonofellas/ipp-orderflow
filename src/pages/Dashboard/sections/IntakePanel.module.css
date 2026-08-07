@@ -42,7 +42,14 @@
   margin-bottom: var(--space-sm);
 }
 
-.customer {
-  font: var(--text-h3);
+.handle {
+  font: var(--text-body);
+  font-weight: 500;
   color: var(--text-primary);
+}
+
+.empty {
+  font: var(--text-body);
+  color: var(--text-secondary);
+  padding: var(--space-sm) 0;
 }

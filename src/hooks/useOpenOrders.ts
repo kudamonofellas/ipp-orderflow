@@ -106,7 +106,6 @@ function groupLinesByOrderId(
 function toOpenOrder(
   row: {
     id: string;
-    order_id?: string | null;
     no?: string | null;
     stage?: string | null;
     status?: string | null;
@@ -120,8 +119,7 @@ function toOpenOrder(
 ): OpenOrder {
   return {
     id: row.id,
-    no: row.no ?? row.order_id ?? "—",
-    orderId: row.order_id ?? "—",
+    no: row.no ?? "—",
     status: row.stage ?? row.status ?? "Draft",
     orderDate: formatDate(row.order_date ?? row.created_at),
     deliveryDate: formatDate(row.delivery_date),
@@ -131,7 +129,7 @@ function toOpenOrder(
   };
 }
 
-export function useOpenOrders(sort: string = "-order_id"): UseOpenOrdersResult {
+export function useOpenOrders(sort: string = "-no"): UseOpenOrdersResult {
   const [orders, setOrders] = useState<OpenOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -156,7 +154,6 @@ export function useOpenOrders(sort: string = "-order_id"): UseOpenOrdersResult {
           filter,
           fields: [
             "id",
-            "order_id",
             "no",
             "stage",
             "status",

@@ -44,7 +44,7 @@ The order creator and manager. Broad access to order + customer + product data.
 | `draft_weighings` | ❌ | ✅ | ❌ | ❌ | Read-only |
 | `courier_locations` | ❌ | ✅ | ❌ | ❌ | Read-only — sees courier GPS |
 
-**Field-level:** Can see `order_lines.price` ✅
+**Field-level:** Can see `order_lines.price` ✅ and `orders.customer_contact` / `customer_email` / `customer_address` / `sales` / `sales_rep` / `sales_phone_number` ✅
 
 ---
 
@@ -73,7 +73,7 @@ Weighs orders, attaches photos, manages packing. Does **not** create orders or t
 | `settings` | ❌ | ✅ | ❌ | ❌ | Read-only — needs tolerance %s |
 | `courier_locations` | ❌ | ❌ | ❌ | ❌ | No access |
 
-**Field-level:** ❌ **Cannot see `order_lines.price`** — hide this field
+**Field-level:** ❌ **Cannot see `order_lines.price`** — hide this field. ❌ **Cannot see `orders.customer_contact` / `customer_email` / `customer_address` / `sales` / `sales_rep` / `sales_phone_number`** — hide these fields (matches the app's `seeCustomerContact` capability default for Warehouse).
 
 ---
 
@@ -102,7 +102,7 @@ Creates cut instructions, marks cutting progress.
 | `settings` | ❌ | ✅ | ❌ | ❌ | Read-only |
 | `courier_locations` | ❌ | ❌ | ❌ | ❌ | No access |
 
-**Field-level:** ❌ **Cannot see `order_lines.price`**
+**Field-level:** ❌ **Cannot see `order_lines.price`**. ❌ **Cannot see `orders.customer_contact` / `customer_email` / `customer_address` / `sales` / `sales_rep` / `sales_phone_number`** — matches the app's `seeCustomerContact` capability default for Production.
 
 ---
 
@@ -131,7 +131,7 @@ Approves/rejects payment. Minimal write access — just the payment flag.
 | `delivery_proofs` | ❌ | ❌ | ❌ | ❌ | No access |
 | `draft_weighings` | ❌ | ❌ | ❌ | ❌ | No access |
 
-**Field-level:** ✅ **Can see `order_lines.price`** — Finance needs this to verify payment amounts
+**Field-level:** ✅ **Can see `order_lines.price`** — Finance needs this to verify payment amounts. ✅ **Can see `orders.customer_contact` / `customer_email` / `customer_address` / `sales` / `sales_rep` / `sales_phone_number`** — matches the app's `seeCustomerContact` capability default for Finance.
 
 ---
 
@@ -160,7 +160,7 @@ Picks up, delivers, uploads 3 proof photos, broadcasts GPS.
 | `line_return_photos` | ❌ | ❌ | ❌ | ❌ | No access |
 | `draft_weighings` | ❌ | ❌ | ❌ | ❌ | No access |
 
-**Field-level:** ❌ **Cannot see `order_lines.price`**
+**Field-level:** ❌ **Cannot see `order_lines.price`**. ✅ **Can see `orders.customer_contact` / `customer_email` / `customer_address` / `sales` / `sales_rep` / `sales_phone_number`** — Courier needs the delivery contact/address to complete drop-offs (matches the app's `seeCustomerContact` capability default for Courier).
 
 ---
 
@@ -191,13 +191,31 @@ Picks up, delivers, uploads 3 proof photos, broadcasts GPS.
 
 ---
 
-## Field-level restriction (the one rule to remember)
+## Field-level restriction (the rules to remember)
 
-| Field | Owner | Admin | Warehouse | Production | Finance | Courier |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|
-| `order_lines.price` | ✅ | ✅ | ❌ | ❌ | ✅ | ❌ |
+These mirror the app's client-side capability gates in `src/lib/domain.ts` (`ALLOW`) — if you change a
+default there, update this table (and the live Directus permissions) to match, or the UI hides a field
+that the raw API still returns.
 
-In Directus admin: **Settings → Roles & Permissions → [role] → `order_lines` → Custom → Field Permissions** → uncheck `price` for Warehouse, Production, Courier.
+| Field | Owner | Admin | Warehouse | Production | Finance | Courier | App capability |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|---|
+| `order_lines.price` | ✅ | ✅ | ❌ | ❌ | ✅ | ❌ | `seePrices` |
+| `orders.customer_contact` | ✅ | ✅ | ❌ | ❌ | ✅ | ✅ | `seeCustomerContact` |
+| `orders.customer_email` | ✅ | ✅ | ❌ | ❌ | ✅ | ✅ | `seeCustomerContact` |
+| `orders.customer_address` | ✅ | ✅ | ❌ | ❌ | ✅ | ✅ | `seeCustomerContact` |
+| `orders.sales` | ✅ | ✅ | ❌ | ❌ | ✅ | ✅ | `seeCustomerContact` |
+| `orders.sales_rep` | ✅ | ✅ | ❌ | ❌ | ✅ | ✅ | `seeCustomerContact` |
+| `orders.sales_phone_number` | ✅ | ✅ | ❌ | ❌ | ✅ | ✅ | `seeCustomerContact` |
+
+In Directus admin: **Settings → Roles & Permissions → [role] → [collection] → Custom → Field
+Permissions** → uncheck the restricted fields for that role. Two collections to touch:
+- `order_lines` → uncheck `price` for Warehouse, Production, Courier.
+- `orders` → uncheck `customer_contact`, `customer_email`, `customer_address`, `sales`, `sales_rep`,
+  `sales_phone_number` for Warehouse, Production.
+
+Not covered by field-level ACLs: `viewIntakePanel` (a new capability added 2026-08-06) only gates
+whether the WhatsApp Intake *panel* renders on the Dashboard — it doesn't correspond to a restricted
+field or collection, so there's nothing to configure for it here.
 
 ---
 
@@ -210,7 +228,18 @@ In Directus admin: **Settings → Roles & Permissions → [role] → `order_line
    - **All** (checkmark) = full CRUD on all fields.
    - **Custom** (gear icon) = opens the permission drawer where you tick Create/Read/Update/Delete and select which fields are visible/editable.
 4. Use the matrix above: set **All** for full-CRUD cells, **Custom** for partial cells (tick only the allowed actions + fields), **No access** for cells marked `—`.
+5. On the `order_lines` and `orders` collections specifically, after setting Read access, open the field
+   list inside the Custom permission drawer and uncheck the fields per the **Field-level restriction**
+   table above — this is a separate step from the collection-level CRUD toggle in step 3/4.
 
 > **Tip:** Start with the **Admin** role (broadest), then clone it for each narrower role and remove permissions. Directus doesn't have a "clone role" button, but you can work top-down: Admin → Warehouse → Production → Finance → Courier, each time removing more access.
 
-Want me to save this as a companion doc next to the checklist (e.g. `context/schema/role-permissions.md`) so you can reference it while clicking through the admin UI?
+## Verification checklist
+
+After configuring each role, confirm with a real login (not just the app's UI) that the API itself enforces the restriction — the whole point of this doc is that the UI hiding a field is not enough:
+
+- [ ] Log in as Warehouse → `GET /items/order_lines/:id` → response has no `price` key (not `null`, the key itself is absent).
+- [ ] Log in as Warehouse → `GET /items/orders/:id` → response has no `customer_contact`/`customer_email`/`customer_address`/`sales`/`sales_rep`/`sales_phone_number` keys.
+- [ ] Log in as Courier → `GET /items/orders/:id` → `customer_contact`/`customer_address` present (Courier needs these), `order_lines.price` absent.
+- [ ] Log in as Finance → both `order_lines.price` and the `orders` contact fields present.
+- [ ] Log in as each non-Admin/Owner role → confirm `role_permissions` and `courier_locations` (except Courier) are fully inaccessible (403, not just empty).

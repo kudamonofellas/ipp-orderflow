@@ -1,0 +1,156 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xl);
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.title {
+  font: var(--text-page-title);
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.sectionHeading {
+  font: var(--text-label);
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+  margin: 0 0 var(--space-sm);
+}
+
+.muted,
+.error {
+  font: var(--text-body);
+  padding: var(--space-md) 0;
+}
+
+.muted {
+  color: var(--text-secondary);
+}
+
+.error {
+  color: var(--state-error);
+}
+
+/* ===== Account ===== */
+.accountName {
+  display: block;
+  font: var(--text-h3);
+  color: var(--text-primary);
+}
+
+.accountRole {
+  display: block;
+  font: var(--text-body);
+  color: var(--text-secondary);
+  margin-top: var(--space-xs);
+}
+
+/* ===== Generic labeled row ===== */
+.row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-md);
+}
+
+.rowIcon {
+  flex-shrink: 0;
+  color: var(--accent-primary);
+  margin-top: 2px;
+}
+
+.rowInfo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-width: 0;
+  flex: 1;
+}
+
+.rowTitle {
+  font: var(--text-body);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.rowNote {
+  font: var(--text-caption);
+  color: var(--text-muted);
+}
+
+/* ===== Cold Storage ===== */
+.stackedCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.toggleRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
+.toleranceBlock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding-top: var(--space-lg);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.toleranceGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-md);
+}
+
+.toleranceField {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.toleranceLabel {
+  font: var(--text-caption);
+  color: var(--text-secondary);
+}
+
+/* ===== General / Language ===== */
+.langButtons {
+  display: flex;
+  gap: var(--space-sm);
+  flex-shrink: 0;
+}
+
+/* ===== Data ===== */
+.dataStack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.dataRow {
+  display: flex;
+  gap: var(--space-md);
+}
+
+.divider {
+  border-top: 1px solid var(--border-subtle);
+  margin: var(--space-sm) 0;
+}
+
+@media (max-width: 640px) {
+  .toleranceGrid,
+  .dataRow {
+    grid-template-columns: 1fr;
+    flex-direction: column;
+  }
+
+  .toggleRow {
+    flex-wrap: wrap;
+  }
+}

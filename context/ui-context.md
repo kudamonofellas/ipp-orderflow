@@ -2,7 +2,7 @@
 
 ## Theme
 
-Light-first design with a clean, modern workspace aesthetic. The interface uses a white page base with soft gray (`#F0F5F5`) for muted surfaces (for example the navbar and secondary card backgrounds). Primary interactive elements use a dark teal-blue accent (`#0C4458`) that carries the brand identity. The design supports both light and dark themes, with light as the default. Typography is clean and spacious using Google's Outfit font family. The overall feel is professional, approachable, and optimized for long-session use in a B2B/Horeca order-management context.
+Light-first design with a clean, modern workspace aesthetic. The interface uses a white page base with soft gray (`#F0F5F5`) for muted surfaces (for example the navbar and secondary card backgrounds). Primary interactive elements use a dark teal-blue accent (`#0C4458`) that carries the brand identity. The design supports both light and dark themes, with light as the default. Dark mode is toggled via a sun/moon icon button in the Sidebar (`src/hooks/ThemeProvider.tsx` + `useTheme.ts`), persisted to `localStorage` (`ipp_theme`), falling back to `prefers-color-scheme` on first visit. Applied via `data-theme="dark"` on `<html>`. Typography is clean and spacious using Google's Outfit font family. The overall feel is professional, approachable, and optimized for long-session use in a B2B/Horeca order-management context.
 
 ## Colors
 
@@ -30,6 +30,11 @@ All components must use these CSS custom property tokens — no hardcoded hex va
 | Badge background     | `--bg-badge`            | `#EEF2FF`                           | Subtle badge/pill backgrounds               |
 | Badge text           | `--text-badge`          | `#4F46E5`                           | Text on badge backgrounds                   |
 | Notification dot     | `--notification-accent` | `#EF4444`                           | Red dot for unread notifications            |
+| Surface hover (alt)  | `--bg-surface-hover-dark` | `#E8F6F8`                         | Secondary hover tint (rarely used)          |
+| Muted surface        | `--bg-muted`            | `#E8EEEE`                           | Muted page/section backgrounds              |
+| Accent (light)       | `--accent-primary-light`| `#2291B9`                           | Lighter accent tint                         |
+| Accent secondary     | `--accent-secondary`    | `#18295E`                           | Secondary brand accent                      |
+| Logo mark            | `--logo-mark`           | `#030303`                           | Black parts of the brand logo (inline SVG)  |
 | Shadow sm            | `--shadow-sm`           | `0 1px 2px 0 rgb(0 0 0 / 0.05)`     | Subtle elevation                            |
 | Shadow md            | `--shadow-md`           | `0 4px 6px -1px rgb(0 0 0 / 0.1)`   | Card elevation                              |
 | Shadow lg            | `--shadow-lg`           | `0 10px 15px -3px rgb(0 0 0 / 0.1)` | Modal/dropdown elevation                    |
@@ -44,11 +49,26 @@ All components must use these CSS custom property tokens — no hardcoded hex va
 | Primary text         | `--text-primary`        | `#F5F6FA` | Headings, body text, high emphasis          |
 | Secondary text       | `--text-secondary`      | `#9CA3AF` | Labels, metadata, medium emphasis           |
 | Muted text           | `--text-muted`          | `#6C757D` | Timestamps, placeholders, low emphasis      |
-| Primary accent       | `--accent-primary`      | `#2B7A8F` | Primary buttons, active nav, brand color    |
+| Primary accent       | `--accent-primary`      | `#57B3CD` | Primary buttons, active nav, brand color    |
 | Primary accent hover | `--accent-primary-dark` | `#1E4D5C` | Hover state for primary actions             |
 | Accent on primary    | `--text-on-accent`      | `#FFFFFF` | Text on primary accent backgrounds          |
 | Border default       | `--border-default`      | `#2C3035` | Default borders for cards, inputs, dividers |
 | Border subtle        | `--border-subtle`       | `#24272A` | Very subtle dividers                        |
+| Surface hover (alt)  | `--bg-surface-hover-dark` | `#16333D` | Secondary hover tint (rarely used)         |
+| Muted surface        | `--bg-muted`            | `#1C2226` | Muted page/section backgrounds              |
+| Accent (light)       | `--accent-primary-light`| `#4DB8DD` | Lighter accent tint                         |
+| Accent secondary     | `--accent-secondary`    | `#4A5FB8` | Secondary brand accent                      |
+| State error          | `--state-error`         | `#F87171` | Error messages, destructive actions         |
+| State success        | `--state-success`       | `#34D399` | Success states, confirmations               |
+| State warning        | `--state-warning`       | `#FBBF24` | Warnings, caution states                    |
+| State info           | `--state-info`          | `#60A5FA` | Info messages, neutral highlights           |
+| Badge background     | `--bg-badge`            | `#1E1B4B` | Subtle badge/pill backgrounds               |
+| Badge text           | `--text-badge`          | `#A5B4FC` | Text on badge backgrounds                   |
+| Notification dot     | `--notification-accent` | `#F87171` | Red dot for unread notifications            |
+| Logo mark            | `--logo-mark`           | `#FFFFFF` | Black parts of the brand logo (inline SVG)  |
+| Shadow sm            | `--shadow-sm`           | `0 1px 2px 0 rgb(0 0 0 / 0.3)` | Subtle elevation                      |
+| Shadow md            | `--shadow-md`           | `0 4px 6px -1px rgb(0 0 0 / 0.4)` | Card elevation                    |
+| Shadow lg            | `--shadow-lg`           | `0 10px 15px -3px rgb(0 0 0 / 0.5)` | Modal/dropdown elevation        |
 
 ## Typography
 

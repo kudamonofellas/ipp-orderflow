@@ -41,6 +41,11 @@ interface NewOrderLocationState {
   prefill?: ParsedOrderDraft | null;
   rawText?: string;
   attachments?: File[];
+  /** Where to return to on cancel / after create — the page this flow was
+   *  started from (Orders list or Dashboard). Falls back to "/orders" when
+   *  absent (e.g. a direct link), rather than relying on browser history
+   *  depth (see OrderDetail's Back button for the same pattern). */
+  from?: string;
 }
 
 interface CutItem {
@@ -96,8 +101,9 @@ const currency = new Intl.NumberFormat("id-ID", {
 export function OrderNew() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { prefill, rawText, attachments } =
+  const { prefill, rawText, attachments, from } =
     (location.state as NewOrderLocationState) || {};
+  const returnTo = from ?? "/orders";
 
   const can = useAuth().can;
   const currentUserName = useCurrentUserName();
@@ -328,7 +334,7 @@ export function OrderNew() {
 
   function cancel() {
     if (submitting) return;
-    navigate(-1);
+    navigate(returnTo);
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -394,7 +400,6 @@ export function OrderNew() {
 
     const orderRes = await createOrder({
       no: orderNoValue,
-      order_id: orderNoValue,
       customer_id: resolvedCustomerId,
       customer_name: trimmedName,
       customer_contact: customerPhone.trim() || null,
@@ -430,7 +435,10 @@ export function OrderNew() {
         `Order created but lines failed: ${linesRes.error}. Order id ${orderId}.`,
       );
       setSubmitting(false);
-      navigate(`/orders/${orderId}`);
+      navigate(`/orders/${orderId}`, {
+        replace: true,
+        state: { from: returnTo },
+      });
       return;
     }
 
@@ -501,7 +509,13 @@ export function OrderNew() {
     setSubmitting(false);
     // Go straight into the freshly created order — the natural next step,
     // and consistent with clicking an order anywhere else in the app.
-    navigate(`/orders/${orderId}`);
+    // `replace: true` + carrying `from` forward: the just-submitted form
+    // shouldn't linger in history, and Back from OrderDetail should return
+    // to wherever this flow started (Orders or Dashboard), not here.
+    navigate(`/orders/${orderId}`, {
+      replace: true,
+      state: { from: returnTo },
+    });
   }
 
   return (
@@ -515,8 +529,13 @@ export function OrderNew() {
         <div className={styles.mainColumn}>
           <header className={styles.header}>
             <div className={styles.titleSection}>
-              <Button type="button" variant="tertiary" onClick={cancel}>
-                <Icon name="chevronLeft" size={16} /> Back
+              <Button
+                type="button"
+                variant="tertiary"
+                icon="chevronLeft"
+                onClick={cancel}
+              >
+                Back
               </Button>
               <h3 className={styles.title}>New Order</h3>
             </div>
@@ -533,9 +552,10 @@ export function OrderNew() {
                 type="submit"
                 form="new-order-form"
                 variant="primary"
+                icon="save"
                 disabled={submitting || !allowed || loadingOpts}
               >
-                <Icon name="save" size={16} />{" "}
+                {" "}
                 {submitting ? "Creating…" : "Create order"}
               </Button>
             </div>
@@ -867,9 +887,7 @@ export function OrderNew() {
                         disabled={submitting || !allowed || lines.length === 1}
                         aria-label={`Remove line ${i + 1}`}
                         className={styles.deleteBtn}
-                      >
-                        <Icon name="trash" size={14} />
-                      </Button>
+                      ></Button>
                     </div>
 
                     {/* Cutting instructions */}
@@ -924,24 +942,23 @@ export function OrderNew() {
                             type="button"
                             variant="ghost"
                             size="sm"
+                            icon="trash"
                             iconOnly
                             onClick={() =>
                               handleDeleteCutFromLine(l.id, cut.id)
                             }
-                          >
-                            <Icon name="trash" size={14} />
-                          </Button>
+                          />
                         </div>
                       ))}
                       <Button
                         type="button"
                         variant="tertiary"
                         size="sm"
+                        icon="add"
                         style={{ alignSelf: "flex-start" }}
                         onClick={() => handleAddCutToLine(l.id)}
                         disabled={submitting || !allowed}
                       >
-                        <Icon name="add" size={14} />
                         Add cutting
                       </Button>
                     </div>
@@ -988,6 +1005,7 @@ export function OrderNew() {
                 type="button"
                 variant="secondary"
                 buttonStyle="fullWidth"
+                icon="add"
                 onClick={() => setIsAddItemModalOpen(true)}
                 style={{
                   marginTop: "var(--space-md)",
@@ -995,7 +1013,7 @@ export function OrderNew() {
                   fontWeight: 600,
                 }}
               >
-                <Icon name="add" size={16} /> Add Item
+                Add Item
               </Button>
             </Card>
 
@@ -1011,17 +1029,13 @@ export function OrderNew() {
           <Button
             type="button"
             variant="secondary"
+            icon={isPanelOpen ? "chevronRight" : "chevronLeft"}
             iconOnly
             className={styles.panelToggleBtn}
             isActive={isPanelOpen}
             onClick={() => setIsPanelOpen((prev) => !prev)}
             title={isPanelOpen ? "Collapse side panel" : "Expand side panel"}
-          >
-            <Icon
-              name={isPanelOpen ? "chevronRight" : "chevronLeft"}
-              size={16}
-            />
-          </Button>
+          />
 
           <div
             className={[
