@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { Icon } from '../Icon/Icon';
+import { useLanguage } from '../../hooks/useLanguage';
 import styles from './ChannelSelectModal.module.css';
 
 interface ChannelSelectModalProps {
@@ -14,6 +15,7 @@ interface ChannelSelectModalProps {
  * Meatfellas is flagged as "Soon" and is not selectable.
  */
 export function ChannelSelectModal({ open, onClose, onSelect }: ChannelSelectModalProps) {
+  const { t } = useLanguage();
   useEffect(() => {
     if (!open) return;
     function onKey(e: KeyboardEvent) {
@@ -36,8 +38,8 @@ export function ChannelSelectModal({ open, onClose, onSelect }: ChannelSelectMod
       <div className={styles.dialog}>
         <div className={styles.header}>
           <div className={styles.headerText}>
-            <h2 className={styles.title}>Add New Order</h2>
-            <p className={styles.subtitle}>Select the sales channel to continue.</p>
+            <h2 className={styles.title}>{t('Add New Order')}</h2>
+            <p className={styles.subtitle}>{t('Select the sales channel to continue.')}</p>
           </div>
           <button
             id="channel-select-close"
@@ -59,7 +61,7 @@ export function ChannelSelectModal({ open, onClose, onSelect }: ChannelSelectMod
             <span className={`${styles.channelBadge} ${styles.b2b}`}>B2B</span>
             <h3 className={styles.channelName}>Horeca</h3>
             <p className={styles.channelDesc}>
-              Hotels, restaurants &amp; cafés — buy whole, cut to order.
+              {t('Hotels, restaurants & cafés — buy whole, cut to order.')}
             </p>
           </button>
 
@@ -70,11 +72,11 @@ export function ChannelSelectModal({ open, onClose, onSelect }: ChannelSelectMod
             disabled
             aria-disabled="true"
           >
-            <span className={styles.soonBadge}>Soon</span>
+            <span className={styles.soonBadge}>{t('Soon')}</span>
             <span className={`${styles.channelBadge} ${styles.b2c}`}>B2C</span>
             <h3 className={styles.channelName}>Meatfellas</h3>
             <p className={styles.channelDesc}>
-              Retail &amp; online shop — Tokopedia, Shopee, walk-in.
+              {t('Retail & online shop — Tokopedia, Shopee, walk-in.')}
             </p>
           </button>
         </div>

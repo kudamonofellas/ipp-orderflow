@@ -4,6 +4,7 @@ import { Button } from '../../components/Button/Button';
 import { Icon } from '../../components/Icon/Icon';
 import { Card } from '../../components/Card/Card';
 import { useAuth } from '../../hooks/useAuth';
+import { useLanguage } from '../../hooks/useLanguage';
 import { Avatar } from '../../components/Avatar/Avatar';
 import { getInitials } from '../../lib/initials';
 import { readCustomers, aggregateCustomers } from '../../lib/directus';
@@ -17,7 +18,16 @@ const PAGE_SIZE = 20;
 export function Customers() {
   const navigate = useNavigate();
   const auth = useAuth();
+  const { t } = useLanguage();
   const canManage = auth.can('manage_customers');
+  const canView = auth.can('browseCustomers');
+
+  // Defence-in-depth: the route is already wrapped in <Guarded cap="browseCustomers">
+  // (App.tsx), but this survives even if that wrapper is ever dropped in a
+  // refactor — same self-guard pattern as ProductEdit.tsx.
+  useEffect(() => {
+    if (!canView) navigate('/', { replace: true });
+  }, [canView, navigate]);
 
   const [customers, setCustomers] = useState<CustomersCollection[]>([]);
   const [total, setTotal] = useState(0);
@@ -97,7 +107,7 @@ export function Customers() {
   return (
     <main className={styles.main}>
       <div className={styles.header}>
-        <h1 className={styles.title}>Customers</h1>
+        <h1 className={styles.title}>{t('Customers')}</h1>
         {!loading && (
           <span className={styles.count}>{total.toLocaleString()}</span>
         )}
@@ -107,7 +117,7 @@ export function Customers() {
             <input
               id="customers-search"
               type="search"
-              placeholder="Search name, company, area…"
+              placeholder={t('Search name, company, area…')}
               className={styles.searchInput}
               value={search}
               onChange={(e) => handleSearch(e.target.value)}
@@ -120,7 +130,7 @@ export function Customers() {
               icon="add"
               onClick={() => navigate('/customers/new')}
             >
-              New Customer
+              {t('New Customer')}
             </Button>
           )}
         </div>
@@ -130,18 +140,18 @@ export function Customers() {
         <table className={styles.table}>
           <thead>
             <tr>
-              <th className={styles.th}>Name / Company</th>
-              <th className={styles.th}>Channel</th>
-              <th className={styles.th}>Contact</th>
-              <th className={styles.th}>Area</th>
-              <th className={styles.th}>Payment</th>
-              <th className={styles.th}>Term</th>
+              <th className={styles.th}>{t('Name / Company')}</th>
+              <th className={styles.th}>{t('Channel')}</th>
+              <th className={styles.th}>{t('Contact')}</th>
+              <th className={styles.th}>{t('Area')}</th>
+              <th className={styles.th}>{t('Payment')}</th>
+              <th className={styles.th}>{t('Term')}</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr className={styles.stateRow}>
-                <td colSpan={6}>Loading customers…</td>
+                <td colSpan={6}>{t('Loading customers…')}</td>
               </tr>
             ) : error ? (
               <tr className={styles.stateRow}>
@@ -149,7 +159,7 @@ export function Customers() {
               </tr>
             ) : customers.length === 0 ? (
               <tr className={styles.stateRow}>
-                <td colSpan={6}>No customers found</td>
+                <td colSpan={6}>{t('No customers found')}</td>
               </tr>
             ) : (
               customers.map((c) => (
@@ -202,7 +212,7 @@ export function Customers() {
 
         <footer className={styles.pagination}>
           <span className={styles.pageInfo}>
-            Showing {rangeStart}–{rangeEnd} of {total}
+            {t('Showing')} {rangeStart}–{rangeEnd} {t('of')} {total}
           </span>
           <div className={styles.pageControls}>
             <Button
@@ -213,7 +223,7 @@ export function Customers() {
               icon="chevronLeft"
               onClick={() => setPage?.(currentPage - 1)}
               disabled={currentPage <= 1}
-              aria-label="Previous page"
+              aria-label={t('Previous page')}
             >
               <Icon name="chevronLeft" size={16} />
             </Button>
@@ -228,7 +238,7 @@ export function Customers() {
               icon="chevronRight"
               onClick={() => setPage?.(currentPage + 1)}
               disabled={currentPage >= totalPages}
-              aria-label="Next page"
+              aria-label={t('Next page')}
             >
               <Icon name="chevronRight" size={16} />
             </Button>

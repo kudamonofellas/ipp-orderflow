@@ -183,7 +183,9 @@ export function useReports(range: ReportRange): UseReportsResult {
           ? { data: [], error: null }
           : await readCustomers({
               filter: { id: { _in: customerIds } },
-              fields: ['id', 'pay_timing'],
+              // `name` is required (non-optional) in CustomersCollectionSchema —
+              // must be requested even though it's unused here, or zod parsing fails.
+              fields: ['id', 'name', 'pay_timing'],
               limit: -1,
             });
       if (cancelled) return;
@@ -212,7 +214,9 @@ export function useReports(range: ReportRange): UseReportsResult {
           ? { data: [], error: null }
           : await readOrderLines({
               filter: { _and: [{ order_id: { _in: orderIds } }, { removed: { _neq: true } }] },
-              fields: ['order_id', 'name', 'qty', 'unit', 'weight', 'short'],
+              // `id` is required (non-optional) in OrderLinesCollectionSchema —
+              // must be requested even though it's unused here, or zod parsing fails.
+              fields: ['id', 'order_id', 'name', 'qty', 'unit', 'weight', 'short'],
               limit: -1,
             });
       if (cancelled) return;
@@ -285,6 +289,10 @@ export function useReports(range: ReportRange): UseReportsResult {
         }
       }
       const productDemand: ProductDemandGroup[] = [...demandByUnit.entries()]
+        // 'pcs' is excluded per an explicit product decision — counted-unit
+        // items sold individually aren't a meaningful "demand" leaderboard
+        // the way weighed/boxed/packed goods are.
+        .filter(([unit]) => unit !== 'pcs')
         .map(([unit, byName]) => ({
           unit,
           rows: [...byName.entries()]

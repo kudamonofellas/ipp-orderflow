@@ -19,6 +19,8 @@ export interface AuthState {
   login: (email: string, password: string) => Promise<boolean>;
   logout: () => Promise<void>;
   can: (capability: Capability) => boolean;
+  /** Re-fetch `role_permissions` overrides — call after the Owner edits the matrix. */
+  refreshPermissions: () => Promise<void>;
 }
 
 export const AuthContext = createContext<AuthState | null>(null);

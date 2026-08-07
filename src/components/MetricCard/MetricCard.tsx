@@ -60,10 +60,7 @@ export function MetricCard({
               aria-expanded={open}
               icon="chevronDown"
               iconPosition="right"
-              style={{
-                minWidth: "160px",
-                justifyContent: "space-between",
-              }}
+              className={styles.rangeButton}
               isActive={open}
               onClick={() => setOpen((prev) => !prev)}
             >
@@ -79,6 +76,16 @@ export function MetricCard({
               role="dialog"
               aria-label="Select Date Range"
             >
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  onRangeChange?.({ type: "all" }, "All time");
+                  setOpen(false);
+                }}
+              >
+                All time
+              </Button>
               <Button
                 type="button"
                 variant="ghost"

@@ -8,6 +8,7 @@ import {
   type AddItemResult,
 } from "../../components/AddItemModal/AddItemModal";
 import { useAuth, useCurrentUserId } from "../../hooks/useAuth";
+import { useLanguage } from "../../hooks/useLanguage";
 import {
   readOrder,
   readOrderLines,
@@ -68,6 +69,7 @@ export function OrderEdit() {
   const navigate = useNavigate();
   const auth = useAuth();
   const userId = useCurrentUserId();
+  const { t } = useLanguage();
 
   /* ── data state ── */
   const [order, setOrder] = useState<OrdersCollection | null>(null);
@@ -400,7 +402,7 @@ export function OrderEdit() {
             sort_order: i,
           });
           if (createRes.error || !createRes.data)
-            throw new Error(createRes.error ?? "Failed to create line");
+            throw new Error(createRes.error ?? t("Failed to create line"));
           targetLineId = createRes.data.id;
         } else {
           const updateRes = await updateOrderLine(el.id, {
@@ -461,11 +463,11 @@ export function OrderEdit() {
   }
 
   if (loading)
-    return <div className={styles.muted}>Loading order details…</div>;
+    return <div className={styles.muted}>{t("Loading order details…")}</div>;
   if (error || !order) {
     return (
       <div className={styles.muted} style={{ color: "var(--state-error)" }}>
-        {error || "Order not found."}
+        {error || t("Order not found.")}
       </div>
     );
   }
@@ -485,9 +487,9 @@ export function OrderEdit() {
                 icon="chevronLeft"
                 onClick={handleCancel}
               >
-                Back to order
+                {t("Back to order")}
               </Button>
-              <h2 className={styles.title}>Order {order.no}</h2>
+              <h2 className={styles.title}>{t("Order")} {order.no}</h2>
             </div>
             <div className={styles.actions}>
               <Button
@@ -496,7 +498,7 @@ export function OrderEdit() {
                 onClick={handleCancel}
                 disabled={submitting}
               >
-                Cancel
+                {t("Cancel")}
               </Button>
               <Button
                 type="button"
@@ -507,7 +509,7 @@ export function OrderEdit() {
                 icon="save"
                 onClick={handleSaveAllEdits}
               >
-                {submitting ? "Saving…" : "Save Changes"}
+                {submitting ? t("Saving…") : t("Save Changes")}
               </Button>
             </div>
           </header>
@@ -518,7 +520,7 @@ export function OrderEdit() {
           <Card className={styles.customerCard}>
             <div className={styles.row}>
               <label className={styles.field}>
-                <span className={styles.label}>Order No.</span>
+                <span className={styles.label}>{t("Order No.")}</span>
                 <input
                   type="text"
                   className={styles.input}
@@ -527,7 +529,7 @@ export function OrderEdit() {
                 />
               </label>
               <label className={styles.field}>
-                <span className={styles.label}>Delivery Date</span>
+                <span className={styles.label}>{t("Delivery Date")}</span>
                 <input
                   type="date"
                   className={styles.input}
@@ -541,13 +543,13 @@ export function OrderEdit() {
             </div>
             <div className={styles.row}>
               <label className={styles.field}>
-                <span className={styles.label}>Customer / Restaurant</span>
+                <span className={styles.label}>{t("Customer / Restaurant")}</span>
                 <select
                   className={styles.select}
                   value={customerId ?? ""}
                   onChange={handleCustomerSelect}
                 >
-                  <option value="">— Select customer —</option>
+                  <option value="">{t("— Select customer —")}</option>
                   {customers.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
@@ -557,9 +559,9 @@ export function OrderEdit() {
               </label>
               <label className={styles.field}>
                 <span className={styles.label}>
-                  Company{" "}
+                  {t("Company")}{" "}
                   <span className={styles.caption}>
-                    (PT / CV — for the invoice)
+                    {t("(PT / CV — for the invoice)")}
                   </span>
                 </span>
                 <input
@@ -568,13 +570,13 @@ export function OrderEdit() {
                   value={company}
                   onChange={(e) => setCompany(e.target.value)}
                   disabled={submitting}
-                  placeholder="e.g. PT En Prima Food & Beverages"
+                  placeholder={t("e.g. PT En Prima Food & Beverages")}
                 />
               </label>
             </div>
             <div className={styles.row}>
               <label className={styles.field}>
-                <span className={styles.label}>Customer Contact</span>
+                <span className={styles.label}>{t("Customer Contact")}</span>
                 <input
                   type="text"
                   className={styles.input}
@@ -583,7 +585,7 @@ export function OrderEdit() {
                 />
               </label>
               <label className={styles.field}>
-                <span className={styles.label}>Sales Rep</span>
+                <span className={styles.label}>{t("Sales Rep")}</span>
                 <input
                   type="text"
                   className={styles.input}
@@ -593,7 +595,7 @@ export function OrderEdit() {
               </label>
             </div>
             <label className={styles.field}>
-              <span className={styles.label}>Delivery Address</span>
+              <span className={styles.label}>{t("Delivery Address")}</span>
               <textarea
                 className={styles.input}
                 style={{
@@ -604,7 +606,7 @@ export function OrderEdit() {
                 value={customerAddress}
                 onChange={(e) => setCustomerAddress(e.target.value)}
                 disabled={submitting}
-                placeholder="Delivery address"
+                placeholder={t("Delivery address")}
               />
             </label>
           </Card>
@@ -612,7 +614,7 @@ export function OrderEdit() {
           {/* Items card */}
           <Card>
             <div className={styles.heading}>
-              <span>Items</span>
+              <span>{t("Items")}</span>
               <span className={styles.count}>{editLines.length}</span>
             </div>
 
@@ -688,7 +690,7 @@ export function OrderEdit() {
                             }
                           }}
                         >
-                          <option value="__custom__">— Custom Product —</option>
+                          <option value="__custom__">{t("— Custom Product —")}</option>
                           {products.map((p) => (
                             <option key={p.id} value={p.id}>
                               {p.name}
@@ -701,7 +703,7 @@ export function OrderEdit() {
                         <input
                           type="text"
                           className={styles.editInput}
-                          placeholder="Item name"
+                          placeholder={t("Item name")}
                           value={line.name}
                           onChange={(e) => {
                             const val = e.target.value;
@@ -748,13 +750,13 @@ export function OrderEdit() {
                             color: "var(--text-secondary)",
                           }}
                         >
-                          cutting
+                          {t("cutting")}
                         </span>
                         <input
                           type="text"
                           className={styles.editInput}
                           style={{ flex: 1, maxWidth: 260 }}
-                          placeholder="e.g. yakiniku pack per 200g"
+                          placeholder={t("e.g. yakiniku pack per 200g")}
                           value={cut.text}
                           onChange={(e) => {
                             const val = e.target.value;
@@ -794,13 +796,13 @@ export function OrderEdit() {
                       style={{ alignSelf: "flex-start" }}
                       onClick={() => handleAddCutToLine(line.id)}
                     >
-                      <Icon name="add" size={14} /> Add cutting
+                      <Icon name="add" size={14} /> {t("Add cutting")}
                     </Button>
                   </div>
 
                   {/* Price Row */}
                   <div className={styles.itemTotalRow}>
-                    <span>Price:</span>
+                    <span>{t("Price:")}</span>
                     <div className={styles.priceCalc}>
                       <input
                         type="number"
@@ -846,7 +848,7 @@ export function OrderEdit() {
                 fontWeight: 600,
               }}
             >
-              Add Item
+              {t("Add Item")}
             </Button>
           </Card>
         </div>

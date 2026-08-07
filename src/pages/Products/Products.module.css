@@ -218,45 +218,12 @@
 }
 
 /* OOS Toggle */
-.toggle {
+.toggleCell {
   position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 6px;
-  cursor: pointer;
-}
-
-.toggleTrack {
-  width: 36px;
-  height: 20px;
-  border-radius: 10px;
-  background: var(--bg-muted);
-  border: 1.5px solid var(--border-default);
-  transition: all var(--duration-fast);
-  position: relative;
-  flex-shrink: 0;
-}
-
-.toggleTrack.on {
-  background: var(--accent-primary);
-  border-color: var(--accent-primary);
-}
-
-.toggleThumb {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-  transition: transform var(--duration-fast);
-}
-
-.toggleTrack.on .toggleThumb {
-  transform: translateX(16px);
+  gap: var(--space-sm);
 }
 
 .toggleLabel {

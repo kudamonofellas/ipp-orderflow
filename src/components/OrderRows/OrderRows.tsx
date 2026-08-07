@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { Icon } from "../Icon/Icon";
 import { StatusPill } from "../StatusPill/StatusPill";
 import { useCan } from "../../hooks/useAuth";
+import { useLanguage } from "../../hooks/useLanguage";
 import type { OpenOrder } from "../../types/dashboard";
 import styles from "./OrderRows.module.css";
 
@@ -22,6 +23,7 @@ export function OrderRows({ order }: { order: OpenOrder }) {
   const location = useLocation();
   const [expanded, setExpanded] = useState(false);
   const canSeePrices = useCan()("seePrices");
+  const { t } = useLanguage();
   const lines = order.lines ?? [];
   const count = lines.length;
   const hasItems = count > 0;
@@ -62,7 +64,7 @@ export function OrderRows({ order }: { order: OpenOrder }) {
         <td>{order.salesRep}</td>
         <td>{order.customerName}</td>
         <td className={styles.itemsCount}>
-          {count > 0 ? `${count} ${count === 1 ? "item" : "items"}` : "-"}
+          {count > 0 ? `${count} ${count === 1 ? t("item") : t("items")}` : "-"}
         </td>
       </tr>
       {expanded && hasItems && (

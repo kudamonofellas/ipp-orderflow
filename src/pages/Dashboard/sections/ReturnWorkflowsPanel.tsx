@@ -1,4 +1,5 @@
 import { Card } from '../../../components/Card/Card';
+import { useLanguage } from '../../../hooks/useLanguage';
 import type { Stage } from '../../../lib/pipeline';
 import type { StageCount } from '../../../types/dashboard';
 import styles from './ReturnWorkflowsPanel.module.css';
@@ -12,9 +13,10 @@ interface ReturnWorkflowsPanelProps {
 
 /** Return Workflows panel: vertical list of horizontal pills (count + label). */
 export function ReturnWorkflowsPanel({ stages, focusStages = [], onStageClick }: ReturnWorkflowsPanelProps) {
+  const { t } = useLanguage();
   return (
     <Card style={{ width: '100%' }}>
-      <h3 className={styles.heading}>Return Workflows</h3>
+      <h3 className={styles.heading}>{t('Return Workflows')}</h3>
       <div className={styles.list}>
         {stages.map((stage) => {
           const highlight = focusStages.includes(stage.stage);
@@ -28,7 +30,7 @@ export function ReturnWorkflowsPanel({ stages, focusStages = [], onStageClick }:
               <span className={stage.count > 0 ? styles.countActive : styles.count}>
                 {stage.count}
               </span>
-              <span className={styles.label}>{stage.label}</span>
+              <span className={styles.label}>{t(stage.label)}</span>
             </button>
           );
         })}

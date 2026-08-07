@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card } from '../../components/Card/Card';
 import { Button } from '../../components/Button/Button';
+import { Toggle } from '../../components/Toggle/Toggle';
 import { useAuth } from '../../hooks/useAuth';
+import { useLanguage } from '../../hooks/useLanguage';
 import {
   readProducts,
   createProduct,
@@ -23,6 +25,7 @@ export function ProductEdit() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const auth = useAuth();
+  const { t } = useLanguage();
 
   const isNew = id === 'new';
   const canManage = auth.can('manage_products');
@@ -98,7 +101,9 @@ export function ProductEdit() {
       const linesRes = await readOrderLines({
         filter: { product_id: { _eq: id } },
         limit: 1,
-        fields: ['id'],
+        // `name` is required (non-optional) in OrderLinesCollectionSchema —
+        // must be requested even though it's unused here, or zod parsing fails.
+        fields: ['id', 'name'],
       });
 
       if (!cancelled && linesRes.data) {
@@ -173,10 +178,10 @@ export function ProductEdit() {
 
   const handleDelete = async () => {
     if (usedBy > 0) {
-      window.alert('Product is used by active orders and cannot be deleted.');
+      window.alert(t('Product is used by active orders and cannot be deleted.'));
       return;
     }
-    if (!window.confirm('Are you sure you want to delete this product?')) return;
+    if (!window.confirm(t('Are you sure you want to delete this product?'))) return;
     if (!id) return;
 
     setDeleting(true);
@@ -190,11 +195,11 @@ export function ProductEdit() {
     }
   };
 
-  if (loading) return <div className={styles.container}>Loading…</div>;
+  if (loading) return <div className={styles.container}>{t('Loading…')}</div>;
   if (error && !name)
     return (
       <div className={styles.container} style={{ color: 'var(--state-error)' }}>
-        {error}
+        {t(error)}
       </div>
     );
 
@@ -205,10 +210,10 @@ export function ProductEdit() {
         <header className={styles.header}>
           <div className={styles.titleSection}>
             <Button type="button" variant="tertiary" icon="chevronLeft" onClick={handleCancel}>
-              Back to product
+              {t('Back to product')}
             </Button>
             <div className={styles.titleRow}>
-              <h2 className={styles.title}>{isNew ? 'New Product' : 'Edit Product'}</h2>
+              <h2 className={styles.title}>{isNew ? t('New Product') : t('Edit Product')}</h2>
             </div>
           </div>
           <div className={styles.actions}>
@@ -220,11 +225,11 @@ export function ProductEdit() {
                 onClick={handleDelete}
                 disabled={saving || deleting}
               >
-                {deleting ? 'Deleting…' : 'Delete'}
+                {deleting ? t('Deleting…') : t('Delete')}
               </Button>
             )}
             <Button type="button" variant="secondary" onClick={handleCancel} disabled={saving}>
-              Cancel
+              {t('Cancel')}
             </Button>
             <Button
               type="button"
@@ -233,18 +238,18 @@ export function ProductEdit() {
               disabled={!canSave}
               onClick={handleSave}
             >
-              {saving ? 'Saving…' : 'Save Changes'}
+              {saving ? t('Saving…') : t('Save Changes')}
             </Button>
           </div>
         </header>
 
-        {error && <div className={styles.error}>{error}</div>}
+        {error && <div className={styles.error}>{t(error)}</div>}
 
         <Card>
-          <h3 className={styles.heading}>Product Details</h3>
+          <h3 className={styles.heading}>{t('Product Details')}</h3>
           <div className={styles.fields}>
             <label className={styles.field}>
-              <span className={styles.label}>Display Name *</span>
+              <span className={styles.label}>{t('Display Name')} *</span>
               <input
                 type="text"
                 className={styles.input}
@@ -257,7 +262,7 @@ export function ProductEdit() {
               />
             </label>
             <label className={styles.field}>
-              <span className={styles.label}>Accurate Name (Raw)</span>
+              <span className={styles.label}>{t('Accurate Name (Raw)')}</span>
               <input
                 type="text"
                 className={styles.input}
@@ -269,7 +274,7 @@ export function ProductEdit() {
             </label>
             <div className={styles.row}>
               <label className={styles.field}>
-                <span className={styles.label}>Category</span>
+                <span className={styles.label}>{t('Category')}</span>
                 <input
                   type="text"
                   className={styles.input}
@@ -279,7 +284,7 @@ export function ProductEdit() {
                 />
               </label>
               <label className={styles.field}>
-                <span className={styles.label}>Origin</span>
+                <span className={styles.label}>{t('Origin')}</span>
                 <input
                   type="text"
                   className={styles.input}
@@ -291,7 +296,7 @@ export function ProductEdit() {
             </div>
             <div className={styles.row}>
               <label className={styles.field}>
-                <span className={styles.label}>Grade</span>
+                <span className={styles.label}>{t('Grade')}</span>
                 <input
                   type="text"
                   className={styles.input}
@@ -301,7 +306,7 @@ export function ProductEdit() {
                 />
               </label>
               <label className={styles.field}>
-                <span className={styles.label}>Brand</span>
+                <span className={styles.label}>{t('Brand')}</span>
                 <input
                   type="text"
                   className={styles.input}
@@ -320,25 +325,25 @@ export function ProductEdit() {
                 onChange={(e) => setCatchWeight(e.target.checked)}
                 disabled={saving}
               />
-              <span>Catch-weight (sold by actual weight)</span>
+              <span>{t('Catch-weight (sold by actual weight)')}</span>
             </label>
 
             <label className={styles.checkboxLabel}>
-              <input
-                type="checkbox"
-                className={styles.checkbox}
+              <Toggle
+                size="sm"
+                label={t('Out of Stock')}
                 checked={oos}
-                onChange={(e) => setOos(e.target.checked)}
+                onChange={setOos}
                 disabled={saving}
               />
               <span style={oos ? { color: 'var(--state-error)', fontWeight: 600 } : undefined}>
-                Out of Stock (warn when someone orders this)
+                {t('Out of Stock (warn when someone orders this)')}
               </span>
             </label>
 
             {!isNew && usedBy > 0 && (
               <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-muted)' }}>
-                Product is currently used by {usedBy} active order(s).
+                {t('Product is currently used by')} {usedBy} {t('active order(s).')}
               </p>
             )}
           </div>

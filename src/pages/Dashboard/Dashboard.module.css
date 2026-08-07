@@ -43,6 +43,13 @@
   font: var(--text-h3);
 }
 
+.sectionHeading {
+  font: var(--text-label);
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+}
+
 .welcomeName {
   font: var(--text-h2);
   color: var(--accent-primary);
@@ -54,10 +61,27 @@
   gap: var(--space-md);
 }
 
+.pipelineRow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
 /* ===== Metrics row — 4 cards ===== */
 .metricsRow {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-lg);
+}
+
+/* ===== Quick-action row — Deliveries / Pick list / Cash-up =====
+   Column count tracks how many cards are actually rendered (role-gated —
+   1, 2, or 3), via a --quick-action-count custom property set inline, so
+   the visible cards always stretch to fill the row instead of leaving a
+   gap where a hidden card's column would have been. */
+.quickActionsRow {
+  display: grid;
+  grid-template-columns: repeat(var(--quick-action-count, 3), minmax(0, 1fr));
   gap: var(--space-lg);
 }
 
@@ -108,6 +132,10 @@
 @media (max-width: 1024px) {
   .metricsRow {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .quickActionsRow {
+    grid-template-columns: 1fr;
   }
 
   .currentStages {

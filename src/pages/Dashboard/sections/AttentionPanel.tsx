@@ -1,5 +1,6 @@
 import { Icon } from '../../../components/Icon/Icon';
 import { Card } from '../../../components/Card/Card';
+import { useLanguage } from '../../../hooks/useLanguage';
 import type { AttentionItem } from '../../../types/dashboard';
 import styles from './AttentionPanel.module.css';
 
@@ -15,11 +16,12 @@ interface AttentionPanelProps {
  * admin action). Replaces the old "Need approval" panel.
  */
 export function AttentionPanel({ items, onItemClick }: AttentionPanelProps) {
+  const { t } = useLanguage();
   return (
     <Card>
-      <h3 className={styles.heading}>Needs Attention</h3>
+      <h3 className={styles.heading}>{t('Needs Attention')}</h3>
       {items.length === 0 ? (
-        <p className={styles.empty}>Nothing needs attention right now.</p>
+        <p className={styles.empty}>{t('Nothing needs attention right now.')}</p>
       ) : (
         <div className={styles.list}>
           {items.map((item) => (
@@ -31,7 +33,7 @@ export function AttentionPanel({ items, onItemClick }: AttentionPanelProps) {
             >
               <span className={styles.content}>
                 <Icon name="alert" size={16} className={styles.alertIcon} />
-                <span className={styles.label}>{item.label}</span>
+                <span className={styles.label}>{t(item.label)}</span>
               </span>
               <span className={styles.countBadge}>{item.count}</span>
             </button>

@@ -126,6 +126,24 @@ export function financeParallelQueueFilter(): Record<string, unknown> {
 }
 
 /**
+ * "Open" orders — anywhere in the pipeline except the 3 terminal stages, and
+ * not cancelled. Defined once here so the Dashboard's "Open Orders" metric
+ * count and the Open Orders panel's actual row list can never disagree.
+ *
+ * Replaces the legacy `status === 'Open'` filter `useOpenOrders.ts` used to
+ * read — `status` is a pre-`stage`-migration field that most live rows never
+ * populate, so filtering on it silently hid orders that were genuinely open.
+ */
+export function openOrdersFilter(): Record<string, unknown> {
+  return {
+    _and: [
+      { cancelled: { _neq: true } },
+      { stage: { _nin: ['delivered', 'cancelled', 'returned'] } },
+    ],
+  };
+}
+
+/**
  * Stages each role "owns" — rendered with the main blue accent on the
  * dashboard (both the pipeline strip and the returns panel) so a user sees
  * at a glance which buckets need their action. One shared map drives both

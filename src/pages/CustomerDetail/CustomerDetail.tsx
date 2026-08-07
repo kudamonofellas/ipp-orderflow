@@ -5,6 +5,7 @@ import { Button } from "../../components/Button/Button";
 import { Avatar } from "../../components/Avatar/Avatar";
 import { StatusPill } from "../../components/StatusPill/StatusPill";
 import { useAuth } from "../../hooks/useAuth";
+import { useLanguage } from "../../hooks/useLanguage";
 import { readCustomers, readOrders, readOrderLines } from "../../lib/directus";
 import { getInitials } from "../../lib/initials";
 import type {
@@ -22,10 +23,19 @@ export function CustomerDetail() {
    *  as OrderDetail's Back button. */
   const backTo = (location.state as { from?: string } | null)?.from ?? "/customers";
   const auth = useAuth();
+  const { t } = useLanguage();
 
   const isNew = id === "new";
   const canEdit = auth.can("manage_customers");
-  const seeCredit = auth.can("seePrices");
+  const seeCredit = auth.can("seeCustomerCredit");
+  const canView = auth.can("browseCustomers");
+
+  // Defence-in-depth: the route is already wrapped in <Guarded cap="browseCustomers">
+  // (App.tsx), but this survives even if that wrapper is ever dropped in a
+  // refactor — same self-guard pattern as ProductEdit.tsx.
+  useEffect(() => {
+    if (!canView) navigate("/", { replace: true });
+  }, [canView, navigate]);
 
   const [loading, setLoading] = useState(!isNew);
   const [error, setError] = useState<string | null>(null);
@@ -138,14 +148,14 @@ export function CustomerDetail() {
   };
 
   if (loading)
-    return <div className={styles.container}>Loading customer details…</div>;
+    return <div className={styles.container}>{t("Loading customer details…")}</div>;
   if (error)
     return (
       <div
         className={styles.container}
         style={{ color: "var(--status-danger)" }}
       >
-        {error}
+        {t(error)}
       </div>
     );
 
@@ -174,7 +184,7 @@ export function CustomerDetail() {
                 icon="chevronLeft"
                 onClick={() => navigate(backTo)}
               >
-                Back
+                {t("Back")}
               </Button>
               <div className={styles.titleRow}>
                 <Avatar
@@ -184,7 +194,7 @@ export function CustomerDetail() {
                 />
                 <div className={styles.customerInfo}>
                   <h3 className={styles.title}>
-                    {isNew ? "New Customer" : name}
+                    {isNew ? t("New Customer") : name}
                   </h3>
                   <p>{channel?.toUpperCase() || "—"}</p>
                 </div>
@@ -198,7 +208,7 @@ export function CustomerDetail() {
                   icon="edit"
                   onClick={() => navigate(`/customers/${id}/edit`)}
                 >
-                  Edit
+                  {t("Edit")}
                 </Button>
               )}
             </div>
@@ -209,13 +219,13 @@ export function CustomerDetail() {
               <div className={styles.row}>
                 <div className={styles.field}>
                   <span className={styles.detailLabel}>
-                    Restaurant / Outlet Name *
+                    {t("Restaurant / Outlet Name")} *
                   </span>
                   <span className={styles.detailValue}>{name || "—"}</span>
                 </div>
                 <div className={styles.field}>
                   <label className={styles.detailLabel}>
-                    Company Name (PT / CV for Invoice)
+                    {t("Company Name (PT / CV for Invoice)")}
                   </label>
                   <span className={styles.detailValue}>
                     {companyName || "—"}
@@ -225,17 +235,17 @@ export function CustomerDetail() {
 
               <div className={styles.row}>
                 <div className={styles.field}>
-                  <label className={styles.detailLabel}>Phone / Contact</label>
+                  <label className={styles.detailLabel}>{t("Phone / Contact")}</label>
                   <span className={styles.detailValue}>{contact || "—"}</span>
                 </div>
                 <div className={styles.field}>
-                  <label className={styles.detailLabel}>Area</label>
+                  <label className={styles.detailLabel}>{t("Area")}</label>
                   <span className={styles.detailValue}>{area || "—"}</span>
                 </div>
               </div>
               <div className={styles.row}>
                 <div className={styles.field}>
-                  <label className={styles.detailLabel}>Delivery Address</label>
+                  <label className={styles.detailLabel}>{t("Delivery Address")}</label>
                   <span className={styles.detailValue}>{address || "—"}</span>
                 </div>
               </div>
@@ -243,15 +253,15 @@ export function CustomerDetail() {
           </Card>
 
           <Card>
-            <div className={styles.heading}>Finance</div>
+            <div className={styles.heading}>{t("Finance")}</div>
             <div className={styles.fields}>
               <div className={styles.row}>
                 <div className={styles.field}>
-                  <label className={styles.detailLabel}>Sales Rep</label>
+                  <label className={styles.detailLabel}>{t("Sales Rep")}</label>
                   <span className={styles.detailValue}>{sales || "—"}</span>
                 </div>
                 <div className={styles.field}>
-                  <label className={styles.detailLabel}>Payment Timing</label>
+                  <label className={styles.detailLabel}>{t("Payment Timing")}</label>
                   <span className={styles.detailValue}>
                     {payTiming
                       ? payTiming.charAt(0).toUpperCase() + payTiming.slice(1)
@@ -260,16 +270,18 @@ export function CustomerDetail() {
                 </div>
               </div>
               <div className={styles.row}>
+                {seeCredit && (
+                  <div className={styles.field}>
+                    <label className={styles.detailLabel}>
+                      {t("Credit Limit (IDR)")}
+                    </label>
+                    <span className={styles.detailValue}>
+                      {creditLimit || "—"}
+                    </span>
+                  </div>
+                )}
                 <div className={styles.field}>
-                  <label className={styles.detailLabel}>
-                    Credit Limit (IDR)
-                  </label>
-                  <span className={styles.detailValue}>
-                    {creditLimit || "—"}
-                  </span>
-                </div>
-                <div className={styles.field}>
-                  <label className={styles.detailLabel}>Terms (days)</label>
+                  <label className={styles.detailLabel}>{t("Terms (days)")}</label>
                   <span className={styles.detailValue}>{termDays || "—"}</span>
                 </div>
               </div>
@@ -278,17 +290,17 @@ export function CustomerDetail() {
 
           {!isNew && seeCredit && parseInt(creditLimit, 10) > 0 && (
             <Card className={styles.detailsCard}>
-              <h3 className={styles.heading}>Credit Profile</h3>
+              <h3 className={styles.heading}>{t("Credit Profile")}</h3>
               <div className={styles.row}>
                 <label className={styles.detailLabel}>
-                  Account Exposure (In Flight Orders)
+                  {t("Account Exposure (In Flight Orders)")}
                 </label>
                 <span className={styles.detailValue}>
                   {currency.format(getExposure())}
                 </span>
               </div>
               <div className={styles.row}>
-                <label className={styles.detailLabel}>Credit Limit</label>
+                <label className={styles.detailLabel}>{t("Credit Limit")}</label>
                 <span className={styles.detailValue}>
                   {currency.format(parseInt(creditLimit, 10))}
                 </span>
@@ -307,7 +319,7 @@ export function CustomerDetail() {
             className={styles.panelToggleBtn}
             isActive={isPanelOpen}
             onClick={() => setIsPanelOpen((prev) => !prev)}
-            title={isPanelOpen ? "Collapse side panel" : "Expand side panel"}
+            title={isPanelOpen ? t("Collapse side panel") : t("Expand side panel")}
           />
 
           <div
@@ -318,16 +330,16 @@ export function CustomerDetail() {
             }
           >
             <Card className={styles.historyCard}>
-              <h3 className={styles.heading}>Order History</h3>
+              <h3 className={styles.heading}>{t("Order History")}</h3>
 
               {!isNew && orders.length > 0 ? (
                 <table className={styles.table}>
                   <thead>
                     <tr>
-                      <th>Order ID</th>
-                      <th>Stage</th>
-                      <th>Order Date</th>
-                      <th>Total Value</th>
+                      <th>{t("Order ID")}</th>
+                      <th>{t("Stage")}</th>
+                      <th>{t("Order Date")}</th>
+                      <th>{t("Total Value")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -363,7 +375,7 @@ export function CustomerDetail() {
                   </tbody>
                 </table>
               ) : (
-                <p className={styles.muted}>No order history yet.</p>
+                <p className={styles.muted}>{t("No order history yet.")}</p>
               )}
             </Card>
           </div>

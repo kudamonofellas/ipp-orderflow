@@ -7,6 +7,7 @@ import { ChannelSelectModal } from "../../components/ChannelSelectModal/ChannelS
 import { IntakeModal } from "../../components/IntakeModal/IntakeModal";
 import { OrderRows } from "../../components/OrderRows/OrderRows";
 import { useCan } from "../../hooks/useAuth";
+import { useLanguage } from "../../hooks/useLanguage";
 import { useOrders } from "../../hooks/useOrders";
 import { PIPELINE_STAGES, RETURN_STAGES } from "../../lib/pipeline";
 import type { OpenOrder } from "../../types/dashboard";
@@ -88,6 +89,7 @@ export function Orders() {
   const navigate = useNavigate();
   const location = useLocation();
   const canCreateOrders = useCan()("createOrders");
+  const { t } = useLanguage();
 
   // Stage + search are the single source of truth in the URL (not component
   // state) — so a dashboard deep-link, the stage dropdown, a bookmark, and
@@ -212,7 +214,7 @@ export function Orders() {
   return (
     <div className={styles.main}>
       <div className={styles.header}>
-        <h1 className={styles.title}>Orders</h1>
+        <h1 className={styles.title}>{t("Orders")}</h1>
         <div className={styles.controls}>
           <div className={styles.dropdownWrapper} ref={stageDropdownRef}>
             <Button
@@ -227,14 +229,14 @@ export function Orders() {
               aria-expanded={stageOpen}
               onClick={() => setStageOpen((o) => !o)}
             >
-              {STAGE_OPTIONS.find((o) => o.key === stage)?.label ||
-                "All stages"}
+              {t(STAGE_OPTIONS.find((o) => o.key === stage)?.label ||
+                "All stages")}
             </Button>
             {stageOpen && (
               <div
                 className={styles.dropdown}
                 role="dialog"
-                aria-label="Filter by stage"
+                aria-label={t("Filter by stage")}
               >
                 {STAGE_OPTIONS.map((opt) => (
                   <Button
@@ -251,7 +253,7 @@ export function Orders() {
                       setPage(1);
                     }}
                   >
-                    {opt.label}
+                    {t(opt.label)}
                   </Button>
                 ))}
               </div>
@@ -263,13 +265,13 @@ export function Orders() {
             <input
               type="search"
               className={styles.searchInput}
-              placeholder="Search # or customer…"
+              placeholder={t("Search # or customer…")}
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
                 setPage(1);
               }}
-              aria-label="Search orders"
+              aria-label={t("Search orders")}
             />
           </div>
 
@@ -278,10 +280,10 @@ export function Orders() {
               variant="primary"
               size="md"
               onClick={startNewOrder}
-              title="Create a new order"
+              title={t("Create a new order")}
               icon="add"
             >
-              New Order
+              {t("New Order")}
             </Button>
           )}
         </div>
@@ -290,7 +292,7 @@ export function Orders() {
       <Card>
         <div className={styles.headerWrap}>
           <h3 className={styles.heading}>
-            {stageCopy.headline} <span className={styles.count}>{total}</span>
+            {t(stageCopy.headline)} <span className={styles.count}>{total}</span>
           </h3>
           <div className={styles.sortContainer} ref={sortDropdownRef}>
             <Button
@@ -307,15 +309,15 @@ export function Orders() {
               onClick={() => setSortOpen((o) => !o)}
             >
               <span>
-                {SORT_OPTIONS.find((o) => o.key === sortBy)?.label ||
-                  "Order ID (Desc)"}
+                {t(SORT_OPTIONS.find((o) => o.key === sortBy)?.label ||
+                  "Order ID (Desc)")}
               </span>
             </Button>
             {sortOpen && (
               <div
                 className={styles.dropdown}
                 role="dialog"
-                aria-label="Sort options"
+                aria-label={t("Sort options")}
               >
                 {SORT_OPTIONS.map((opt) => (
                   <Button
@@ -331,7 +333,7 @@ export function Orders() {
                       setSortOpen(false);
                     }}
                   >
-                    {opt.label}
+                    {t(opt.label)}
                   </Button>
                 ))}
               </div>
@@ -340,25 +342,25 @@ export function Orders() {
         </div>
 
         {loading ? (
-          <div className={styles.muted}>Loading orders…</div>
+          <div className={styles.muted}>{t("Loading orders…")}</div>
         ) : error ? (
           <div className={styles.error}>{error}</div>
         ) : orders.length === 0 ? (
-          <div className={styles.muted}>{stageCopy.empty}</div>
+          <div className={styles.muted}>{t(stageCopy.empty)}</div>
         ) : (
           <>
             <div style={{ overflowX: "auto" }}>
               <table className={styles.table}>
                 <thead>
                   <tr>
-                    <th className={styles.arrowHead} aria-label="Expand" />
-                    <th style={{ textAlign: "left" }}>Order ID</th>
-                    <th style={{ textAlign: "left" }}>Stage</th>
-                    <th style={{ textAlign: "left" }}>Order Date</th>
-                    <th style={{ textAlign: "left" }}>Delivery Date</th>
-                    <th style={{ textAlign: "left" }}>Sales Rep</th>
-                    <th style={{ textAlign: "left" }}>Customer</th>
-                    <th style={{ textAlign: "left" }}>Items</th>
+                    <th className={styles.arrowHead} aria-label={t("Expand")} />
+                    <th style={{ textAlign: "left" }}>{t("Order ID")}</th>
+                    <th style={{ textAlign: "left" }}>{t("Stage")}</th>
+                    <th style={{ textAlign: "left" }}>{t("Order Date")}</th>
+                    <th style={{ textAlign: "left" }}>{t("Delivery Date")}</th>
+                    <th style={{ textAlign: "left" }}>{t("Sales Rep")}</th>
+                    <th style={{ textAlign: "left" }}>{t("Customer")}</th>
+                    <th style={{ textAlign: "left" }}>{t("Items")}</th>
                   </tr>
                 </thead>
                 {orders.map((order: OpenOrder) => (
@@ -369,7 +371,7 @@ export function Orders() {
 
             <footer className={styles.pagination}>
               <span className={styles.pageInfo}>
-                Showing {rangeStart}–{rangeEnd} of {total}
+                {t("Showing")} {rangeStart}–{rangeEnd} {t("of")} {total}
               </span>
               <div className={styles.pageControls}>
                 <Button
@@ -380,7 +382,7 @@ export function Orders() {
                   iconOnly
                   onClick={() => setPage?.(currentPage - 1)}
                   disabled={currentPage <= 1}
-                  aria-label="Previous page"
+                  aria-label={t("Previous page")}
                 />
                 <span className={styles.pageIndicator}>
                   {currentPage} / {totalPages}
@@ -393,7 +395,7 @@ export function Orders() {
                   iconOnly
                   onClick={() => setPage?.(currentPage + 1)}
                   disabled={currentPage >= totalPages}
-                  aria-label="Next page"
+                  aria-label={t("Next page")}
                 />
               </div>
             </footer>

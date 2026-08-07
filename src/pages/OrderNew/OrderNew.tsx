@@ -12,6 +12,7 @@ import {
   useCurrentUserId,
   useCurrentUserName,
 } from "../../hooks/useAuth";
+import { useLanguage } from "../../hooks/useLanguage";
 import {
   appendOrderHistory,
   createAttachment,
@@ -106,6 +107,7 @@ export function OrderNew() {
   const returnTo = from ?? "/orders";
 
   const can = useAuth().can;
+  const { t } = useLanguage();
   const currentUserName = useCurrentUserName();
   const userId = useCurrentUserId();
   const allowed = can("createOrders");
@@ -340,15 +342,15 @@ export function OrderNew() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!allowed) {
-      setError("Your role doesn't have permission to create orders.");
+      setError(t("Your role doesn't have permission to create orders."));
       return;
     }
     if (!customerName.trim()) {
-      setError("Enter a customer / restaurant name.");
+      setError(t("Enter a customer / restaurant name."));
       return;
     }
     if (badNo) {
-      setError("Order number format is invalid.");
+      setError(t("Order number format is invalid."));
       return;
     }
     if (dupOrder) {
@@ -369,7 +371,7 @@ export function OrderNew() {
       );
     if (cleanLines.length === 0) {
       setError(
-        "Add at least one line with a name and a quantity greater than 0.",
+        t("Add at least one line with a name and a quantity greater than 0."),
       );
       return;
     }
@@ -535,9 +537,9 @@ export function OrderNew() {
                 icon="chevronLeft"
                 onClick={cancel}
               >
-                Back
+                {t("Back")}
               </Button>
-              <h3 className={styles.title}>New Order</h3>
+              <h3 className={styles.title}>{t("New Order")}</h3>
             </div>
             <div className={styles.actions}>
               <Button
@@ -546,7 +548,7 @@ export function OrderNew() {
                 onClick={cancel}
                 disabled={submitting}
               >
-                <Icon name="close" size={16} /> Cancel
+                <Icon name="close" size={16} /> {t("Cancel")}
               </Button>
               <Button
                 type="submit"
@@ -556,18 +558,18 @@ export function OrderNew() {
                 disabled={submitting || !allowed || loadingOpts}
               >
                 {" "}
-                {submitting ? "Creating…" : "Create order"}
+                {submitting ? t("Creating…") : t("Create order")}
               </Button>
             </div>
           </header>
 
           {!allowed && (
             <p className={styles.error} role="alert">
-              Your role doesn't have permission to create orders.
+              {t("Your role doesn't have permission to create orders.")}
             </p>
           )}
           {loadingOpts && (
-            <p className={styles.muted}>Loading customers + products…</p>
+            <p className={styles.muted}>{t("Loading customers + products…")}</p>
           )}
 
           <form
@@ -577,27 +579,28 @@ export function OrderNew() {
           >
             {multiCustomer && (
               <p className={styles.error} role="alert">
-                This looks like more than one customer's order — please enter
-                them as separate orders.
+                {t(
+                  "This looks like more than one customer's order — please enter them as separate orders.",
+                )}
               </p>
             )}
 
             <Card className={styles.customerCard}>
               {badNo && (
                 <p className={`${styles.hint} ${styles.banner}`}>
-                  Order no. should look like {dcOf || "YYMMDD"}NNN (9 digits).
+                  {t("Order no. should look like")} {dcOf || "YYMMDD"}NNN ({t("9 digits")}).
                 </p>
               )}
               {dupOrder && (
                 <p className={`${styles.hint} ${styles.banner}`}>
-                  Order #{orderNoValue} already exists — duplicate?
+                  {t("Order")} #{orderNoValue} {t("already exists — duplicate?")}
                 </p>
               )}
               {seqGap && (
                 <div className={`${styles.hint} ${styles.banner}`}>
                   <span>
-                    The next open queue number is #{expectedNo} — but you
-                    entered #{orderNoValue}. Typo, or keep it?
+                    {t("The next open queue number is")} #{expectedNo} —{" "}
+                    {t("but you entered")} #{orderNoValue}. {t("Typo, or keep it?")}
                   </span>
                   <Button
                     type="button"
@@ -608,13 +611,13 @@ export function OrderNew() {
                       setOrderNoTouched(true);
                     }}
                   >
-                    Use #{expectedNo}
+                    {t("Use")} #{expectedNo}
                   </Button>
                 </div>
               )}
               <div className={styles.row}>
                 <label className={styles.field}>
-                  <span className={styles.label}>Order No.</span>
+                  <span className={styles.label}>{t("Order No.")}</span>
                   <input
                     type="text"
                     className={styles.input}
@@ -628,7 +631,7 @@ export function OrderNew() {
                   />
                 </label>
                 <label className={styles.field}>
-                  <span className={styles.label}>Delivery Date</span>
+                  <span className={styles.label}>{t("Delivery Date")}</span>
                   <input
                     type="date"
                     className={styles.input}
@@ -644,14 +647,14 @@ export function OrderNew() {
                       className={styles.secondary}
                       style={{ color: "var(--state-warning)" }}
                     >
-                      Delivery date was guessed — please check.
+                      {t("Delivery date was guessed — please check.")}
                     </p>
                   )}
                 </label>
               </div>
               <div className={styles.row}>
                 <label className={styles.field}>
-                  <span className={styles.label}>Customer / Restaurant *</span>
+                  <span className={styles.label}>{t("Customer / Restaurant")} *</span>
                   <input
                     type="text"
                     className={styles.input}
@@ -659,7 +662,7 @@ export function OrderNew() {
                     value={customerName}
                     onChange={(e) => handleCustomerNameChange(e.target.value)}
                     disabled={submitting || !allowed}
-                    placeholder="Type or select a customer"
+                    placeholder={t("Type or select a customer")}
                     required
                   />
                   <datalist id="customer-suggestions">
@@ -670,9 +673,9 @@ export function OrderNew() {
                 </label>
                 <label className={styles.field}>
                   <span className={styles.label}>
-                    Company{" "}
+                    {t("Company")}{" "}
                     <span className={styles.caption}>
-                      (PT / CV — for the invoice)
+                      {t("(PT / CV — for the invoice)")}
                     </span>
                   </span>
                   <input
@@ -688,21 +691,21 @@ export function OrderNew() {
 
               {customerMatch.type === "fuzzy" && customerMatch.customer && (
                 <div className={styles.matchBanner} data-tone="warning">
-                  Did you mean <b>{customerMatch.customer.name}</b>? Looks like
-                  the same customer.
+                  {t("Did you mean")} <b>{customerMatch.customer.name}</b>?{" "}
+                  {t("Looks like the same customer.")}
                   <button
                     type="button"
                     className={styles.addLineBtn}
                     style={{ marginLeft: 8 }}
                     onClick={() => acceptCustomerMatch(customerMatch.customer!)}
                   >
-                    Use {customerMatch.customer.name}
+                    {t("Use")} {customerMatch.customer.name}
                   </button>
                 </div>
               )}
               {customerMatch.type === "phone" && customerMatch.customer && (
                 <div className={styles.matchBanner} data-tone="success">
-                  Matched by phone number to{" "}
+                  {t("Matched by phone number to")}{" "}
                   <b>{customerMatch.customer.name}</b>.
                   <button
                     type="button"
@@ -710,7 +713,7 @@ export function OrderNew() {
                     style={{ marginLeft: 8 }}
                     onClick={() => acceptCustomerMatch(customerMatch.customer!)}
                   >
-                    Use {customerMatch.customer.name}
+                    {t("Use")} {customerMatch.customer.name}
                   </button>
                 </div>
               )}
@@ -723,43 +726,44 @@ export function OrderNew() {
                     gap: "var(--space-xs)",
                   }}
                 >
-                  <Icon name="check" /> Existing customer.
+                  <Icon name="check" /> {t("Existing customer.")}
                 </div>
               )}
               {customerMatch.type === "new" && customerName.trim() && (
                 <div className={styles.secondary}>
-                  New customer — <b>{customerName.trim()}</b> will be saved.
+                  {t("New customer —")} <b>{customerName.trim()}</b>{" "}
+                  {t("will be saved.")}
                 </div>
               )}
 
               <div className={styles.row}>
                 <label className={styles.field}>
-                  <span className={styles.label}>Customer Contact</span>
+                  <span className={styles.label}>{t("Customer Contact")}</span>
                   <input
                     type="text"
                     className={styles.input}
                     value={customerPhone}
                     onChange={(e) => setCustomerPhone(e.target.value)}
                     disabled={submitting || !allowed}
-                    placeholder="WhatsApp / phone"
+                    placeholder={t("WhatsApp / phone")}
                   />
                 </label>
                 <label className={styles.field}>
-                  <span className={styles.label}>Sales Rep</span>
+                  <span className={styles.label}>{t("Sales Rep")}</span>
                   <input
                     type="text"
                     className={styles.input}
                     value={sales}
                     onChange={(e) => setSales(e.target.value)}
                     disabled={submitting || !allowed}
-                    placeholder="Auto-filled from your name"
+                    placeholder={t("Auto-filled from your name")}
                   />
                 </label>
               </div>
               <label className={styles.field}>
                 <span className={styles.label}>
-                  Delivery Address{" "}
-                  <span className={styles.caption}>(Optional)</span>
+                  {t("Delivery Address")}{" "}
+                  <span className={styles.caption}>({t("Optional")})</span>
                 </span>
                 <textarea
                   className={styles.input}
@@ -771,13 +775,13 @@ export function OrderNew() {
                   value={customerAddress}
                   onChange={(e) => setCustomerAddress(e.target.value)}
                   disabled={submitting || !allowed}
-                  placeholder="Delivery address"
+                  placeholder={t("Delivery address")}
                 />
               </label>
 
               <label className={styles.field}>
                 <span className={styles.label}>
-                  Notes <span className={styles.caption}>(Optional)</span>
+                  {t("Notes")} <span className={styles.caption}>({t("Optional")})</span>
                 </span>
                 <textarea
                   className={styles.input}
@@ -789,14 +793,14 @@ export function OrderNew() {
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   disabled={submitting || !allowed}
-                  placeholder="Any note for this order..."
+                  placeholder={t("Any note for this order...")}
                 />
               </label>
             </Card>
 
             <Card>
               <div className={styles.heading}>
-                Items <span className={styles.count}>{lines.length}</span>
+                {t("Items")} <span className={styles.count}>{lines.length}</span>
               </div>
               <div className={styles.itemsList}>
                 {lines.map((l, i) => (
@@ -814,7 +818,7 @@ export function OrderNew() {
                             onChange={(e) =>
                               updateLine(l.id, { qty: e.target.value })
                             }
-                            placeholder="Qty"
+                            placeholder={t("Qty")}
                             disabled={submitting || !allowed}
                           />
                           <select
@@ -845,7 +849,7 @@ export function OrderNew() {
                             }
                             disabled={submitting || !allowed}
                           >
-                            <option value="">— Custom Product —</option>
+                            <option value="">{t("— Custom Product —")}</option>
                             {products.map((p) => (
                               <option key={p.id} value={p.id}>
                                 {p.name}
@@ -857,7 +861,7 @@ export function OrderNew() {
                           <input
                             type="text"
                             className={styles.editInput}
-                            placeholder="Item name"
+                            placeholder={t("Item name")}
                             onChange={(e) => {
                               const val = e.target.value;
                               setLines((prev) =>
@@ -873,7 +877,7 @@ export function OrderNew() {
                             className={styles.statusChip}
                             data-status={l.learned ? "learned" : l.parseStatus}
                           >
-                            {l.learned ? "learned" : l.parseStatus}
+                            {l.learned ? t("learned") : t(l.parseStatus)}
                           </span>
                         )}
                       </div>
@@ -912,14 +916,14 @@ export function OrderNew() {
                               color: "var(--text-secondary)",
                             }}
                           >
-                            cutting
+                            {t("cutting")}
                           </span>
                           <input
                             type="text"
                             className={styles.input}
                             style={{ flex: 1, maxWidth: 220 }}
                             value={cut.text}
-                            placeholder="e.g. yakiniku pack per 200g"
+                            placeholder={t("e.g. yakiniku pack per 200g")}
                             onChange={(e) => {
                               const val = e.target.value;
                               setLines((prev) =>
@@ -959,13 +963,13 @@ export function OrderNew() {
                         onClick={() => handleAddCutToLine(l.id)}
                         disabled={submitting || !allowed}
                       >
-                        Add cutting
+                        {t("Add cutting")}
                       </Button>
                     </div>
 
                     {/* Price & Qty Row */}
                     <div className={styles.itemPriceRow}>
-                      <span>Total:</span>
+                      <span>{t("Total:")}</span>
                       <div className={styles.priceCalc}>
                         <input
                           type="number"
@@ -1013,7 +1017,7 @@ export function OrderNew() {
                   fontWeight: 600,
                 }}
               >
-                Add Item
+                {t("Add Item")}
               </Button>
             </Card>
 
@@ -1034,7 +1038,7 @@ export function OrderNew() {
             className={styles.panelToggleBtn}
             isActive={isPanelOpen}
             onClick={() => setIsPanelOpen((prev) => !prev)}
-            title={isPanelOpen ? "Collapse side panel" : "Expand side panel"}
+            title={isPanelOpen ? t("Collapse side panel") : t("Expand side panel")}
           />
 
           <div
@@ -1044,20 +1048,18 @@ export function OrderNew() {
             ].join(" ")}
           >
             <Card className={styles.notesCard}>
-              <h3 className={styles.heading}>Original WhatsApp message</h3>
+              <h3 className={styles.heading}>{t("Original WhatsApp message")}</h3>
               {rawText && rawText.trim() ? (
                 <pre className={styles.pre}>{rawText}</pre>
               ) : (
                 <p className={styles.muted}>
-                  No pasted message — entered manually.
+                  {t("No pasted message — entered manually.")}
                 </p>
               )}
               {attachments && attachments.length > 0 && (
                 <div className={styles.attachmentsNote}>
                   <p className={styles.muted}>
-                    {attachments.length} attachment
-                    {attachments.length > 1 ? "s" : ""} will be added as PO
-                    document{attachments.length > 1 ? "s" : ""}:
+                    {attachments.length} {t("attachment(s) will be added as PO document(s):")}
                   </p>
                   <ul>
                     {attachments.map((f, i) => (

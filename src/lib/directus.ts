@@ -31,6 +31,9 @@ import {
   deleteItem,
   uploadFiles,
   readUsers,
+  updateUser,
+  deleteUser,
+  readRoles,
 } from "@directus/sdk";
 import {
   CustomersCollectionSchema,
@@ -719,6 +722,127 @@ export async function readAllUsers(): Promise<DirectusResult<UserBrief[]>> {
       };
     }
     return { data: parsed.data, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+/* ================================================== Team / Roles & Permissions === */
+
+/** A `directus_users` row shaped for the Owner Settings "Team" section. */
+export interface TeamMember {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  email: string;
+  status: string;
+  role: { id: string; name: string } | null;
+}
+
+export async function readTeamMembers(): Promise<DirectusResult<TeamMember[]>> {
+  try {
+    const raw = await getClient().request(
+      readUsers({
+        fields: ["id", "first_name", "last_name", "email", "status", "role.id", "role.name"],
+        limit: -1,
+      } as never),
+    );
+    return { data: raw as unknown as TeamMember[], error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+/** Update a team member's name/role/active-status (Owner Settings "Team" section). */
+export async function updateTeamMember(
+  id: string,
+  patch: Partial<{ first_name: string; last_name: string; role: string; status: string }>,
+): Promise<DirectusResult<null>> {
+  try {
+    await getClient().request(updateUser(id, patch as never));
+    return { data: null, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+/** Remove a team member's login access entirely (Owner Settings "Team" section). */
+export async function deleteTeamMember(id: string): Promise<DirectusResult<null>> {
+  try {
+    await getClient().request(deleteUser(id));
+    return { data: null, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+/** A `directus_roles` row — used to populate the Team section's role dropdown. */
+export interface RoleBrief {
+  id: string;
+  name: string;
+}
+
+export async function readAllRoles(): Promise<DirectusResult<RoleBrief[]>> {
+  try {
+    const raw = await getClient().request(
+      readRoles({ fields: ["id", "name"], limit: -1 } as never),
+    );
+    return { data: raw as unknown as RoleBrief[], error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+/** A `role_permissions` row — the live override table behind `can()`. */
+export interface RolePermissionRow {
+  id: string;
+  capability: string;
+  role: string;
+  allowed: boolean;
+}
+
+export async function readRolePermissionRows(): Promise<DirectusResult<RolePermissionRow[]>> {
+  try {
+    const raw = await getClient().request(
+      readItems("role_permissions", {
+        fields: ["id", "capability", "role", "allowed"],
+        limit: -1,
+      } as never),
+    );
+    return { data: raw as unknown as RolePermissionRow[], error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+/** Create or update a single (role, capability) override cell. */
+export async function setRolePermission(
+  existingId: string | null,
+  role: string,
+  capability: string,
+  allowed: boolean,
+): Promise<DirectusResult<null>> {
+  try {
+    if (existingId) {
+      await getClient().request(updateItem("role_permissions", existingId, { allowed } as never));
+    } else {
+      await getClient().request(
+        createItem("role_permissions", { role, capability, allowed } as never),
+      );
+    }
+    return { data: null, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+/** Delete override rows — "Reset permissions to defaults" reverts to the coded ALLOW matrix. */
+export async function deleteRolePermissionRows(ids: string[]): Promise<DirectusResult<null>> {
+  try {
+    for (const id of ids) {
+      await getClient().request(deleteItem("role_permissions", id));
+    }
+    return { data: null, error: null };
   } catch (err) {
     return { data: null, error: errMsg(err) };
   }

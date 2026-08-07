@@ -5,6 +5,7 @@ import { Icon } from "../../components/Icon/Icon";
 import { Button } from "../../components/Button/Button";
 import { Avatar } from "../../components/Avatar/Avatar";
 import { useAuth, useCurrentUserId } from "../../hooks/useAuth";
+import { useLanguage } from "../../hooks/useLanguage";
 import { getInitials } from "../../lib/initials";
 import {
   readOrder,
@@ -195,6 +196,7 @@ export function OrderDetail() {
   const backTo = (location.state as { from?: string } | null)?.from ?? "/orders";
   const auth = useAuth();
   const userId = useCurrentUserId();
+  const { t } = useLanguage();
 
   /* ── data state ── */
   const [order, setOrder] = useState<OrdersCollection | null>(null);
@@ -394,11 +396,11 @@ export function OrderDetail() {
 
   /* ────────────── guards ── */
   if (loading)
-    return <div className={styles.muted}>Loading order details…</div>;
+    return <div className={styles.muted}>{t("Loading order details…")}</div>;
   if (error || !order)
     return (
       <div className={styles.muted} style={{ color: "var(--state-error)" }}>
-        {error || "Order not found."}
+        {error || t("Order not found.")}
       </div>
     );
 
@@ -419,17 +421,21 @@ export function OrderDetail() {
   const isReturned = stage === "returned";
 
   const canEdit = auth.can("editOrderLines") && !isCancelled && !isDelivered;
-  const canAdvance = flow ? auth.can(flow.capability) : false;
-  const canSendBack = flow?.prev ? auth.can(flow.capability) : false;
+  // A role can advance a stage it owns (flow.capability) OR — if granted the
+  // separate "floor helper" capability — cover any stage regardless of owner.
+  const canAdvance = flow
+    ? auth.can(flow.capability) || auth.can("helpOtherStages")
+    : false;
+  const canSendBack = flow?.prev ? auth.can("sendBackStage") : false;
   const canCancel =
     auth.can("cancelOrders") && !isCancelled && !isDelivered && !isReturned;
   const canHold =
-    auth.can("advanceStage") &&
+    auth.can("holdResume") &&
     !isOutstanding &&
     !isCancelled &&
     !isDelivered &&
     !isReturned;
-  const canRestore = (isCancelled || isOutstanding) && auth.can("advanceStage");
+  const canRestore = (isCancelled || isOutstanding) && auth.can("reopenOrders");
   const canAddDocs = auth.can("printDocuments");
   const canProcessReturns = auth.can("processReturns");
   const canSeePrices = auth.can("seePrices");
@@ -742,7 +748,7 @@ export function OrderDetail() {
   }
 
   async function handleDeleteDocument(docId: number | string) {
-    if (!window.confirm("Delete this document?")) return;
+    if (!window.confirm(t("Delete this document?"))) return;
     const res = await deleteAttachment(docId);
     if (!res.error) {
       setAttachments((prev) => prev.filter((a) => a.id !== docId));
@@ -795,7 +801,7 @@ export function OrderDetail() {
   async function handleCancel() {
     if (
       !id ||
-      !window.confirm("Cancel this order? This can be undone via Restore.")
+      !window.confirm(t("Cancel this order? This can be undone via Restore."))
     )
       return;
     setCancelling(true);
@@ -918,7 +924,7 @@ export function OrderDetail() {
       (l) => (parseFloat(refuseQtyMap[l.id] ?? "0") || 0) > 0,
     );
     if (refusedLines.length === 0) {
-      window.alert("Enter a returned quantity for at least one item.");
+      window.alert(t("Enter a returned quantity for at least one item."));
       return;
     }
     setSubmittingRefusal(true);
@@ -1210,7 +1216,7 @@ export function OrderDetail() {
       document.execCommand("copy");
       ta.remove();
     }
-    window.alert("WhatsApp order confirmation copied to clipboard.");
+    window.alert(t("WhatsApp order confirmation copied to clipboard."));
   }
 
   /* ────────────── render ── */
@@ -1235,11 +1241,11 @@ export function OrderDetail() {
                 icon="chevronLeft"
                 onClick={() => navigate(backTo)}
               >
-                Back
+                {t("Back")}
               </Button>
 
               <div className={styles.titleRow}>
-                <h3 className={styles.title}>Order {order.no}</h3>
+                <h3 className={styles.title}>{t("Order")} {order.no}</h3>
                 {isCancelled && (
                   <span
                     style={{
@@ -1248,7 +1254,7 @@ export function OrderDetail() {
                       fontWeight: 600,
                     }}
                   >
-                    CANCELLED
+                    {t("CANCELLED")}
                   </span>
                 )}
                 {isOutstanding && (
@@ -1259,7 +1265,7 @@ export function OrderDetail() {
                       fontWeight: 600,
                     }}
                   >
-                    ON HOLD
+                    {t("ON HOLD")}
                   </span>
                 )}
                 {isReturned && (
@@ -1270,7 +1276,7 @@ export function OrderDetail() {
                       fontWeight: 600,
                     }}
                   >
-                    RETURNED
+                    {t("RETURNED")}
                   </span>
                 )}
                 {order.is_replacement && (
@@ -1281,7 +1287,7 @@ export function OrderDetail() {
                       fontWeight: 600,
                     }}
                   >
-                    REPLACEMENT
+                    {t("REPLACEMENT")}
                   </span>
                 )}
               </div>
@@ -1293,7 +1299,7 @@ export function OrderDetail() {
                 icon="whatsapp"
                 onClick={copyWA}
               >
-                Copy WA
+                {t("Copy WA")}
               </Button>
               <Button
                 type="button"
@@ -1301,7 +1307,7 @@ export function OrderDetail() {
                 icon="printer"
                 onClick={() => window.print()}
               >
-                Print
+                {t("Print")}
               </Button>
               {canEdit && (
                 <Button
@@ -1310,7 +1316,7 @@ export function OrderDetail() {
                   icon="edit"
                   onClick={() => navigate(`/orders/${order.id}/edit`)}
                 >
-                  Edit
+                  {t("Edit")}
                 </Button>
               )}
             </div>
@@ -1364,7 +1370,7 @@ export function OrderDetail() {
                         isCompleted ? styles.stepLabelCompleted : "",
                       ].join(" ")}
                     >
-                      {s.label}
+                      {t(s.label)}
                     </span>
                   </div>
                 );
@@ -1385,7 +1391,7 @@ export function OrderDetail() {
                     state: { from: location.pathname },
                   });
               }}
-              title={customerId ? "View customer details" : undefined}
+              title={customerId ? t("View customer details") : undefined}
             >
               <Avatar
                 initials={getInitials(order.customer_name) || "??"}
@@ -1395,19 +1401,19 @@ export function OrderDetail() {
               <div className={styles.customerInfo}>
                 <h3>{order.customer_name || "—"}</h3>
                 <p>
-                  {matchedCustomer?.channel?.toUpperCase() || "Horeca · B2B"}
+                  {matchedCustomer?.channel?.toUpperCase() || t("Horeca · B2B")}
                 </p>
               </div>
             </div>
             <div className={styles.detailsGrid}>
               <div className={styles.detailItem}>
-                <span className={styles.detailLabel}>Delivery Date</span>
+                <span className={styles.detailLabel}>{t("Delivery Date")}</span>
                 <span className={styles.detailValue}>
                   {formatDate(order.deliver_at)}
                 </span>
               </div>
               <div className={styles.detailItem}>
-                <span className={styles.detailLabel}>Order Date</span>
+                <span className={styles.detailLabel}>{t("Order Date")}</span>
                 <span className={styles.detailValue}>
                   {order.order_date
                     ? new Date(order.order_date).toLocaleDateString("en-US", {
@@ -1420,7 +1426,7 @@ export function OrderDetail() {
               </div>
               {canSeeCustomerContact && (
                 <div className={styles.detailItem}>
-                  <span className={styles.detailLabel}>Sales Rep</span>
+                  <span className={styles.detailLabel}>{t("Sales Rep")}</span>
                   <span className={styles.detailValue}>
                     {order.sales ?? order.sales_rep ?? "—"}
                   </span>
@@ -1428,7 +1434,7 @@ export function OrderDetail() {
               )}
               {canSeeCustomerContact && (
                 <div className={styles.detailItem}>
-                  <span className={styles.detailLabel}>Contact</span>
+                  <span className={styles.detailLabel}>{t("Contact")}</span>
                   <span className={styles.detailValue}>
                     {order.customer_contact ?? "—"}
                   </span>
@@ -1439,7 +1445,7 @@ export function OrderDetail() {
                   className={styles.detailItem}
                   style={{ gridColumn: "1 / -1" }}
                 >
-                  <span className={styles.detailLabel}>Address</span>
+                  <span className={styles.detailLabel}>{t("Address")}</span>
                   <span className={styles.detailValue}>
                     {order.customer_address}
                   </span>
@@ -1451,7 +1457,7 @@ export function OrderDetail() {
           {/* Items Card */}
           <Card>
             <div className={styles.heading}>
-              Items <span className={styles.count}>{lines.length}</span>
+              {t("Items")} <span className={styles.count}>{lines.length}</span>
             </div>
 
             {/* View Mode Items List */}
@@ -1493,7 +1499,7 @@ export function OrderDetail() {
                         <span className={styles.itemName}>{line.name}</span>
                       </div>
                       <div className={styles.sendingBadge}>
-                        sending
+                        {t("sending")}
                         <input
                           type="number"
                           className={styles.sendingInput}
@@ -1510,7 +1516,7 @@ export function OrderDetail() {
                               }));
                           }}
                         />
-                        of {qty}
+                        {t("of")} {qty}
                       </div>
                     </div>
 
@@ -1547,7 +1553,7 @@ export function OrderDetail() {
                                 size="sm"
                                 icon="camera"
                                 iconOnly
-                                title="Add weighing photo"
+                                title={t("Add weighing photo")}
                                 onClick={(e) => {
                                   const inputElem = (
                                     e.currentTarget as HTMLElement
@@ -1571,7 +1577,7 @@ export function OrderDetail() {
                               size="sm"
                               icon="trash"
                               iconOnly
-                              title="Remove weighing"
+                              title={t("Remove weighing")}
                               onClick={() =>
                                 handleRemoveWeighing(line.id, w.id)
                               }
@@ -1589,7 +1595,7 @@ export function OrderDetail() {
                                     onClick={() =>
                                       setActiveImageModal({
                                         url: p.url,
-                                        title: `Weighing photo — ${line.name}`,
+                                        title: `${t("Weighing photo —")} ${line.name}`,
                                         weighingLineId: line.id,
                                         weighingId: w.id,
                                         weighingPhotoId: p.id,
@@ -1603,7 +1609,7 @@ export function OrderDetail() {
                                     />
                                     <div
                                       className={styles.thumbnailHoverTrash}
-                                      title="Delete image"
+                                      title={t("Delete image")}
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         handleRemoveWeighingPhoto(
@@ -1630,7 +1636,7 @@ export function OrderDetail() {
                           style={{ alignSelf: "flex-start" }}
                           onClick={() => handleAddWeighing(line.id)}
                         >
-                          Add weighing
+                          {t("Add weighing")}
                         </Button>
                       </div>
                     )}
@@ -1661,7 +1667,7 @@ export function OrderDetail() {
                           size="sm"
                           icon="camera"
                           iconOnly
-                          title="Upload item photo"
+                          title={t("Upload item photo")}
                           onClick={(e) => {
                             const inputElem = (e.currentTarget as HTMLElement)
                               .nextElementSibling as HTMLInputElement;
@@ -1687,7 +1693,7 @@ export function OrderDetail() {
                               onClick={() =>
                                 setActiveImageModal({
                                   url: img.url,
-                                  title: `Attachment for ${line.name}`,
+                                  title: `${t("Attachment for")} ${line.name}`,
                                   photoId: img.id,
                                   lineId: line.id,
                                 })
@@ -1700,7 +1706,7 @@ export function OrderDetail() {
                               />
                               <div
                                 className={styles.thumbnailHoverTrash}
-                                title="Delete image"
+                                title={t("Delete image")}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   handleRemoveItemPhoto(line.id, img.id);
@@ -1717,7 +1723,7 @@ export function OrderDetail() {
                     {/* Item Summary line */}
                     <div className={styles.itemTotalRow}>
                       <span className={styles.totalWeight}>
-                        Total:{" "}
+                        {t("Total:")}{" "}
                         {isWeighedItem
                           ? `${totalMeasuredWeight.toFixed(2)} kg`
                           : ""}
@@ -1743,14 +1749,14 @@ export function OrderDetail() {
                 className={styles.noteItem}
                 style={{ gridColumn: "1 / -1", marginTop: "var(--space-md)" }}
               >
-                <span className={styles.noteHeader}>Order Note</span>
+                <span className={styles.noteHeader}>{t("Order Note")}</span>
                 <span>{order.notes}</span>
               </div>
             )}
 
             {canSeePrices && (
               <div className={styles.totalRow}>
-                <span>Order value · from PO</span>
+                <span>{t("Order value · from PO")}</span>
                 <span className={styles.totalValue}>
                   {currency.format(orderTotal)}
                 </span>
@@ -1761,12 +1767,12 @@ export function OrderDetail() {
           {/* Documents Section */}
           <Card>
             <div className={styles.heading}>
-              Documents{" "}
+              {t("Documents")}{" "}
               <span className={styles.count}>{docEntries.length}</span>
             </div>
 
             {docEntries.length === 0 ? (
-              <p className={styles.muted}>No documents logged yet.</p>
+              <p className={styles.muted}>{t("No documents logged yet.")}</p>
             ) : (
               <div className={styles.docList}>
                 {docEntries.map((doc) => {
@@ -1807,7 +1813,7 @@ export function OrderDetail() {
                           size="sm"
                           icon="trash"
                           iconOnly
-                          title="Delete document"
+                          title={t("Delete document")}
                           onClick={() =>
                             doc.id != null && handleDeleteDocument(doc.id)
                           }
@@ -1832,9 +1838,9 @@ export function OrderDetail() {
                     value={docType}
                     onChange={(e) => setDocType(e.target.value)}
                   >
-                    {DOC_TYPES.map((t) => (
-                      <option key={t} value={t}>
-                        {t}
+                    {DOC_TYPES.map((docTypeOption) => (
+                      <option key={docTypeOption} value={docTypeOption}>
+                        {docTypeOption}
                       </option>
                     ))}
                   </select>
@@ -1842,7 +1848,7 @@ export function OrderDetail() {
                     type="text"
                     className={styles.editInput}
                     style={{ flex: 1 }}
-                    placeholder="Document number"
+                    placeholder={t("Document number")}
                     value={docNumber}
                     onChange={(e) => setDocNumber(e.target.value)}
                     required
@@ -1868,13 +1874,13 @@ export function OrderDetail() {
                     variant="primary"
                     disabled={savingDoc || !docNumber.trim()}
                   >
-                    {savingDoc ? "…" : "+ Add"}
+                    {savingDoc ? "…" : t("+ Add")}
                   </Button>
                 </div>
                 <input
                   type="text"
                   className={styles.editInput}
-                  placeholder="Put notes here..."
+                  placeholder={t("Put notes here...")}
                   value={docNote}
                   onChange={(e) => setDocNote(e.target.value)}
                 />
@@ -1884,7 +1890,7 @@ export function OrderDetail() {
 
           {showActorNotice && (
             <div className={styles.actorNotice}>
-              This order is currently with <strong>{stageActor}</strong>.
+              {t("This order is currently with")} <strong>{t(stageActor ?? "")}</strong>.
             </div>
           )}
 
@@ -1903,7 +1909,7 @@ export function OrderDetail() {
                     disabled={advancing}
                     className={styles.actionBtn}
                   >
-                    {advancing ? "Saving…" : flow.advanceLabel}
+                    {advancing ? t("Saving…") : t(flow.advanceLabel)}
                   </Button>
                 )}
                 {flow?.prev && canSendBack && (
@@ -1915,7 +1921,7 @@ export function OrderDetail() {
                     disabled={advancing}
                     className={styles.actionBtn}
                   >
-                    {flow.sendBackLabel ?? "Send Back"}
+                    {flow.sendBackLabel ? t(flow.sendBackLabel) : t("Send Back")}
                   </Button>
                 )}
                 {stage === "dispatch" && canAdvance && !showRefuseForm && (
@@ -1927,7 +1933,7 @@ export function OrderDetail() {
                     className={styles.actionBtn}
                     style={{ color: "var(--state-error)" }}
                   >
-                    Customer refused / returned
+                    {t("Customer refused / returned")}
                   </Button>
                 )}
               </div>
@@ -1935,7 +1941,7 @@ export function OrderDetail() {
               {showRefuseForm && (
                 <Card style={{ marginTop: "0.75rem" }}>
                   <div className={styles.heading}>
-                    <span>Customer refused / returned</span>
+                    <span>{t("Customer refused / returned")}</span>
                   </div>
                   {lines.map((l) => (
                     <div
@@ -1985,7 +1991,7 @@ export function OrderDetail() {
                   ))}
                   <textarea
                     className={styles.editInput}
-                    placeholder="Reason for return"
+                    placeholder={t("Reason for return")}
                     value={refuseReason}
                     onChange={(e) => setRefuseReason(e.target.value)}
                     style={{ width: "100%", minHeight: 60, marginTop: "0.5rem" }}
@@ -1997,7 +2003,7 @@ export function OrderDetail() {
                       onClick={handleConfirmRefusal}
                       disabled={submittingRefusal}
                     >
-                      {submittingRefusal ? "Saving…" : "Confirm return"}
+                      {submittingRefusal ? t("Saving…") : t("Confirm return")}
                     </Button>
                     <Button
                       type="button"
@@ -2005,7 +2011,7 @@ export function OrderDetail() {
                       onClick={() => setShowRefuseForm(false)}
                       disabled={submittingRefusal}
                     >
-                      Cancel
+                      {t("Cancel")}
                     </Button>
                   </div>
                 </Card>
@@ -2017,15 +2023,15 @@ export function OrderDetail() {
           {isReturned && !isCancelled && (
             <Card style={{ marginTop: "0.75rem" }}>
               <div className={styles.heading}>
-                <span>Customer Return</span>
+                <span>{t("Customer Return")}</span>
               </div>
               {order.returned_reason && (
-                <p className="tiny muted">Reason: {order.returned_reason}</p>
+                <p className="tiny muted">{t("Reason:")} {order.returned_reason}</p>
               )}
 
               {inReceiveBucket && (
                 <div style={{ marginBottom: "1rem" }}>
-                  <h4 style={{ margin: "0.5rem 0" }}>Awaiting Return</h4>
+                  <h4 style={{ margin: "0.5rem 0" }}>{t("Awaiting Return")}</h4>
                   {lines
                     .filter((l) => Number(l.returned) > 0)
                     .map((l) => (
@@ -2091,7 +2097,7 @@ export function OrderDetail() {
 
               {inSettleBucket && (
                 <div style={{ marginBottom: "1rem" }}>
-                  <h4 style={{ margin: "0.5rem 0" }}>Admin Action Required</h4>
+                  <h4 style={{ margin: "0.5rem 0" }}>{t("Admin Action Required")}</h4>
                   {canProcessReturns ? (
                     <>
                       {RETURN_DOC_OPTIONS.map((opt) => (
@@ -2106,7 +2112,7 @@ export function OrderDetail() {
                             checked={selectedDocType === opt.key}
                             onChange={() => setSelectedDocType(opt.key)}
                           />
-                          {opt.label}
+                          {t(opt.label)}
                         </label>
                       ))}
                       <Button
@@ -2115,12 +2121,12 @@ export function OrderDetail() {
                         onClick={handleConfirmSettle}
                         disabled={!selectedDocType || confirmingSettle}
                       >
-                        {confirmingSettle ? "Saving…" : "Confirm"}
+                        {confirmingSettle ? t("Saving…") : t("Confirm")}
                       </Button>
                     </>
                   ) : (
                     <p className="tiny muted">
-                      Waiting for an admin to update Accurate & decide.
+                      {t("Waiting for an admin to update Accurate & decide.")}
                     </p>
                   )}
                 </div>
@@ -2128,10 +2134,10 @@ export function OrderDetail() {
 
               {inSignBucket && (
                 <div style={{ marginBottom: "1rem" }}>
-                  <h4 style={{ margin: "0.5rem 0" }}>Awaiting Signed DO/SI</h4>
+                  <h4 style={{ margin: "0.5rem 0" }}>{t("Awaiting Signed DO/SI")}</h4>
                   {latestSignedDoc ? (
                     <p className="tiny muted">
-                      Signed document on file — order closes once received.
+                      {t("Signed document on file — order closes once received.")}
                     </p>
                   ) : canProcessReturns ? (
                     <>
@@ -2142,7 +2148,7 @@ export function OrderDetail() {
                           style={{ display: "none" }}
                           onChange={handleUploadSignedDoc}
                         />
-                        {signedDocFileId ? "Photo attached ✓" : "Attach signed document"}
+                        {signedDocFileId ? t("Photo attached ✓") : t("Attach signed document")}
                       </label>
                       <div style={{ marginTop: "0.5rem" }}>
                         <Button
@@ -2151,21 +2157,21 @@ export function OrderDetail() {
                           onClick={handleMarkSignedAndClose}
                           disabled={!signedDocFileId || closingSigned}
                         >
-                          {closingSigned ? "Saving…" : "Mark signed & close"}
+                          {closingSigned ? t("Saving…") : t("Mark signed & close")}
                         </Button>
                       </div>
                     </>
                   ) : (
-                    <p className="tiny muted">Revised DO/SI is out with the customer to sign.</p>
+                    <p className="tiny muted">{t("Revised DO/SI is out with the customer to sign.")}</p>
                   )}
                 </div>
               )}
 
               {order.is_replacement && !isDelivered && (
                 <p className="tiny muted">
-                  Replacement re-entered the pipeline and is currently at{" "}
+                  {t("Replacement re-entered the pipeline and is currently at")}{" "}
                   <strong>
-                    {PIPELINE_STAGES.find((s) => s.key === stage)?.label ?? stage}
+                    {t(PIPELINE_STAGES.find((s) => s.key === stage)?.label ?? stage)}
                   </strong>
                   .
                 </p>
@@ -2184,7 +2190,7 @@ export function OrderDetail() {
                   icon="refresh"
                   onClick={handleRestore}
                 >
-                  Restore Order
+                  {t("Restore Order")}
                 </Button>
               )}
               {canHold && !isOutstanding && (
@@ -2195,7 +2201,7 @@ export function OrderDetail() {
                   icon="pause"
                   onClick={handleHold}
                 >
-                  Put on Hold
+                  {t("Put on Hold")}
                 </Button>
               )}
               {canCancel && (
@@ -2207,7 +2213,7 @@ export function OrderDetail() {
                   onClick={handleCancel}
                   disabled={cancelling}
                 >
-                  {cancelling ? "Cancelling…" : "Cancel Order"}
+                  {cancelling ? t("Cancelling…") : t("Cancel Order")}
                 </Button>
               )}
             </div>
@@ -2224,7 +2230,7 @@ export function OrderDetail() {
             className={styles.panelToggleBtn}
             isActive={isPanelOpen}
             onClick={() => setIsPanelOpen((prev) => !prev)}
-            title={isPanelOpen ? "Collapse side panel" : "Expand side panel"}
+            title={isPanelOpen ? t("Collapse side panel") : t("Expand side panel")}
           />
 
           <div
@@ -2235,11 +2241,11 @@ export function OrderDetail() {
           >
             {/* Notes Card */}
             <Card className={styles.notesCard}>
-              <h3 className={styles.heading}>Notes</h3>
+              <h3 className={styles.heading}>{t("Notes")}</h3>
               <div className={styles.notesListScroll}>
                 {history.filter((h) => h.what.startsWith("Note")).length ===
                 0 ? (
-                  <p className={styles.muted}>No note</p>
+                  <p className={styles.muted}>{t("No note")}</p>
                 ) : (
                   history
                     .filter((h) => h.what.startsWith("Note:"))
@@ -2262,7 +2268,7 @@ export function OrderDetail() {
               <form className={styles.noteFormFixed} onSubmit={handleAddNote}>
                 <textarea
                   className={styles.noteInput}
-                  placeholder="Add note for the team..."
+                  placeholder={t("Add note for the team...")}
                   value={noteText}
                   onChange={(e) => setNoteText(e.target.value)}
                   onKeyDown={(e) => {
@@ -2285,17 +2291,17 @@ export function OrderDetail() {
                   icon="add"
                   disabled={savingNote || !noteText.trim()}
                 >
-                  Add
+                  {t("Add")}
                 </Button>
               </form>
             </Card>
 
             {/* History Card */}
             <Card className={styles.historyCard}>
-              <h3 className={styles.heading}>History</h3>
+              <h3 className={styles.heading}>{t("History")}</h3>
               <div className={styles.historyListScroll}>
                 {history.length === 0 && (
-                  <p className={styles.muted}>No history yet.</p>
+                  <p className={styles.muted}>{t("No history yet.")}</p>
                 )}
                 {history
                   .slice()
@@ -2308,7 +2314,7 @@ export function OrderDetail() {
                           {h.who ? ` ${displayName(h.who)}` : ""}
                         </span>
                       </span>
-                      <span className={styles.historyContent}>{h.what}</span>
+                      <span className={styles.historyContent}>{t(h.what)}</span>
                     </div>
                   ))}
               </div>

@@ -11,7 +11,7 @@
 
 import type { Stage } from '../lib/pipeline';
 
-export type DateRangeType = 'today' | 'week' | 'month' | 'year' | 'specific';
+export type DateRangeType = 'today' | 'week' | 'month' | 'year' | 'specific' | 'all';
 
 export interface DateRangeVal {
   type: DateRangeType;

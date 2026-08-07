@@ -69,7 +69,7 @@ Replaces `data/products.js` (the Accurate catalog). Auto-synced from Accurate "I
 | `catch_weight`  | BOOLEAN DEFAULT FALSE     | weighed at delivery (loaf/kg), not counted                    |
 | `fixed_pack`    | BOOLEAN DEFAULT FALSE     |                                                               |
 | `ppn`           | TEXT                      | enum: `exempt`, `included`, `excluded` (tax treatment)        |
-| `active`        | BOOLEAN DEFAULT TRUE      | soft-deactivate old SKUs                                      |
+| `oos`           | BOOLEAN DEFAULT FALSE     | flagged out of stock by the warehouse — warns admin/sales before promising this item (replaces the prototype's `p.oos`, `Dev-Products.jsx`) |
 | `created_at`    | TIMESTAMPTZ DEFAULT now() |                                                               |
 | `updated_at`    | TIMESTAMPTZ DEFAULT now() |                                                               |
 

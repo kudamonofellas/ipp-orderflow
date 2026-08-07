@@ -1,4 +1,5 @@
 import { Card } from "../../../components/Card/Card";
+import { useLanguage } from "../../../hooks/useLanguage";
 import type { IntakeMessage } from "../../../types/dashboard";
 import styles from "./IntakePanel.module.css";
 
@@ -10,15 +11,16 @@ interface IntakePanelProps {
 
 /** WhatsApp Intake panel: triage message preview cards. */
 export function IntakePanel({ messages, loading, error }: IntakePanelProps) {
+  const { t } = useLanguage();
   return (
     <Card className={styles.card}>
-      <h3 className={styles.heading}>WhatsApp Intake</h3>
+      <h3 className={styles.heading}>{t('WhatsApp Intake')}</h3>
       {loading ? (
-        <p className={styles.empty}>Loading…</p>
+        <p className={styles.empty}>{t('Loading…')}</p>
       ) : error ? (
         <p className={styles.empty}>{error}</p>
       ) : messages.length === 0 ? (
-        <p className={styles.empty}>No untriaged messages.</p>
+        <p className={styles.empty}>{t('No untriaged messages.')}</p>
       ) : (
         <ul className={styles.list}>
           {messages.map((msg) => (

@@ -47,7 +47,33 @@ export type Capability =
   | 'viewIntakePanel'
   | 'viewPickList'
   | 'viewDeliveryRun'
-  | 'reconcileCOD';
+  | 'reconcileCOD'
+  | 'seeCustomerCredit'
+  | 'browseCustomers'
+  | 'browseProducts'
+  | 'accessReports'
+  // No live courier-location map exists in the port yet (GPS tracking is a
+  // deferred "Next Up" item, same as the courier hand-off/pickup flow) — this
+  // capability has no UI to gate today. Kept for capability-matrix parity
+  // with the prototype and ready to wire up the moment that feature lands.
+  | 'trackCourier'
+  // Decoupled from advanceStage/flow.capability so Owner Settings can grant
+  // these independently (Settings-Owner.png "Roles & Permissions" grid).
+  | 'holdResume'
+  | 'sendBackStage'
+  | 'reopenOrders'
+  // Lets a role advance stages outside their own pipeline focus (e.g. Admin
+  // covering for Warehouse). Additive to the stage's own owning capability.
+  | 'helpOtherStages'
+  // The following have no live UI yet (same "capability exists, feature
+  // doesn't" posture as trackCourier) — added for Owner Settings matrix
+  // parity with the design, ready to wire up when the feature lands.
+  | 'confirmDocsReturned'
+  | 'overrideCreditLimit'
+  | 'exportCSV'
+  | 'backupRestore'
+  | 'resetData'
+  | 'editAfterLock';
 
 /**
  * Coded defaults — the fallback when `role_permissions` has no row for a
@@ -71,6 +97,20 @@ export const ALLOW: Record<Exclude<Role, 'Owner'>, Partial<Record<Capability, bo
     viewPickList: true,
     viewDeliveryRun: true,
     reconcileCOD: true,
+    seeCustomerCredit: true,
+    browseCustomers: true,
+    browseProducts: true,
+    accessReports: true,
+    trackCourier: true,
+    // Owner Settings "Roles & Permissions" grid defaults (Settings-Owner.png).
+    holdResume: true,
+    sendBackStage: true,
+    reopenOrders: true,
+    helpOtherStages: true,
+    confirmDocsReturned: true,
+    exportCSV: true,
+    backupRestore: true,
+    manageSettings: true,
   },
   Warehouse: {
     weighColdStorage: true,
@@ -82,16 +122,33 @@ export const ALLOW: Record<Exclude<Role, 'Owner'>, Partial<Record<Capability, bo
     // so it defaults on rather than blocking the workflow.
     processReturns: true,
     viewPickList: true,
+    browseProducts: true,
+    // Per Settings-Owner.png's Roles & Permissions grid: Warehouse sees order
+    // value (needed to judge what's being packed/weighed).
+    seePrices: true,
+    exportCSV: true,
   },
   Production: {
     cutProduction: true,
     advanceStage: true,
+    browseProducts: true,
+    // Per Settings-Owner.png: Production sees order value (needed to judge
+    // what's being cut).
+    seePrices: true,
+    exportCSV: true,
   },
   Finance: {
     approveFinance: true,
     seePrices: true,
     seeCustomerContact: true,
     reconcileCOD: true,
+    seeCustomerCredit: true,
+    browseCustomers: true,
+    browseProducts: true,
+    accessReports: true,
+    trackCourier: true,
+    overrideCreditLimit: true,
+    exportCSV: true,
   },
   Courier: {
     dispatch: true,
@@ -101,6 +158,8 @@ export const ALLOW: Record<Exclude<Role, 'Owner'>, Partial<Record<Capability, bo
     // matches the prototype's default (Dev-domain.js ALLOW.Courier.seeCustomerContact).
     seeCustomerContact: true,
     viewDeliveryRun: true,
+    browseProducts: true,
+    exportCSV: true,
   },
 };
 
@@ -122,12 +181,99 @@ export const CAPABILITIES: Capability[] = [
   'processReturns',
   'manageRoles',
   'manageSettings',
+  'manage_products',
+  'manage_customers',
   'seePrices',
   'seeCustomerContact',
   'viewIntakePanel',
   'viewPickList',
   'viewDeliveryRun',
   'reconcileCOD',
+  'seeCustomerCredit',
+  'browseCustomers',
+  'browseProducts',
+  'accessReports',
+  'trackCourier',
+  'holdResume',
+  'sendBackStage',
+  'reopenOrders',
+  'helpOtherStages',
+  'confirmDocsReturned',
+  'overrideCreditLimit',
+  'exportCSV',
+  'backupRestore',
+  'resetData',
+  'editAfterLock',
+];
+
+/**
+ * Roles & Permissions grid layout (Owner Settings, context/designs/Settings-Owner.png).
+ * A curated subset/order of `CAPABILITIES` grouped under the design's section
+ * headers — not every internal capability belongs on this Owner-facing grid
+ * (e.g. weighColdStorage/cutProduction/packWarehouse are implied by stage
+ * ownership, not independently toggled).
+ */
+export const PERMISSION_GRID: { section: string; rows: { cap: Capability; label: string }[] }[] = [
+  {
+    section: 'Visibility',
+    rows: [
+      { cap: 'seePrices', label: 'See prices & order value' },
+      { cap: 'seeCustomerContact', label: 'See customer contact & sales rep' },
+      { cap: 'seeCustomerCredit', label: 'See credit limit & exposure' },
+      { cap: 'browseCustomers', label: 'Browse the Customers directory' },
+      { cap: 'browseProducts', label: 'Browse the Products directory' },
+      { cap: 'accessReports', label: 'Access Reports' },
+      { cap: 'trackCourier', label: 'See live courier location' },
+    ],
+  },
+  {
+    section: 'Orders',
+    rows: [
+      { cap: 'createOrders', label: 'Create orders' },
+      { cap: 'editOrderLines', label: 'Edit orders (own stage, pre-cut)' },
+      { cap: 'editAfterLock', label: 'Edit after cutting / dispatch (override)' },
+    ],
+  },
+  {
+    section: 'Pipeline',
+    rows: [
+      { cap: 'helpOtherStages', label: 'Act on other stages (floor helper)' },
+      { cap: 'approveFinance', label: 'Clear payment at the Finance gate' },
+      { cap: 'holdResume', label: 'Put on hold / resume' },
+      { cap: 'cancelOrders', label: 'Cancel orders' },
+      { cap: 'sendBackStage', label: 'Send an order back a stage' },
+      { cap: 'reopenOrders', label: 'Reopen closed orders' },
+      { cap: 'confirmDocsReturned', label: 'Confirm signed DO & SI returned' },
+    ],
+  },
+  {
+    section: 'Money',
+    rows: [
+      { cap: 'overrideCreditLimit', label: 'Clear an order over the credit limit' },
+      { cap: 'reconcileCOD', label: 'Reconcile COD cash' },
+      { cap: 'exportCSV', label: 'Export data to CSV (orders / products)' },
+    ],
+  },
+  {
+    section: 'Admin Area',
+    rows: [
+      { cap: 'manage_customers', label: 'Create / edit customers' },
+      { cap: 'manage_products', label: 'Create / edit products' },
+      { cap: 'manageSettings', label: 'Edit operational settings' },
+      { cap: 'backupRestore', label: 'Backup / restore data' },
+      { cap: 'manageRoles', label: 'Manage team / users' },
+      { cap: 'resetData', label: 'Reset demo data' },
+    ],
+  },
+];
+
+/** Column order for the Roles & Permissions grid (matches Settings-Owner.png). */
+export const PERMISSION_GRID_ROLES: Exclude<Role, 'Owner'>[] = [
+  'Admin',
+  'Warehouse',
+  'Production',
+  'Finance',
+  'Courier',
 ];
 
 /**

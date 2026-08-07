@@ -11,7 +11,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { aggregateOrders, readOrderLines, readOrders } from "../lib/directus";
-import { financeParallelQueueFilter } from "../lib/pipeline";
+import { financeParallelQueueFilter, openOrdersFilter } from "../lib/pipeline";
 import type { OpenOrder, OpenOrderLine } from "../types/dashboard";
 
 /** Max orders per page in the Orders list. */
@@ -146,10 +146,7 @@ export function useOrders(
       const filter: Record<string, unknown> = {};
 
       if (stageFilter === "active") {
-        filter._and = [
-          { cancelled: { _neq: true } },
-          { stage: { _nin: ["delivered", "cancelled", "returned"] } },
-        ];
+        Object.assign(filter, openOrdersFilter());
       } else if (stageFilter === "pending-docs") {
         filter._and = [
           { stage: { _eq: "delivered" } },
@@ -203,9 +200,9 @@ export function useOrders(
         const todayStart = new Date();
         todayStart.setHours(0, 0, 0, 0);
         const cutoff = todayStart.toISOString();
+        const { _and: openConds } = openOrdersFilter() as { _and: unknown[] };
         filter._and = [
-          { stage: { _nin: ["delivered", "cancelled", "returned"] } },
-          { cancelled: { _neq: true } },
+          ...openConds,
           {
             _or: [
               { delivery_date: { _lt: cutoff } },

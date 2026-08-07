@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Icon } from '../Icon/Icon';
 import { Button } from '../Button/Button';
+import { useLanguage } from '../../hooks/useLanguage';
 import type { ProductsCollection } from '../../types/directus';
 import styles from './AddItemModal.module.css';
 
@@ -40,6 +41,7 @@ function defaultResult(products: ProductsCollection[], unitOptions: string[]): A
  * generic result via onConfirm.
  */
 export function AddItemModal({ open, products, unitOptions, onClose, onConfirm }: AddItemModalProps) {
+    const { t } = useLanguage();
     const [addItemText, setAddItemText] = useState('');
     const [matchedItem, setMatchedItem] = useState<AddItemResult>(() => defaultResult(products, unitOptions));
     const [isManual, setIsManual] = useState(true);
@@ -131,7 +133,7 @@ export function AddItemModal({ open, products, unitOptions, onClose, onConfirm }
         <div className={styles.modalBackdrop} onClick={(e) => { if (e.target === e.currentTarget) handleClose(); }}>
             <div className={styles.addItemModalCard}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <span className={styles.title}>Add new item</span>
+                    <span className={styles.title}>{t('Add new item')}</span>
                     <Button type="button" variant="tertiary" iconOnly size="sm" onClick={handleClose}>
                         <Icon name="close" size={18} />
                     </Button>
@@ -139,7 +141,7 @@ export function AddItemModal({ open, products, unitOptions, onClose, onConfirm }
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     <label className={styles.subtitle}>
-                        Type or paste the item here:
+                        {t('Type or paste the item here:')}
                     </label>
                     <textarea
                         className={styles.addItemTextarea}
@@ -155,13 +157,13 @@ export function AddItemModal({ open, products, unitOptions, onClose, onConfirm }
                         autoFocus
                     />
                     <Button type="button" variant="primary" size="lg" buttonStyle="fullWidth" disabled={!addItemText.trim()} onClick={handleMatchItem}>
-                        <Icon name="ai" size={16} /> Match
+                        <Icon name="ai" size={16} /> {t('Match')}
                     </Button>
                 </div>
 
                 {!isManual && <hr className={styles.matchDivider} />}
                 <div className={styles.subtitle}>
-                    {isManual ? 'or add manually:' : 'Matched result — review and adjust:'}
+                    {isManual ? t('or add manually:') : t('Matched result — review and adjust:')}
                 </div>
                 <div className={styles.matchedResultRow}>
                     <input
@@ -187,14 +189,14 @@ export function AddItemModal({ open, products, unitOptions, onClose, onConfirm }
                             }
                         }}
                     >
-                        <option value="__custom__">— No match (custom) —</option>
+                        <option value="__custom__">{t('— No match (custom) —')}</option>
                         {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                     </select>
                 </div>
 
                 {!matchedItem.productId && (
                     <input
-                        type="text" className={styles.editInput} placeholder="Item name (custom)"
+                        type="text" className={styles.editInput} placeholder={t('Item name (custom)')}
                         value={matchedItem.name}
                         onChange={(e) => setMatchedItem((prev) => ({ ...prev, name: e.target.value }))}
                     />
@@ -205,9 +207,9 @@ export function AddItemModal({ open, products, unitOptions, onClose, onConfirm }
                         type="button" variant="primary" size="lg" buttonStyle="fullWidth"
                         onClick={handleConfirm} disabled={!matchedItem.name.trim()} style={{ fontWeight: 600 }}
                     >
-                        Add to order
+                        {t('Add to order')}
                     </Button>
-                    <Button type="button" variant="secondary" size="lg" buttonStyle="fullWidth" onClick={handleClose}>Cancel</Button>
+                    <Button type="button" variant="secondary" size="lg" buttonStyle="fullWidth" onClick={handleClose}>{t('Cancel')}</Button>
                 </div>
             </div>
         </div>

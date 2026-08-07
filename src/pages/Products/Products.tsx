@@ -2,8 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Icon } from '../../components/Icon/Icon';
 import { Card } from '../../components/Card/Card';
+import { Toggle } from '../../components/Toggle/Toggle';
 import { readProducts, updateProduct, aggregateProducts } from '../../lib/directus';
 import { useAuth } from '../../hooks/useAuth';
+import { useLanguage } from '../../hooks/useLanguage';
 import type { ProductsCollection } from '../../types/directus';
 import styles from './Products.module.css';
 
@@ -15,7 +17,16 @@ type ActiveFilter = 'all' | 'active' | 'oos';
 export function Products() {
   const navigate = useNavigate();
   const { can } = useAuth();
+  const { t } = useLanguage();
   const canToggleOOS = can('manage_products');
+  const canView = can('browseProducts');
+
+  // Defence-in-depth: the route is already wrapped in <Guarded cap="browseProducts">
+  // (App.tsx), but this survives even if that wrapper is ever dropped in a
+  // refactor — same self-guard pattern as ProductEdit.tsx.
+  useEffect(() => {
+    if (!canView) navigate('/', { replace: true });
+  }, [canView, navigate]);
 
   const [products, setProducts] = useState<ProductsCollection[]>([]);
   const [total, setTotal] = useState(0);
@@ -112,8 +123,7 @@ export function Products() {
     setPage(1);
   };
 
-  const handleToggleActive = async (e: React.MouseEvent, product: ProductsCollection) => {
-    e.stopPropagation();
+  const handleToggleActive = async (product: ProductsCollection) => {
     if (!canToggleOOS) return;
     setTogglingId(product.id);
     const newOos = !product.oos;
@@ -139,16 +149,16 @@ export function Products() {
   const rangeEnd = Math.min(currentPage * PAGE_SIZE, total);
 
   const FILTERS: { key: ActiveFilter; label: string }[] = [
-    { key: 'all', label: 'All' },
-    { key: 'active', label: 'Active' },
-    { key: 'oos', label: 'Out of Stock' },
+    { key: 'all', label: t('All') },
+    { key: 'active', label: t('Active') },
+    { key: 'oos', label: t('Out of Stock') },
   ];
 
   return (
     <main className={styles.main}>
 
       <div className={styles.header}>
-        <h1 className={styles.title}>Products</h1>
+        <h1 className={styles.title}>{t('Products')}</h1>
         {!loading && (
           <span className={styles.count}>{total.toLocaleString()}</span>
         )}
@@ -171,7 +181,7 @@ export function Products() {
             <input
               id="products-search"
               type="search"
-              placeholder="Search products…"
+              placeholder={t('Search products…')}
               className={styles.searchInput}
               value={search}
               onChange={(e) => handleSearchChange(e.target.value)}
@@ -184,7 +194,7 @@ export function Products() {
               onClick={() => navigate('/products/new')}
             >
               <Icon name="add" size={16} />
-              New Product
+              {t('New Product')}
             </button>
           )}
         </div>
@@ -195,20 +205,20 @@ export function Products() {
           <table className={styles.table}>
             <thead>
               <tr>
-                <th className={styles.th}>Name</th>
-                <th className={styles.th}>Category</th>
-                <th className={styles.th}>Grade</th>
-                <th className={styles.th}>Brand</th>
-                <th className={styles.th}>Form / Pack</th>
+                <th className={styles.th}>{t('Name')}</th>
+                <th className={styles.th}>{t('Category')}</th>
+                <th className={styles.th}>{t('Grade')}</th>
+                <th className={styles.th}>{t('Brand')}</th>
+                <th className={styles.th}>{t('Form / Pack')}</th>
                 {canToggleOOS && (
-                  <th className={styles.th}>Active</th>
+                  <th className={styles.th}>{t('Active')}</th>
                 )}
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr className={styles.stateRow}>
-                  <td colSpan={canToggleOOS ? 6 : 5}>Loading products…</td>
+                  <td colSpan={canToggleOOS ? 6 : 5}>{t('Loading products…')}</td>
                 </tr>
               ) : error ? (
                 <tr className={styles.stateRow}>
@@ -216,7 +226,7 @@ export function Products() {
                 </tr>
               ) : products.length === 0 ? (
                 <tr className={styles.stateRow}>
-                  <td colSpan={canToggleOOS ? 6 : 5}>No products found</td>
+                  <td colSpan={canToggleOOS ? 6 : 5}>{t('No products found')}</td>
                 </tr>
               ) : (
                 products.map((p) => {
@@ -250,22 +260,21 @@ export function Products() {
                       </td>
                       {canToggleOOS && (
                         <td className={styles.td}>
-                          <button
-                            id={`product-toggle-${p.id}`}
-                            type="button"
-                            className={styles.toggle}
-                            onClick={(e) => handleToggleActive(e, p)}
-                            disabled={togglingId === p.id}
-                            aria-label={isActive ? 'Mark out of stock' : 'Mark active'}
-                            title={isActive ? 'Mark out of stock' : 'Mark active'}
+                          <div
+                            className={styles.toggleCell}
+                            onClick={(e) => e.stopPropagation()}
                           >
                             <span className={styles.toggleLabel}>
-                              {isActive ? 'Active' : 'OOS'}
+                              {isActive ? t('Active') : t('OOS')}
                             </span>
-                            <span className={`${styles.toggleTrack} ${isActive ? styles.on : ''}`}>
-                              <span className={styles.toggleThumb} />
-                            </span>
-                          </button>
+                            <Toggle
+                              size="sm"
+                              checked={isActive}
+                              disabled={togglingId === p.id}
+                              label={isActive ? t('Mark out of stock') : t('Mark active')}
+                              onChange={() => handleToggleActive(p)}
+                            />
+                          </div>
                         </td>
                       )}
                     </tr>
@@ -277,7 +286,7 @@ export function Products() {
 
           <footer className={styles.pagination}>
             <span className={styles.pageInfo}>
-              Showing {rangeStart}–{rangeEnd} of {total}
+              {t('Showing')} {rangeStart}–{rangeEnd} {t('of')} {total}
             </span>
             <div className={styles.pageControls}>
               <button
@@ -285,7 +294,7 @@ export function Products() {
                 className={styles.pageButton}
                 onClick={() => setPage(currentPage - 1)}
                 disabled={currentPage <= 1}
-                aria-label="Previous page"
+                aria-label={t('Previous page')}
               >
                 <Icon name="chevronLeft" size={16} />
               </button>
@@ -297,7 +306,7 @@ export function Products() {
                 className={styles.pageButton}
                 onClick={() => setPage(currentPage + 1)}
                 disabled={currentPage >= totalPages}
-                aria-label="Next page"
+                aria-label={t('Next page')}
               >
                 <Icon name="chevronRight" size={16} />
               </button>

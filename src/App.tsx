@@ -4,7 +4,9 @@ import { AppLayout } from './layouts/AppLayout/AppLayout';
 import { SidebarProvider } from './layouts/Sidebar/Sidebar';
 import { AuthProvider } from './hooks/RoleContext';
 import { ThemeProvider } from './hooks/ThemeProvider';
-import { useAuth } from './hooks/useAuth';
+import { LanguageProvider } from './hooks/LanguageProvider';
+import { useAuth, useCan } from './hooks/useAuth';
+import type { Capability } from './lib/domain';
 import { Customers } from './pages/Customers/Customers';
 import { CustomerDetail } from './pages/CustomerDetail/CustomerDetail';
 import { CustomerEdit } from './pages/CustomerEdit/CustomerEdit';
@@ -35,6 +37,20 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+/**
+ * Route-level capability gate — redirects to `/` when the signed-in role
+ * lacks `cap`. Auth itself is handled by `ProtectedRoute`, which this always
+ * sits inside of; this only adds the capability check on top. Mirrors the
+ * prototype's `<Guarded cap="...">` (Dev-App.jsx:25) — prototype-audit.md F-01.
+ */
+function Guarded({ cap, children }: { cap: Capability; children: ReactNode }) {
+  const can = useCan();
+  if (!can(cap)) {
+    return <Navigate to="/" replace />;
+  }
+  return <>{children}</>;
+}
+
 function LoginRoute() {
   const { user, loading } = useAuth();
   if (loading) {
@@ -49,6 +65,7 @@ function LoginRoute() {
 export default function App() {
   return (
     <ThemeProvider>
+    <LanguageProvider>
     <AuthProvider>
       <BrowserRouter>
         <Routes>
@@ -67,22 +84,79 @@ export default function App() {
             <Route path="/orders/new" element={<OrderNew />} />
             <Route path="orders/:id" element={<OrderDetail />} />
             <Route path="orders/:id/edit" element={<OrderEdit />} />
-            <Route path="customers" element={<Customers />} />
-            <Route path="customers/:id" element={<CustomerDetail />} />
+            <Route
+              path="customers"
+              element={
+                <Guarded cap="browseCustomers">
+                  <Customers />
+                </Guarded>
+              }
+            />
+            <Route
+              path="customers/:id"
+              element={
+                <Guarded cap="browseCustomers">
+                  <CustomerDetail />
+                </Guarded>
+              }
+            />
             <Route path="customers/:id/edit" element={<CustomerEdit />} />
-            <Route path="products" element={<Products />} />
-            <Route path="products/:id" element={<ProductDetail />} />
+            <Route
+              path="products"
+              element={
+                <Guarded cap="browseProducts">
+                  <Products />
+                </Guarded>
+              }
+            />
+            <Route
+              path="products/:id"
+              element={
+                <Guarded cap="browseProducts">
+                  <ProductDetail />
+                </Guarded>
+              }
+            />
             <Route path="products/:id/edit" element={<ProductEdit />} />
-            <Route path="reports" element={<Reports />} />
+            <Route
+              path="reports"
+              element={
+                <Guarded cap="accessReports">
+                  <Reports />
+                </Guarded>
+              }
+            />
             <Route path="settings" element={<Settings />} />
-            <Route path="picklist" element={<PickList />} />
-            <Route path="deliveries" element={<Deliveries />} />
-            <Route path="cashup" element={<CashUp />} />
+            <Route
+              path="picklist"
+              element={
+                <Guarded cap="viewPickList">
+                  <PickList />
+                </Guarded>
+              }
+            />
+            <Route
+              path="deliveries"
+              element={
+                <Guarded cap="viewDeliveryRun">
+                  <Deliveries />
+                </Guarded>
+              }
+            />
+            <Route
+              path="cashup"
+              element={
+                <Guarded cap="reconcileCOD">
+                  <CashUp />
+                </Guarded>
+              }
+            />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>
       </BrowserRouter>
     </AuthProvider>
+    </LanguageProvider>
     </ThemeProvider>
   );
 }

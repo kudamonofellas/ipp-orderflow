@@ -1,8 +1,11 @@
+import { useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Card } from "../../components/Card/Card";
 import { Button } from "../../components/Button/Button";
 import { Avatar } from "../../components/Avatar/Avatar";
 import { StatCard } from "../../components/StatCard/StatCard";
+import { useCan } from "../../hooks/useAuth";
+import { useLanguage } from "../../hooks/useLanguage";
 import { useCashUp } from "../../hooks/useCashUp";
 import { getInitials } from "../../lib/initials";
 import styles from "./CashUp.module.css";
@@ -22,6 +25,16 @@ export function CashUp() {
   const navigate = useNavigate();
   const location = useLocation();
   const backTo = (location.state as { from?: string } | null)?.from ?? "/";
+  const canView = useCan()("reconcileCOD");
+  const { t } = useLanguage();
+
+  // Defence-in-depth: the route is already wrapped in <Guarded cap="reconcileCOD">
+  // (App.tsx), but this survives even if that wrapper is ever dropped in a
+  // refactor — same self-guard pattern as ProductEdit.tsx.
+  useEffect(() => {
+    if (!canView) navigate("/", { replace: true });
+  }, [canView, navigate]);
+
   const { groups, expected, collected, remaining, confirmedIds, confirm, loading, error } = useCashUp();
 
   function handleConfirm(orderId: string, customerName: string, amount: number) {
@@ -35,24 +48,24 @@ export function CashUp() {
       <header className={styles.header}>
         <div className={styles.titleSection}>
           <Button type="button" variant="tertiary" icon="chevronLeft" onClick={() => navigate(backTo)}>
-            Back
+            {t("Back")}
           </Button>
-          <h1 className={styles.title}>Cash-up</h1>
+          <h1 className={styles.title}>{t("Cash-up")}</h1>
         </div>
       </header>
 
       <div className={styles.statsRow}>
-        <StatCard value={currency.format(expected)} label="Expected" />
-        <StatCard value={currency.format(collected)} label="Collected" />
-        <StatCard value={currency.format(remaining)} label="Remaining" />
+        <StatCard value={currency.format(expected)} label={t("Expected")} />
+        <StatCard value={currency.format(collected)} label={t("Collected")} />
+        <StatCard value={currency.format(remaining)} label={t("Remaining")} />
       </div>
 
       {loading ? (
-        <div className={styles.muted}>Loading cash-up…</div>
+        <div className={styles.muted}>{t("Loading cash-up…")}</div>
       ) : error ? (
         <div className={styles.error}>{error}</div>
       ) : groups.length === 0 ? (
-        <div className={styles.muted}>Nothing to reconcile — no COD orders out for delivery right now.</div>
+        <div className={styles.muted}>{t("Nothing to reconcile — no COD orders out for delivery right now.")}</div>
       ) : (
         groups.map((group) => (
           <div key={group.courier} className={styles.courierGroup}>
@@ -61,7 +74,7 @@ export function CashUp() {
                 <Avatar initials={getInitials(group.courier)} label={group.courier} size="md" />
                 <span className={styles.courierName}>{group.courier}</span>
                 <span className={styles.dropCount}>
-                  {group.orders.length} drop{group.orders.length === 1 ? "" : "s"}
+                  {group.orders.length} {t("drop(s)")}
                 </span>
               </div>
               <span className={styles.courierSubtotal}>{currency.format(group.subtotal)}</span>
@@ -88,7 +101,7 @@ export function CashUp() {
                       disabled={isConfirmed}
                       onClick={() => handleConfirm(o.orderId, o.customerName, o.amount)}
                     >
-                      {isConfirmed ? "Confirmed" : "Confirm"}
+                      {isConfirmed ? t("Confirmed") : t("Confirm")}
                     </Button>
                   </div>
                 );

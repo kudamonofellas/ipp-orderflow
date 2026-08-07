@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth";
+import { useLanguage } from "../../hooks/useLanguage";
 import { Button } from "../../components/Button/Button";
 import { Logo } from "../../components/Logo/Logo";
 import styles from "./Login.module.css";
@@ -12,6 +13,7 @@ import styles from "./Login.module.css";
 export function Login() {
   const { login, loginError, loading } = useAuth();
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -38,12 +40,12 @@ export function Login() {
           </span>
         </div>
 
-        <h1 className={styles.title}>Sign in</h1>
-        <p className={styles.subtitle}>Enter your account credentials.</p>
+        <h1 className={styles.title}>{t("Sign in")}</h1>
+        <p className={styles.subtitle}>{t("Enter your account credentials.")}</p>
 
         <form className={styles.form} onSubmit={handleSubmit}>
           <label className={styles.field}>
-            <span className={styles.label}>Email</span>
+            <span className={styles.label}>{t("Email")}</span>
             <input
               type="email"
               required
@@ -57,7 +59,7 @@ export function Login() {
           </label>
 
           <label className={styles.field}>
-            <span className={styles.label}>Password</span>
+            <span className={styles.label}>{t("Password")}</span>
             <input
               type="password"
               required
@@ -81,7 +83,7 @@ export function Login() {
             size="lg"
             disabled={submitting || loading || !email || !password}
           >
-            {submitting || loading ? "Signing in…" : "Sign in"}
+            {submitting || loading ? t("Signing in…") : t("Sign in")}
           </Button>
         </form>
       </div>

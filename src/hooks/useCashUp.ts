@@ -18,7 +18,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { readOrders, readCustomers, readOrderLines } from '../lib/directus';
+import { readOrders, readCustomers, readOrderLines, readAllUsers } from '../lib/directus';
 
 export interface CashUpOrderRow {
   orderId: string;
@@ -101,15 +101,26 @@ export function useCashUp(): UseCashUpResult {
       const customerIds = [...new Set(orders.map((o) => o.customer_id).filter((id): id is string => !!id))];
       const orderIds = orders.map((o) => o.id);
 
-      const [customersRes, linesRes] = await Promise.all([
+      const [customersRes, linesRes, usersRes] = await Promise.all([
         customerIds.length === 0
           ? Promise.resolve({ data: [], error: null })
-          : readCustomers({ filter: { id: { _in: customerIds } }, fields: ['id', 'pay_timing'], limit: -1 }),
+          : readCustomers({
+              filter: { id: { _in: customerIds } },
+              // `name` is required (non-optional) in CustomersCollectionSchema —
+              // must be requested even though it's unused here, or zod parsing fails.
+              fields: ['id', 'name', 'pay_timing'],
+              limit: -1,
+            }),
         readOrderLines({
           filter: { _and: [{ order_id: { _in: orderIds } }, { removed: { _neq: true } }] },
-          fields: ['order_id', 'qty', 'price'],
+          // `id` is required (non-optional) in OrderLinesCollectionSchema —
+          // must be requested even though it's unused here, or zod parsing fails.
+          fields: ['id', 'order_id', 'qty', 'price'],
           limit: -1,
         }),
+        // `orders.taken_by` is a UUID FK to directus_users.id, not a courier
+        // name — resolve it to a display name the same way OrderDetail does.
+        readAllUsers(),
       ]);
       if (cancelled) return;
       if (customersRes.error) {
@@ -123,6 +134,12 @@ export function useCashUp(): UseCashUpResult {
         return;
       }
 
+      const nameByUserId = new Map(
+        (usersRes.data ?? []).map((u) => [
+          u.id,
+          `${u.first_name ?? ''} ${u.last_name ?? ''}`.trim() || u.email || u.id,
+        ]),
+      );
       const codByCustomer = new Map((customersRes.data ?? []).map((c) => [c.id, isCOD(c.pay_timing)]));
       const totalByOrder = new Map<string, number>();
       for (const line of linesRes.data ?? []) {
@@ -144,7 +161,7 @@ export function useCashUp(): UseCashUpResult {
           amount,
         };
         built.push(row);
-        const courier = order.taken_by ?? 'Unassigned';
+        const courier = order.taken_by ? (nameByUserId.get(order.taken_by) ?? order.taken_by) : 'Unassigned';
         const existing = byCourier.get(courier) ?? [];
         existing.push(row);
         byCourier.set(courier, existing);

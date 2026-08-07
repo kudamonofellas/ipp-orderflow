@@ -15,7 +15,7 @@
   align-items: center;
   justify-content: center;
   border-radius: var(--radius-xl);
-  background: var(--accent-primary);
+  background: var(--state-error);
   color: var(--text-on-accent);
   border: 2px solid var(--bg-surface);
   font: var(--text-caption);
@@ -136,7 +136,7 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--accent-primary);
+  background: var(--state-error);
 }
 
 .notificationItem:hover {

@@ -13,11 +13,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { aggregateOrders, readOrderLines, readOrders } from "../lib/directus";
+import { openOrdersFilter } from "../lib/pipeline";
 import type { OpenOrder, OpenOrderLine } from "../types/dashboard";
-
-/** Orders considered "open" — only the explicit 'Open' status (legacy field).
- *  TODO: migrate to `stage` enum in a separate unit per ai-workflow-rules.md. */
-const OPEN_STATUSES = ["Open"];
 
 /** Max orders per page in the Open Orders panel. */
 export const OPEN_ORDERS_PAGE_SIZE = 20;
@@ -146,7 +143,7 @@ export function useOpenOrders(sort: string = "-no"): UseOpenOrdersResult {
       setLoading(true);
       setError(null);
 
-      const filter = { status: { _in: OPEN_STATUSES } };
+      const filter = openOrdersFilter();
 
       // Fetch the current page of orders + the total count in parallel.
       const [pageResult, countResult] = await Promise.all([

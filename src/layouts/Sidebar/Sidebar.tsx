@@ -15,7 +15,9 @@ import type { IconName } from "../../components/Icon/icons";
 import { Avatar } from "../../components/Avatar/Avatar";
 import { Button } from "../../components/Button/Button";
 import { getInitials } from "../../lib/initials";
-import { useAuth, useCurrentUserName } from "../../hooks/useAuth";
+import { useAuth, useCan, useCurrentUserName } from "../../hooks/useAuth";
+import { useLanguage } from "../../hooks/useLanguage";
+import type { Capability } from "../../lib/domain";
 import { useTheme } from "../../hooks/useTheme";
 import { SidebarContext, type SidebarState } from "./sidebar-context";
 import { useSidebar } from "./useSidebar";
@@ -28,14 +30,18 @@ interface NavItem {
   to: string;
   label: string;
   icon: IconName;
+  /** Hides the link entirely for a role lacking this capability — matches
+   *  the prototype's Dev-Layout.jsx behavior (Sidebar/tab nav hides
+   *  Customers/Products/Reports by capability). Omit for always-visible links. */
+  cap?: Capability;
 }
 
 const NAV_ITEMS: NavItem[] = [
   { to: "/", label: "Dashboard", icon: "dashboard" },
   { to: "/orders", label: "Orders", icon: "orders" },
-  { to: "/customers", label: "Customers", icon: "customers" },
-  { to: "/products", label: "Products", icon: "products" },
-  { to: "/reports", label: "Reports", icon: "reports" },
+  { to: "/customers", label: "Customers", icon: "customers", cap: "browseCustomers" },
+  { to: "/products", label: "Products", icon: "products", cap: "browseProducts" },
+  { to: "/reports", label: "Reports", icon: "reports", cap: "accessReports" },
   { to: "/settings", label: "Settings", icon: "settings" },
 ];
 
@@ -76,6 +82,9 @@ export function Sidebar() {
   const { user, role, logout } = useAuth();
   const navigate = useNavigate();
   const name = useCurrentUserName();
+  const can = useCan();
+  const { t } = useLanguage();
+  const visibleNavItems = NAV_ITEMS.filter((item) => !item.cap || can(item.cap));
 
   async function handleLogout() {
     await logout();
@@ -104,7 +113,7 @@ export function Sidebar() {
       </Link>
 
       <nav className={styles.nav} aria-label="Primary">
-        {NAV_ITEMS.map(({ to, label, icon }) => (
+        {visibleNavItems.map(({ to, label, icon }) => (
           <NavLink
             key={to}
             to={to}
@@ -114,10 +123,10 @@ export function Sidebar() {
                 .filter(Boolean)
                 .join(" ")
             }
-            title={collapsed ? label : undefined}
+            title={collapsed ? t(label) : undefined}
           >
             <Icon name={icon} size={20} />
-            {!collapsed && <span className={styles.linkLabel}>{label}</span>}
+            {!collapsed && <span className={styles.linkLabel}>{t(label)}</span>}
           </NavLink>
         ))}
       </nav>
@@ -134,9 +143,9 @@ export function Sidebar() {
           }}
           onClick={toggle}
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          title={collapsed ? "Expand" : "Collapse"}
+          title={collapsed ? "Expand" : t("Collapse")}
         >
-          {!collapsed && <span>Collapse</span>}
+          {!collapsed && <span>{t("Collapse")}</span>}
         </Button>
 
         <Button
@@ -152,10 +161,10 @@ export function Sidebar() {
           aria-label={
             theme === "dark" ? "Switch to light mode" : "Switch to dark mode"
           }
-          title={theme === "dark" ? "Light mode" : "Dark mode"}
+          title={theme === "dark" ? t("Light mode") : t("Dark mode")}
         >
           {!collapsed && (
-            <span>{theme === "dark" ? "Light mode" : "Dark mode"}</span>
+            <span>{theme === "dark" ? t("Light mode") : t("Dark mode")}</span>
           )}
         </Button>
         <Button
@@ -168,9 +177,9 @@ export function Sidebar() {
             gap: "var(--space-md)",
           }}
           aria-label="Sign out"
-          title="Sign out"
+          title={t("Sign out")}
         >
-          {!collapsed && <span>Sign out</span>}
+          {!collapsed && <span>{t("Sign out")}</span>}
         </Button>
       </div>
 

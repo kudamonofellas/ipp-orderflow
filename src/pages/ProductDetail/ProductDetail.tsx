@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { Card } from "../../components/Card/Card";
 import { Button } from "../../components/Button/Button";
 import { useAuth } from "../../hooks/useAuth";
+import { useLanguage } from "../../hooks/useLanguage";
 import {
   readProducts,
   deleteProduct,
@@ -15,9 +16,18 @@ export function ProductDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const auth = useAuth();
+  const { t } = useLanguage();
 
   const isNew = id === "new";
   const canManage = auth.can("manage_products");
+  const canView = auth.can("browseProducts");
+
+  // Defence-in-depth: the route is already wrapped in <Guarded cap="browseProducts">
+  // (App.tsx), but this survives even if that wrapper is ever dropped in a
+  // refactor — same self-guard pattern as ProductEdit.tsx.
+  useEffect(() => {
+    if (!canView) navigate("/", { replace: true });
+  }, [canView, navigate]);
 
   const [loading, setLoading] = useState(!isNew);
   const [error, setError] = useState<string | null>(null);
@@ -66,7 +76,9 @@ export function ProductDetail() {
       const linesRes = await readOrderLines({
         filter: { product_id: { _eq: id } },
         limit: 1,
-        fields: ["id"],
+        // `name` is required (non-optional) in OrderLinesCollectionSchema —
+        // must be requested even though it's unused here, or zod parsing fails.
+        fields: ["id", "name"],
       });
 
       if (!cancelled && linesRes.data) {
@@ -84,10 +96,10 @@ export function ProductDetail() {
 
   const handleDelete = async () => {
     if (usedBy > 0) {
-      window.alert("Product is used by active orders and cannot be deleted.");
+      window.alert(t("Product is used by active orders and cannot be deleted."));
       return;
     }
-    if (!window.confirm("Are you sure you want to delete this product?"))
+    if (!window.confirm(t("Are you sure you want to delete this product?")))
       return;
     if (!id) return;
 
@@ -103,11 +115,11 @@ export function ProductDetail() {
   };
 
   if (loading)
-    return <div className={styles.container}>Loading product details…</div>;
+    return <div className={styles.container}>{t("Loading product details…")}</div>;
   if (error)
     return (
       <div className={styles.container} style={{ color: "var(--state-error)" }}>
-        {error}
+        {t(error)}
       </div>
     );
 
@@ -121,10 +133,10 @@ export function ProductDetail() {
             icon="chevronLeft"
             onClick={() => navigate("/products")}
           >
-            Back
+            {t("Back")}
           </Button>
           <div className={styles.headingRow}>
-            <h2 className={styles.title}>{isNew ? "New Product" : name}</h2>
+            <h2 className={styles.title}>{isNew ? t("New Product") : name}</h2>
 
             {!isNew && accurateName && (
               <span>
@@ -141,11 +153,11 @@ export function ProductDetail() {
               <span
                 className={`${styles.pill} ${oos ? styles.pillDanger : ""}`}
               >
-                {oos ? "Out of stock" : "In-stock"}
+                {oos ? t("Out of stock") : t("In-stock")}
               </span>
 
               {catchWeight && (
-                <span className={styles.pillNeutral}>Catch-weight</span>
+                <span className={styles.pillNeutral}>{t("Catch-weight")}</span>
               )}
             </span>
           </div>
@@ -160,7 +172,7 @@ export function ProductDetail() {
                 onClick={handleDelete}
                 disabled={deleting}
               >
-                {deleting ? "Deleting…" : "Delete"}
+                {deleting ? t("Deleting…") : t("Delete")}
               </Button>
             )}
             <Button
@@ -169,7 +181,7 @@ export function ProductDetail() {
               icon="edit"
               onClick={() => navigate(`/products/${id}/edit`)}
             >
-              Edit
+              {t("Edit")}
             </Button>
           </div>
         )}
@@ -179,21 +191,21 @@ export function ProductDetail() {
         <div className={styles.fields}>
           <div className={styles.row}>
             <div className={styles.field}>
-              <span className={styles.detailLabel}>Category</span>
+              <span className={styles.detailLabel}>{t("Category")}</span>
               <span className={styles.detailValue}>{category || "—"}</span>
             </div>
             <div className={styles.field}>
-              <span className={styles.detailLabel}>Origin</span>
+              <span className={styles.detailLabel}>{t("Origin")}</span>
               <span className={styles.detailValue}>{origin || "—"}</span>
             </div>
           </div>
           <div className={styles.row}>
             <div className={styles.field}>
-              <span className={styles.detailLabel}>Grade</span>
+              <span className={styles.detailLabel}>{t("Grade")}</span>
               <span className={styles.detailValue}>{grade || "—"}</span>
             </div>
             <div className={styles.field}>
-              <span className={styles.detailLabel}>Brand</span>
+              <span className={styles.detailLabel}>{t("Brand")}</span>
               <span className={styles.detailValue}>{brand || "—"}</span>
             </div>
           </div>
@@ -206,7 +218,7 @@ export function ProductDetail() {
                 color: "var(--text-muted)",
               }}
             >
-              Product is currently used by {usedBy} active order(s).
+              {t('Product is currently used by')} {usedBy} {t('active order(s).')}
             </p>
           )}
         </div>

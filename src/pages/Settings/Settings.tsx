@@ -1,47 +1,396 @@
+import { Fragment, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card } from "../../components/Card/Card";
 import { Icon } from "../../components/Icon/Icon";
 import { Button } from "../../components/Button/Button";
 import { Toggle } from "../../components/Toggle/Toggle";
 import { useAuth, useCurrentUserName } from "../../hooks/useAuth";
+import { useLanguage } from "../../hooks/useLanguage";
 import { useSettings } from "../../hooks/useSettings";
+import { useTeamSettings } from "../../hooks/useTeamSettings";
+import {
+  updateTeamMember,
+  deleteTeamMember,
+  setRolePermission,
+  deleteRolePermissionRows,
+  type TeamMember,
+} from "../../lib/directus";
+import {
+  ALLOW,
+  PERMISSION_GRID,
+  PERMISSION_GRID_ROLES,
+  normalizeRole,
+  type Capability,
+  type Role,
+} from "../../lib/domain";
 import styles from "./Settings.module.css";
 
-const NOT_AVAILABLE = "Not available yet — this feature has no backing implementation.";
+const NOT_AVAILABLE =
+  "Not available yet — this feature has no backing implementation.";
 
-/** Full Settings page — Account, Intake Learning, Cold Storage, Dispatch, General, and Data sections. */
+/** Full Settings page — Account, Team, Roles & Permissions, Intake Learning, Cold Storage, Dispatch, General, and Data sections. */
 export function Settings() {
   const navigate = useNavigate();
-  const { role, logout } = useAuth();
+  const auth = useAuth();
+  const { role, logout, can, refreshPermissions } = auth;
   const name = useCurrentUserName();
   const { settings, learnedMatches, loading, error, update } = useSettings();
+  const { lang, setLang, t } = useLanguage();
+  const {
+    members,
+    roles,
+    permRows,
+    loading: teamLoading,
+    error: teamError,
+    reload: reloadTeam,
+  } = useTeamSettings();
+
+  const canManageSettings = can("manageSettings");
+  const canManageRoles = can("manageRoles");
+  const canBackupRestore = can("backupRestore");
+  const canExportCSV = can("exportCSV");
+  const isOwner = role === "Owner";
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editRoleId, setEditRoleId] = useState("");
+  const [savingMember, setSavingMember] = useState(false);
+
+  function handleLangChange(next: "en" | "id") {
+    update({ lang: next });
+    // Live-update this session's language immediately — update() only
+    // persists to Directus, it doesn't touch the render-time t() the rest
+    // of the app reads from.
+    setLang(next);
+  }
 
   async function handleLogout() {
     await logout();
     navigate("/login", { replace: true });
   }
 
+  function startEdit(m: TeamMember) {
+    setEditingId(m.id);
+    setEditName(`${m.first_name ?? ""} ${m.last_name ?? ""}`.trim());
+    setEditRoleId(m.role?.id ?? "");
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+  }
+
+  async function saveEdit(id: string) {
+    setSavingMember(true);
+    const trimmed = editName.trim();
+    const [first, ...rest] = trimmed.split(/\s+/);
+    const res = await updateTeamMember(id, {
+      first_name: first || "",
+      last_name: rest.join(" "),
+      role: editRoleId,
+    });
+    setSavingMember(false);
+    if (res.error) {
+      window.alert(res.error);
+      return;
+    }
+    setEditingId(null);
+    reloadTeam();
+  }
+
+  async function deleteMember(m: TeamMember) {
+    const fullName =
+      `${m.first_name ?? ""} ${m.last_name ?? ""}`.trim() || m.email;
+    if (
+      !window.confirm(
+        `${t("Remove")} ${fullName} — ${t("This cannot be undone.")}`,
+      )
+    ) {
+      return;
+    }
+    const res = await deleteTeamMember(m.id);
+    if (res.error) {
+      window.alert(res.error);
+      return;
+    }
+    setEditingId(null);
+    reloadTeam();
+  }
+
+  async function handleToggleActive(m: TeamMember, nextActive: boolean) {
+    const res = await updateTeamMember(m.id, {
+      status: nextActive ? "active" : "suspended",
+    });
+    if (res.error) {
+      window.alert(res.error);
+      return;
+    }
+    reloadTeam();
+  }
+
+  function permValue(
+    gridRole: Exclude<Role, "Owner">,
+    cap: Capability,
+  ): boolean {
+    const row = permRows.find(
+      (r) => normalizeRole(r.role) === gridRole && r.capability === cap,
+    );
+    if (row) return row.allowed;
+    return ALLOW[gridRole]?.[cap] === true;
+  }
+
+  async function toggleCell(
+    gridRole: Exclude<Role, "Owner">,
+    cap: Capability,
+    next: boolean,
+  ) {
+    const existing = permRows.find(
+      (r) => normalizeRole(r.role) === gridRole && r.capability === cap,
+    );
+    const res = await setRolePermission(
+      existing?.id ?? null,
+      gridRole,
+      cap,
+      next,
+    );
+    if (res.error) {
+      window.alert(res.error);
+      return;
+    }
+    reloadTeam();
+    await refreshPermissions();
+  }
+
+  async function handleResetPermissions() {
+    if (
+      !window.confirm(
+        `${t("Reset all role permissions to defaults?")} ${t("This clears every override.")}`,
+      )
+    ) {
+      return;
+    }
+    const res = await deleteRolePermissionRows(permRows.map((r) => r.id));
+    if (res.error) {
+      window.alert(res.error);
+      return;
+    }
+    reloadTeam();
+    await refreshPermissions();
+  }
+
   return (
     <div className={styles.container}>
-      <h1 className={styles.title}>Settings</h1>
+      <h1 className={styles.title}>{t("Settings")}</h1>
 
       <section>
-        <h2 className={styles.sectionHeading}>Account</h2>
+        <h2 className={styles.sectionHeading}>{t("Account")}</h2>
         <Card>
           <span className={styles.accountName}>{name || "—"}</span>
           <span className={styles.accountRole}>{role ?? ""}</span>
         </Card>
       </section>
 
+      {canManageRoles && (
+        <section>
+          <h2 className={styles.sectionHeading}>{t("Team")}</h2>
+          <p className={styles.body}>
+            {t(
+              "Manage who can log in. Toggle a member inactive to block their access without deleting the account.",
+            )}
+          </p>
+          {teamLoading ? (
+            <div className={styles.muted}>{t("Loading team…")}</div>
+          ) : teamError ? (
+            <div className={styles.error}>{teamError}</div>
+          ) : (
+            <Card className={styles.teamCard}>
+              {members.map((m) => {
+                const isEditing = editingId === m.id;
+                return (
+                  <div key={m.id} className={styles.teamMember}>
+                    <div className={styles.teamRowHeader}>
+                      <div className={styles.teamInfo}>
+                        <span className={styles.teamName}>
+                          {`${m.first_name ?? ""} ${m.last_name ?? ""}`.trim() ||
+                            m.email}
+                        </span>
+                        <span className={styles.teamRole}>
+                          {m.role?.name ?? "—"}
+                        </span>
+                      </div>
+                      <div className={styles.teamActions}>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          iconOnly
+                          icon="pencilEdit"
+                          title={t("Edit")}
+                          isActive={isEditing}
+                          onClick={() =>
+                            isEditing ? cancelEdit() : startEdit(m)
+                          }
+                        >
+                          {t("Edit")}
+                        </Button>
+                        <Toggle
+                          size="sm"
+                          label={
+                            m.status === "active"
+                              ? t("Deactivate member")
+                              : t("Activate member")
+                          }
+                          checked={m.status === "active"}
+                          onChange={(next) => handleToggleActive(m, next)}
+                        />
+                      </div>
+                    </div>
+
+                    {isEditing && (
+                      <div className={styles.teamEditRow}>
+                        <div className={styles.teamEditGrid}>
+                          <input
+                            className={styles.input}
+                            value={editName}
+                            onChange={(e) => setEditName(e.target.value)}
+                            placeholder={t("Name")}
+                          />
+                          <select
+                            className={styles.select}
+                            value={editRoleId}
+                            onChange={(e) => setEditRoleId(e.target.value)}
+                          >
+                            {roles.map((r) => (
+                              <option key={r.id} value={r.id}>
+                                {r.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className={styles.teamEditFooter}>
+                          <Button
+                            type="button"
+                            variant="tertiary"
+                            size="sm"
+                            iconOnly
+                            icon="trash"
+                            title={t("Remove member")}
+                            onClick={() => deleteMember(m)}
+                          >
+                            {t("Remove")}
+                          </Button>
+                          <div className={styles.teamEditActions}>
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              size="sm"
+                              onClick={cancelEdit}
+                            >
+                              {t("Cancel")}
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="primary"
+                              size="sm"
+                              disabled={savingMember}
+                              onClick={() => saveEdit(m.id)}
+                            >
+                              {t("Save")}
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </Card>
+          )}
+        </section>
+      )}
+
+      {isOwner && (
+        <section>
+          <h2 className={styles.sectionHeading}>{t("Roles & Permissions")}</h2>
+          <p className={styles.body}>
+            {t(
+              "Turn each function on or off per role. Owner always has full access. Tap a cell to change it.",
+            )}
+          </p>
+          <Card className={styles.gridCard}>
+            <div className={styles.gridScroll}>
+              <table className={styles.permTable}>
+                <thead>
+                  <tr>
+                    <th></th>
+                    {PERMISSION_GRID_ROLES.map((r) => (
+                      <th key={r}>{t(r)}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {PERMISSION_GRID.map((group) => (
+                    <Fragment key={group.section}>
+                      <tr className={styles.groupRow}>
+                        <td colSpan={PERMISSION_GRID_ROLES.length + 1}>
+                          {t(group.section)}
+                        </td>
+                      </tr>
+                      {group.rows.map(({ cap, label }) => (
+                        <tr key={cap}>
+                          <td className={styles.permLabel}>{t(label)}</td>
+                          {PERMISSION_GRID_ROLES.map((r) => {
+                            const allowed = permValue(r, cap);
+                            return (
+                              <td key={r} className={styles.permCell}>
+                                <button
+                                  type="button"
+                                  className={[
+                                    styles.checkbox,
+                                    allowed ? styles.checkboxOn : "",
+                                  ]
+                                    .filter(Boolean)
+                                    .join(" ")}
+                                  aria-pressed={allowed}
+                                  aria-label={`${t(label)} — ${t(r)}`}
+                                  onClick={() => toggleCell(r, cap, !allowed)}
+                                >
+                                  {allowed && <Icon name="tick" size={14} />}
+                                </button>
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <Button
+              type="button"
+              variant="tertiary"
+              className={styles.resetLink}
+              onClick={handleResetPermissions}
+            >
+              {t("Reset permissions to defaults")}
+            </Button>
+          </Card>
+        </section>
+      )}
+
       <section>
-        <h2 className={styles.sectionHeading}>Intake Learning</h2>
+        <h2 className={styles.sectionHeading}>{t("Intake Learning")}</h2>
         <Card>
           <div className={styles.row}>
             <Icon name="ai" size={20} className={styles.rowIcon} />
             <div className={styles.rowInfo}>
-              <span className={styles.rowTitle}>{learnedMatches} learned matches</span>
+              <span className={styles.rowTitle}>
+                {learnedMatches} {t("learned matches")}
+              </span>
               <span className={styles.rowNote}>
-                Shared knowledge base — every correction your team makes is kept and reused. Cannot be cleared.
+                {t(
+                  "Shared knowledge base — every correction your team makes is kept and reused. Cannot be cleared.",
+                )}
               </span>
             </div>
           </div>
@@ -49,99 +398,133 @@ export function Settings() {
       </section>
 
       {loading ? (
-        <div className={styles.muted}>Loading settings…</div>
+        <div className={styles.muted}>{t("Loading settings…")}</div>
       ) : error ? (
         <div className={styles.error}>{error}</div>
       ) : (
         <>
-          <section>
-            <h2 className={styles.sectionHeading}>Cold Storage</h2>
-            <Card className={styles.stackedCard}>
-              <div className={styles.toggleRow}>
-                <div className={styles.rowInfo}>
-                  <span className={styles.rowTitle}>Require a proof photo on every item</span>
-                  <span className={styles.rowNote}>Warehouse must attach at least one photo per item before releasing.</span>
-                </div>
-                <Toggle
-                  label="Require a proof photo on every item"
-                  checked={settings?.require_photo === true}
-                  onChange={(next) => update({ require_photo: next })}
-                />
-              </div>
-
-              <div className={styles.toleranceBlock}>
-                <span className={styles.rowTitle}>Weigh tolerance vs the order</span>
-                <div className={styles.toleranceGrid}>
-                  <label className={styles.toleranceField}>
-                    <span className={styles.toleranceLabel}>Flag if below by (%)</span>
-                    <input
-                      type="number"
-                      min={0}
-                      max={100}
-                      value={settings?.tol_below_pct ?? 10}
-                      onChange={(e) => update({ tol_below_pct: Number(e.target.value) })}
+          {canManageSettings && (
+            <>
+              <section>
+                <h2 className={styles.sectionHeading}>{t("Cold Storage")}</h2>
+                <Card className={styles.stackedCard}>
+                  <div className={styles.toggleRow}>
+                    <div className={styles.rowInfo}>
+                      <span className={styles.rowTitle}>
+                        {t("Require a proof photo on every item")}
+                      </span>
+                      <span className={styles.rowNote}>
+                        {t(
+                          "Warehouse must attach at least one photo per item before releasing.",
+                        )}
+                      </span>
+                    </div>
+                    <Toggle
+                      label={t("Require a proof photo on every item")}
+                      checked={settings?.require_photo === true}
+                      onChange={(next) => update({ require_photo: next })}
                     />
-                  </label>
-                  <label className={styles.toleranceField}>
-                    <span className={styles.toleranceLabel}>Flag if above by (%)</span>
-                    <input
-                      type="number"
-                      min={0}
-                      max={100}
-                      value={settings?.tol_above_pct ?? 10}
-                      onChange={(e) => update({ tol_above_pct: Number(e.target.value) })}
+                  </div>
+
+                  <div className={styles.toleranceBlock}>
+                    <span className={styles.rowTitle}>
+                      {t("Weigh tolerance vs the order")}
+                    </span>
+                    <div className={styles.toleranceGrid}>
+                      <label className={styles.toleranceField}>
+                        <span className={styles.toleranceLabel}>
+                          {t("Flag if below by (%)")}
+                        </span>
+                        <input
+                          className={styles.input}
+                          type="number"
+                          min={0}
+                          max={100}
+                          value={settings?.tol_below_pct ?? 10}
+                          onChange={(e) =>
+                            update({ tol_below_pct: Number(e.target.value) })
+                          }
+                        />
+                      </label>
+                      <label className={styles.toleranceField}>
+                        <span className={styles.toleranceLabel}>
+                          {t("Flag if above by (%)")}
+                        </span>
+                        <input
+                          className={styles.input}
+                          type="number"
+                          min={0}
+                          max={100}
+                          value={settings?.tol_above_pct ?? 10}
+                          onChange={(e) =>
+                            update({ tol_above_pct: Number(e.target.value) })
+                          }
+                        />
+                      </label>
+                    </div>
+                    <span className={styles.rowNote}>
+                      {t(
+                        "A weighed total outside this range shows a gentle hint — it does not block.",
+                      )}
+                    </span>
+                  </div>
+                </Card>
+              </section>
+
+              <section>
+                <h2 className={styles.sectionHeading}>{t("Dispatch")}</h2>
+                <Card>
+                  <div className={styles.toggleRow}>
+                    <div className={styles.rowInfo}>
+                      <span className={styles.rowTitle}>
+                        {t("Require delivery proof photos")}
+                      </span>
+                      <span className={styles.rowNote}>
+                        {t(
+                          "Courier must attach condition, received-by & signed-invoice photos before marking delivered. Off = photos optional.",
+                        )}
+                      </span>
+                    </div>
+                    <Toggle
+                      label={t("Require delivery proof photos")}
+                      checked={settings?.dispatch_proof_required === true}
+                      onChange={(next) =>
+                        update({ dispatch_proof_required: next })
+                      }
                     />
-                  </label>
-                </div>
-                <span className={styles.rowNote}>A weighed total outside this range shows a gentle hint — it does not block.</span>
-              </div>
-            </Card>
-          </section>
+                  </div>
+                </Card>
+              </section>
+            </>
+          )}
 
           <section>
-            <h2 className={styles.sectionHeading}>Dispatch</h2>
-            <Card>
-              <div className={styles.toggleRow}>
-                <div className={styles.rowInfo}>
-                  <span className={styles.rowTitle}>Require delivery proof photos</span>
-                  <span className={styles.rowNote}>
-                    Courier must attach condition, received-by &amp; signed-invoice photos before marking delivered. Off = photos optional.
-                  </span>
-                </div>
-                <Toggle
-                  label="Require delivery proof photos"
-                  checked={settings?.dispatch_proof_required === true}
-                  onChange={(next) => update({ dispatch_proof_required: next })}
-                />
-              </div>
-            </Card>
-          </section>
-
-          <section>
-            <h2 className={styles.sectionHeading}>General</h2>
+            <h2 className={styles.sectionHeading}>{t("General")}</h2>
             <Card>
               <div className={styles.row}>
                 <Icon name="language" size={20} className={styles.rowIcon} />
                 <div className={styles.rowInfo}>
-                  <span className={styles.rowTitle}>Language</span>
-                  <span className={styles.rowNote}>Sets the default UI language for the whole team.</span>
+                  <span className={styles.rowTitle}>{t("Language")}</span>
+                  <span className={styles.rowNote}>
+                    {t("Sets the default UI language for the whole team.")}
+                  </span>
                 </div>
                 <div className={styles.langButtons}>
                   <Button
                     type="button"
-                    variant={(settings?.lang ?? "en") === "en" ? "primary" : "secondary"}
-                    size="sm"
-                    onClick={() => update({ lang: "en" })}
+                    variant={lang === "en" ? "primary" : "secondary"}
+                    size="md"
+                    onClick={() => handleLangChange("en")}
                   >
-                    English
+                    {t("English")}
                   </Button>
                   <Button
                     type="button"
-                    variant={settings?.lang === "id" ? "primary" : "secondary"}
-                    size="sm"
-                    onClick={() => update({ lang: "id" })}
+                    variant={lang === "id" ? "primary" : "secondary"}
+                    size="md"
+                    onClick={() => handleLangChange("id")}
                   >
-                    Bahasa
+                    {t("Bahasa")}
                   </Button>
                 </div>
               </div>
@@ -151,45 +534,63 @@ export function Settings() {
       )}
 
       <section>
-        <h2 className={styles.sectionHeading}>Data</h2>
+        <h2 className={styles.sectionHeading}>{t("Data")}</h2>
         <div className={styles.dataStack}>
-          <Button
-            type="button"
-            variant="secondary"
-            buttonStyle="fullWidth"
-            icon="download"
-            onClick={() => window.alert(NOT_AVAILABLE)}
-          >
-            Backup everything (Download)
-          </Button>
+          {canBackupRestore && (
+            <Button
+              type="button"
+              variant="secondary"
+              buttonStyle="fullWidth"
+              size="lg"
+              icon="download"
+              onClick={() => window.alert(t(NOT_AVAILABLE))}
+            >
+              {t("Backup everything (Download)")}
+            </Button>
+          )}
           <div className={styles.dataRow}>
-            <Button
-              type="button"
-              variant="secondary"
-              buttonStyle="fullWidth"
-              icon="restore"
-              onClick={() => window.alert(NOT_AVAILABLE)}
-            >
-              Restore from Backup
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              buttonStyle="fullWidth"
-              icon="export"
-              onClick={() => window.alert(NOT_AVAILABLE)}
-            >
-              Export all orders (CSV)
-            </Button>
+            {canBackupRestore && (
+              <Button
+                type="button"
+                variant="secondary"
+                buttonStyle="fullWidth"
+                size="lg"
+                icon="restore"
+                onClick={() => window.alert(t(NOT_AVAILABLE))}
+              >
+                {t("Restore from Backup")}
+              </Button>
+            )}
+            {canExportCSV && (
+              <Button
+                type="button"
+                variant="secondary"
+                buttonStyle="fullWidth"
+                size="lg"
+                icon="export"
+                onClick={() => window.alert(t(NOT_AVAILABLE))}
+              >
+                {t("Export all orders (CSV)")}
+              </Button>
+            )}
           </div>
           <span className={styles.rowNote}>
-            Full backup = orders, customers, settings + all photos in one file. Columns follow your role.
+            {t(
+              "Full backup = orders, customers, settings + all photos in one file. Columns follow your role.",
+            )}
           </span>
 
           <div className={styles.divider} />
 
-          <Button type="button" variant="secondary" buttonStyle="fullWidth" icon="logout" onClick={handleLogout}>
-            Logout
+          <Button
+            type="button"
+            variant="secondary"
+            buttonStyle="fullWidth"
+            size="lg"
+            icon="logout"
+            onClick={handleLogout}
+          >
+            {t("Logout")}
           </Button>
         </div>
       </section>

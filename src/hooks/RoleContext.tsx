@@ -122,9 +122,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [role, overrides],
   );
 
+  const refreshPermissions = useCallback(async () => {
+    const perms = await loadRolePermissions();
+    setOverrides(perms);
+  }, []);
+
   const value = useMemo<AuthState>(
-    () => ({ user, role, loading, loginError, login, logout, can }),
-    [user, role, loading, loginError, login, logout, can],
+    () => ({ user, role, loading, loginError, login, logout, can, refreshPermissions }),
+    [user, role, loading, loginError, login, logout, can, refreshPermissions],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

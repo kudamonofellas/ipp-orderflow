@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Card } from "../../components/Card/Card";
 import { Icon } from "../../components/Icon/Icon";
 import { Button } from "../../components/Button/Button";
+import { useCan } from "../../hooks/useAuth";
+import { useLanguage } from "../../hooks/useLanguage";
 import { usePickList, type PickListRow } from "../../hooks/usePickList";
 import styles from "./PickList.module.css";
 
@@ -25,6 +27,7 @@ function PickListRowCard({
   pulled: boolean;
   onToggle: () => void;
 }) {
+  const { t } = useLanguage();
   const qtyDisplay = Math.round(row.qty * 100) / 100;
 
   return (
@@ -35,24 +38,29 @@ function PickListRowCard({
             type="button"
             role="checkbox"
             aria-checked={pulled}
-            aria-label={pulled ? `Mark ${row.name} as not pulled` : `Mark ${row.name} as pulled`}
-            className={[styles.checkbox, pulled ? styles.checkboxChecked : ""].join(" ")}
+            aria-label={`${row.name} — ${pulled ? t("Mark as not pulled") : t("Mark as pulled")}`}
+            className={[
+              styles.checkbox,
+              pulled ? styles.checkboxChecked : "",
+            ].join(" ")}
             onClick={onToggle}
           >
-            {pulled && <Icon name="tick" size={14} className={styles.checkboxIcon} />}
+            {pulled && (
+              <Icon name="tick" size={14} className={styles.checkboxIcon} />
+            )}
           </button>
           <div className={styles.productInfo}>
             <span className={styles.productName}>{row.name}</span>
             {row.cutCount > 0 && (
               <span className={styles.cuttingPill}>
                 <Icon name="knife" size={12} />
-                {row.cutCount} cutting job{row.cutCount === 1 ? "" : "s"}
+                {row.cutCount} {t("cutting job(s)")}
               </span>
             )}
             {row.catchWeight && (
               <span className={styles.weighCaption}>
                 <Icon name="weight" size={12} />
-                weigh per order
+                {t("weigh per order")}
               </span>
             )}
           </div>
@@ -95,6 +103,15 @@ export function PickList() {
   const navigate = useNavigate();
   const location = useLocation();
   const backTo = (location.state as { from?: string } | null)?.from ?? "/";
+  const canView = useCan()("viewPickList");
+  const { t } = useLanguage();
+
+  // Defence-in-depth: the route is already wrapped in <Guarded cap="viewPickList">
+  // (App.tsx), but this survives even if that wrapper is ever dropped in a
+  // refactor — same self-guard pattern as ProductEdit.tsx.
+  useEffect(() => {
+    if (!canView) navigate("/", { replace: true });
+  }, [canView, navigate]);
 
   const [day, setDay] = useState(todayISO);
   const { groups, rows, orderCount, loading, error } = usePickList(day);
@@ -119,52 +136,64 @@ export function PickList() {
     });
   }
 
-  const progressPct = rows.length === 0 ? 0 : Math.round((pulled.size / rows.length) * 100);
+  const progressPct =
+    rows.length === 0 ? 0 : Math.round((pulled.size / rows.length) * 100);
 
   return (
     <div className={styles.container}>
       <header className={styles.header}>
         <div className={styles.titleSection}>
-          <Button type="button" variant="tertiary" icon="chevronLeft" onClick={() => navigate(backTo)}>
-            Back
+          <Button
+            type="button"
+            variant="tertiary"
+            icon="chevronLeft"
+            onClick={() => navigate(backTo)}
+          >
+            {t("Back")}
           </Button>
           <div className={styles.titleRow}>
-            <h1 className={styles.title}>Pick list</h1>
+            <h1 className={styles.title}>{t("Pick list")}</h1>
             <span className={styles.count}>{orderCount}</span>
           </div>
-          {rows.length > 0 && (
-            <div className={styles.progressRow}>
-              <div className={styles.progressBar}>
-                <div className={styles.progressBarFill} style={{ width: `${progressPct}%` }} />
-              </div>
-              <p className={styles.progress}>
-                {pulled.size} of {rows.length} pulled
-              </p>
-            </div>
-          )}
         </div>
+
         <div className={styles.actions}>
-          <span className={styles.dateLabel}>Deliveries on</span>
+          <span className={styles.dateLabel}>{t("Deliveries on")}</span>
           <div className={styles.dateField}>
             <input
               type="date"
               className={styles.dateInput}
               value={day}
               onChange={(e) => e.target.value && setDay(e.target.value)}
-              aria-label="Deliveries on"
+              aria-label={t("Deliveries on")}
             />
             <Icon name="calendar" size={16} className={styles.dateIcon} />
           </div>
         </div>
       </header>
+      {rows.length > 0 && (
+        <div className={styles.progressRow}>
+          <div className={styles.progressBar}>
+            <div
+              className={styles.progressBarFill}
+              style={{ width: `${progressPct}%` }}
+            />
+          </div>
+          <p className={styles.progress}>
+            {pulled.size} {t("of")} {rows.length} {t("pulled")}
+          </p>
+        </div>
+      )}
 
       {loading ? (
-        <div className={styles.muted}>Loading pick list…</div>
+        <div className={styles.muted}>{t("Loading pick list…")}</div>
       ) : error ? (
         <div className={styles.error}>{error}</div>
       ) : rows.length === 0 ? (
         <div className={styles.muted}>
-          Nothing to pull for this date — orders past Cold Storage are already picked.
+          {t(
+            "Nothing to pull for this date — orders past Cold Storage are already picked.",
+          )}
         </div>
       ) : groups.length > 0 ? (
         groups.map((group) => (

@@ -326,6 +326,14 @@ New patterns introduced this session (append if reused):
 
 ---
 
+## Built components (2026-08-07)
+
+- **`QuickActionCard`** (`src/components/QuickActionCard/`) — Dashboard's Deliveries / Pick list / Cash-up row card. A full-width clickable `<button>`: icon tile + label on the left, a bold value + small suffix text on the right (`justify-content: space-between`). `1px solid var(--border-default)` border, `--radius-md`, hover → `--bg-surface-hover` background. Icon tile is a plain 36×36 flex box (no background fill) tinted `--accent-primary`; label/value also read `--accent-primary` rather than `--text-primary` (a deliberate accent-forward variant on the Metric icon tile pattern below, not the same styling). Renders `-` for the value when the underlying count/amount is zero, instead of hiding the card — capability-gating (whether the card renders at all) and empty-state (what it shows once rendered) are two separate, independently-controlled concerns.
+
+New patterns introduced this session (append if reused):
+
+- **Role-gated grid, dynamic column count**: when a grid row's children are individually gated (`{cond && <Card/>}` per item) and the *number* of visible children varies (1–3 here), don't hardcode `grid-template-columns: repeat(3, ...)` — the visible items will only fill part of the row, leaving dead space instead of stretching. Instead compute the visible count in the component (`[cond1, cond2, cond3].filter(Boolean).length`), pass it down as a CSS custom property via inline `style={{ "--foo-count": n } as React.CSSProperties }}`, and reference it in the CSS module: `grid-template-columns: repeat(var(--foo-count, 3), minmax(0, 1fr))`. The `, 3` fallback keeps SSR/no-JS and the responsive single-column media-query override well-defined. First used on the Dashboard's `.quickActionsRow`.
+
 ## How this registry is used
 
 At the start of any session involving UI work, read this file before writing any component. When building a new card, check the Card baseline above. When building a new button, check the Button baseline. Match the exact tokens.

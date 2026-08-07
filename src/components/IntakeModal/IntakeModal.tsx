@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Icon } from '../Icon/Icon';
 import { Button } from '../Button/Button';
+import { useLanguage } from '../../hooks/useLanguage';
 import { parseOrderText, type ParsedOrderDraft } from '../../lib/directus';
 import styles from './IntakeModal.module.css';
 
@@ -24,6 +25,7 @@ interface IntakeModalProps {
  * If parse fails, the user can still tap "Skip" to open a blank NewOrderModal.
  */
 export function IntakeModal({ open, channel, onClose, onParsed }: IntakeModalProps) {
+  const { t } = useLanguage();
   const [text, setText] = useState('');
   const [attachments, setAttachments] = useState<File[]>([]);
   const [parsing, setParsing] = useState(false);
@@ -57,7 +59,7 @@ export function IntakeModal({ open, channel, onClose, onParsed }: IntakeModalPro
   async function handleParse() {
     const trimmed = text.trim();
     if (!trimmed) {
-      setError('Paste a WhatsApp message first.');
+      setError(t('Paste a WhatsApp message first.'));
       return;
     }
     setParsing(true);
@@ -117,13 +119,13 @@ export function IntakeModal({ open, channel, onClose, onParsed }: IntakeModalPro
         <div className={styles.header}>
           <div className={styles.headerText}>
             <h2 className={styles.title}>
-              WhatsApp Intake
+              {t('WhatsApp Intake')}
               <span className={styles.channelBadge}>
                 {channel === 'horeca' ? 'Horeca' : channel}
               </span>
             </h2>
             <p className={styles.subtitle}>
-              Paste the customer's WhatsApp order message to auto-fill the order form.
+              {t("Paste the customer's WhatsApp order message to auto-fill the order form.")}
             </p>
           </div>
           <Button
@@ -142,7 +144,7 @@ export function IntakeModal({ open, channel, onClose, onParsed }: IntakeModalPro
         <div className={styles.body}>
           <div>
             <label htmlFor="intake-text" className={styles.label}>
-              Order Message
+              {t('Order Message')}
             </label>
             <textarea
               id="intake-text"
@@ -156,13 +158,13 @@ export function IntakeModal({ open, channel, onClose, onParsed }: IntakeModalPro
               spellCheck={false}
             />
             <p className={styles.hint}>
-              The message will be parsed automatically. You can review and correct every line before saving.
+              {t('The message will be parsed automatically. You can review and correct every line before saving.')}
             </p>
           </div>
 
           {/* Attachment upload */}
           <div>
-            <span className={styles.label}>Attachments (optional)</span>
+            <span className={styles.label}>{t('Attachments (optional)')}</span>
             <div className={styles.attachRow}>
               <Button
                 variant="secondary"
@@ -173,7 +175,7 @@ export function IntakeModal({ open, channel, onClose, onParsed }: IntakeModalPro
                 disabled={parsing}
               >
                 <Icon name="attach" size={16} />
-                Add file
+                {t('Add file')}
               </Button>
               {attachments.length > 0 && (
                 <div className={styles.attachList}>
@@ -214,7 +216,7 @@ export function IntakeModal({ open, channel, onClose, onParsed }: IntakeModalPro
             onClick={handleSkip}
             disabled={parsing}
           >
-            Skip — enter manually
+            {t('Skip — enter manually')}
           </Button>
           <Button
             variant="primary"
@@ -224,11 +226,11 @@ export function IntakeModal({ open, channel, onClose, onParsed }: IntakeModalPro
             disabled={parsing || !text.trim()}
           >
             {parsing ? (
-              <><span className={styles.spinner} /> Parsing…</>
+              <><span className={styles.spinner} /> {t('Parsing…')}</>
             ) : (
               <>
                 <Icon name="whatsapp" size={16} />
-                Parse &amp; Continue
+                {t('Parse & Continue')}
               </>
             )}
           </Button>

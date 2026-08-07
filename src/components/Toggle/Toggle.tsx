@@ -5,10 +5,12 @@ interface ToggleProps {
   onChange: (next: boolean) => void;
   label: string;
   disabled?: boolean;
+  /** @default 'md' */
+  size?: "sm" | "md" | "lg";
 }
 
 /** Pill switch. `label` is the accessible name (visually hidden — pair with visible copy beside it). */
-export function Toggle({ checked, onChange, label, disabled = false }: ToggleProps) {
+export function Toggle({ checked, onChange, label, disabled = false, size = "md" }: ToggleProps) {
   return (
     <button
       type="button"
@@ -16,7 +18,9 @@ export function Toggle({ checked, onChange, label, disabled = false }: TogglePro
       aria-checked={checked}
       aria-label={label}
       disabled={disabled}
-      className={[styles.toggle, checked ? styles.toggleOn : ""].join(" ")}
+      className={[styles.toggle, styles[size], checked ? styles.toggleOn : ""]
+        .filter(Boolean)
+        .join(" ")}
       onClick={() => onChange(!checked)}
     >
       <span className={styles.knob} />

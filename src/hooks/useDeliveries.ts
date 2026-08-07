@@ -1,10 +1,11 @@
 /**
  * Deliveries — the current courier's run-sheet. Pools orders at `dispatch`
- * assigned to the signed-in user or unassigned (ported from the prototype's
- * `myDeliveries`/`takenByMe` predicate — unassigned dispatch orders count as
- * "mine" for anyone, same caveat the prototype had), ordered by delivery
- * time as a stand-in sequence (the live schema has no `runSeq`-style column
- * yet — see prototype-audit.md's Deliveries notes).
+ * assigned to the signed-in user (matched by `taken_by`, a UUID FK to
+ * `directus_users.id` — not the display name) or unassigned (ported from the
+ * prototype's `myDeliveries`/`takenByMe` predicate — unassigned dispatch
+ * orders count as "mine" for anyone, same caveat the prototype had), ordered
+ * by delivery time as a stand-in sequence (the live schema has no
+ * `runSeq`-style column yet — see prototype-audit.md's Deliveries notes).
  *
  * COD-ness and the amount to collect use the same source as `useCashUp`:
  * `customers.pay_timing === 'cod'` and the order total (`order_lines`
@@ -43,7 +44,7 @@ function isCOD(payTiming: string | null | undefined): boolean {
   return (payTiming ?? '').trim().toLowerCase() === 'cod';
 }
 
-export function useDeliveries(courierName: string): UseDeliveriesResult {
+export function useDeliveries(courierId: string | null): UseDeliveriesResult {
   const [stops, setStops] = useState<DeliveryStop[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -58,12 +59,19 @@ export function useDeliveries(courierName: string): UseDeliveriesResult {
       setLoading(true);
       setError(null);
 
+      // `orders.taken_by` is a UUID FK to directus_users.id, not a display
+      // name — comparing it against a name string makes Postgres reject the
+      // uuid cast (surfaces as a generic "unexpected error"). Filter on the
+      // signed-in user's id instead.
+      const takenByOr: Record<string, unknown>[] = [{ taken_by: { _null: true } }];
+      if (courierId) takenByOr.push({ taken_by: { _eq: courierId } });
+
       const ordersRes = await readOrders({
         filter: {
           _and: [
             { stage: { _eq: 'dispatch' } },
             { cancelled: { _neq: true } },
-            { _or: [{ taken_by: { _eq: courierName } }, { taken_by: { _null: true } }] },
+            { _or: takenByOr },
           ],
         },
         fields: [
@@ -97,10 +105,18 @@ export function useDeliveries(courierName: string): UseDeliveriesResult {
       const [customersRes, linesRes] = await Promise.all([
         customerIds.length === 0
           ? Promise.resolve({ data: [], error: null })
-          : readCustomers({ filter: { id: { _in: customerIds } }, fields: ['id', 'pay_timing'], limit: -1 }),
+          : readCustomers({
+              filter: { id: { _in: customerIds } },
+              // `name` is required (non-optional) in CustomersCollectionSchema —
+              // must be requested even though it's unused here, or zod parsing fails.
+              fields: ['id', 'name', 'pay_timing'],
+              limit: -1,
+            }),
         readOrderLines({
           filter: { _and: [{ order_id: { _in: orderIds } }, { removed: { _neq: true } }] },
-          fields: ['order_id', 'qty', 'price'],
+          // `id` is required (non-optional) in OrderLinesCollectionSchema —
+          // must be requested even though it's unused here, or zod parsing fails.
+          fields: ['id', 'order_id', 'qty', 'price'],
           limit: -1,
         }),
       ]);
@@ -144,7 +160,7 @@ export function useDeliveries(courierName: string): UseDeliveriesResult {
     return () => {
       cancelled = true;
     };
-  }, [courierName, nonce]);
+  }, [courierId, nonce]);
 
   async function markDelivered(orderId: string, userId: string | null) {
     const res = await updateOrder(orderId, {

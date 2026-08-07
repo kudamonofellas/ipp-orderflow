@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "../../../components/Button/Button";
 import { Card } from "../../../components/Card/Card";
 import { OrderRows } from "../../../components/OrderRows/OrderRows";
+import { useLanguage } from "../../../hooks/useLanguage";
 import type { OpenOrder } from "../../../types/dashboard";
 import styles from "./OpenOrdersPanel.module.css";
 
@@ -38,6 +39,7 @@ export function OpenOrdersPanel({
 }: OpenOrdersPanelProps) {
   const [sortOpen, setSortOpen] = useState(false);
   const sortDropdownRef = useRef<HTMLDivElement>(null);
+  const { t } = useLanguage();
 
   useEffect(() => {
     if (!sortOpen) return;
@@ -68,7 +70,7 @@ export function OpenOrdersPanel({
   return (
     <Card>
       <div className={styles.headerWrap}>
-        <h3 className={styles.heading}>Open Orders</h3>
+        <h3 className={styles.heading}>{t('Open Orders')}</h3>
         {onSortChange && (
           <div className={styles.sortContainer} ref={sortDropdownRef}>
             <Button
@@ -132,13 +134,13 @@ export function OpenOrdersPanel({
               <thead>
                 <tr>
                   <th className={styles.arrowHead} aria-label="Expand" />
-                  <th style={{ textAlign: "left" }}>Order ID</th>
-                  <th style={{ textAlign: "left" }}>Stage</th>
-                  <th style={{ textAlign: "left" }}>Order Date</th>
-                  <th style={{ textAlign: "left" }}>Delivery Date</th>
-                  <th style={{ textAlign: "left" }}>Sales Rep</th>
-                  <th style={{ textAlign: "left" }}>Customer</th>
-                  <th style={{ textAlign: "left" }}>Items</th>
+                  <th style={{ textAlign: "left" }}>{t('Order ID')}</th>
+                  <th style={{ textAlign: "left" }}>{t('Stage')}</th>
+                  <th style={{ textAlign: "left" }}>{t('Order Date')}</th>
+                  <th style={{ textAlign: "left" }}>{t('Delivery Date')}</th>
+                  <th style={{ textAlign: "left" }}>{t('Sales Rep')}</th>
+                  <th style={{ textAlign: "left" }}>{t('Customer')}</th>
+                  <th style={{ textAlign: "left" }}>{t('Items')}</th>
                 </tr>
               </thead>
               {orders.map((order) => (

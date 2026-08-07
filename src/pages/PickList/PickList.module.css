@@ -51,14 +51,19 @@
 .progressRow {
   display: flex;
   align-items: center;
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+  box-sizing: border-box;
   gap: var(--space-sm);
 }
 
 .progressBar {
-  width: 120px;
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
   height: 6px;
-  flex-shrink: 0;
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-xl);
   background: var(--bg-muted);
   overflow: hidden;
 }
@@ -66,7 +71,7 @@
 .progressBarFill {
   height: 100%;
   background: var(--accent-primary);
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-xl);
   transition: width var(--duration-normal) var(--ease-default);
 }
 
@@ -75,6 +80,9 @@
   color: var(--text-secondary);
   margin: 0;
   white-space: nowrap;
+  width: 72px;
+  text-align: right;
+  flex-shrink: 0;
 }
 
 .actions {

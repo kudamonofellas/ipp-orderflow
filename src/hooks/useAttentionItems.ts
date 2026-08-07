@@ -13,7 +13,7 @@ import { useEffect, useState } from 'react';
 import { aggregateOrders } from '../lib/directus';
 import { useCan } from './useAuth';
 import type { Capability } from '../lib/domain';
-import { financeParallelQueueFilter } from '../lib/pipeline';
+import { financeParallelQueueFilter, openOrdersFilter } from '../lib/pipeline';
 import type { AttentionItem } from '../types/dashboard';
 
 function extractCount(val: unknown): number {
@@ -85,13 +85,13 @@ function lateBucket(): Bucket {
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
   const cutoff = todayStart.toISOString();
+  const { _and: openConds } = openOrdersFilter() as { _and: unknown[] };
   return {
     key: 'late',
     label: 'Orders past their delivery date',
     filter: {
       _and: [
-        { stage: { _nin: ['delivered', 'cancelled', 'returned'] } },
-        { cancelled: { _neq: true } },
+        ...openConds,
         {
           _or: [
             { delivery_date: { _lt: cutoff } },

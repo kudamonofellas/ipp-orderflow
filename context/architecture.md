@@ -48,7 +48,8 @@ not yet confirmed wired up in the frontend: `draft_weighings`, `purchase_orders`
 partially wired (return flow reads/writes it). Treat `target-db-schema.md` as materially accurate for
 column-level detail; re-verify against `snapshot.json` before relying on any single field, since it has
 drifted from the target doc before (see the `products.active` vs `products.oos` incident,
-`progress-tracker.md` 2026-08-05).
+`progress-tracker.md` 2026-08-05 — **resolved 2026-08-07**: `target-db-schema.md` corrected to document
+`oos` as the real column; `active` was never real in the prototype, the live DB, or `snapshot.json`).
 
 The paragraphs immediately below (the original 3-collection description) are kept for historical context
 only — they describe the schema's state early in the project, before the pipeline collections existed.
@@ -106,7 +107,7 @@ Directus-adapted version.
 #### Pipeline collections (built — see the 2026-08-07 note above for what's confirmed live)
 
 - **`customers`** — replaces denormalized customer fields on `orders`. Fields: `name`, `company_name` (legal entity name — equivalent to the current `orders.customer_legal_name`), `channel` (horeca/retail/b2c), `contact`, `address`, `area`, `sales`, `credit_limit` NUMERIC(15,2), `term_days` INT, `pay_timing` (upfront/cod/terms), `pay_method` (cash/transfer). `orders.customer_id` → `customers.id`.
-- **`products`** — the Accurate SKU catalog (auto-synced from Accurate exports). Fields: `name`, `accurate_name` (unique — the recognizer's matching key), `category`, `origin`, `grade`, `brand`, `form`, `pack`, `catch_weight` BOOL, `fixed_pack` BOOL, `ppn` (exempt/included/excluded), `active` BOOL.
+- **`products`** — the Accurate SKU catalog (auto-synced from Accurate exports). Fields: `name`, `accurate_name` (unique — the recognizer's matching key), `category`, `origin`, `grade`, `brand`, `form`, `pack`, `catch_weight` BOOL, `fixed_pack` BOOL, `ppn` (exempt/included/excluded), `oos` BOOL (flagged out of stock by the warehouse — matches the prototype's `p.oos`; there is no separate `active` column).
 - **`order_lines`** — replaces `orders.order_items` text blob. Fields: `order_id` → `orders`, `product_id` → `products` (nullable for free-text), `name` (snapshot), `qty` NUMERIC(12,3), `unit` (kg/gram/pack/pcs/box/ekor/loaf), `weight` NUMERIC(10,3) (actual catch-weight), `price` NUMERIC(15,2) (PO-stated only; NULL = priced in Accurate), `status` (recognized/manual/unmatched), `delivered` INT, `returned` INT, `short` BOOL, `removed` BOOL, `weigh_photo` → `directus_files`, `returned_weigh_photo` → `directus_files`, `sort_order` INT.
 - **`line_cuts`** — production cut instructions per line. Fields: `line_id` → `order_lines`, `text` (e.g. "steak cut 2 cm"), `done` BOOL, `sort_order` INT.
 - **`line_weighings`** — individual scale readings on a catch-weight line (a loaf may be weighed in pieces). Fields: `line_id` → `order_lines`, `weight` NUMERIC(10,3), `photo_id` → `directus_files`, `created_at`.

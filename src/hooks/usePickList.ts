@@ -127,7 +127,9 @@ export function usePickList(day: string): UsePickListResult {
             ? Promise.resolve({ data: [], error: null })
             : readProducts({
                 filter: { id: { _in: productIds } },
-                fields: ['id', 'category', 'catch_weight'],
+                // `name` is required (non-optional) in ProductsCollectionSchema —
+                // must be requested even though it's unused here, or zod parsing fails.
+                fields: ['id', 'name', 'category', 'catch_weight'],
                 limit: -1,
               });
         })(),

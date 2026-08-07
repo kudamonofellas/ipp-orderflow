@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Card } from "../../components/Card/Card";
 import { Icon } from "../../components/Icon/Icon";
 import { Button } from "../../components/Button/Button";
-import { useCan, useCurrentUserId, useCurrentUserName } from "../../hooks/useAuth";
+import { useCan, useCurrentUserId } from "../../hooks/useAuth";
+import { useLanguage } from "../../hooks/useLanguage";
 import { useDeliveries, type DeliveryStop } from "../../hooks/useDeliveries";
 import styles from "./Deliveries.module.css";
 
@@ -26,11 +27,20 @@ export function Deliveries() {
   const navigate = useNavigate();
   const location = useLocation();
   const backTo = (location.state as { from?: string } | null)?.from ?? "/";
-  const currentUserName = useCurrentUserName();
   const userId = useCurrentUserId();
-  const canMarkDelivered = useCan()("dispatch");
+  const can = useCan();
+  const canMarkDelivered = can("dispatch");
+  const canView = can("viewDeliveryRun");
+  const { t } = useLanguage();
 
-  const { stops, loading, error, markDelivered } = useDeliveries(currentUserName);
+  // Defence-in-depth: the route is already wrapped in <Guarded cap="viewDeliveryRun">
+  // (App.tsx), but this survives even if that wrapper is ever dropped in a
+  // refactor — same self-guard pattern as ProductEdit.tsx.
+  useEffect(() => {
+    if (!canView) navigate("/", { replace: true });
+  }, [canView, navigate]);
+
+  const { stops, loading, error, markDelivered } = useDeliveries(userId);
   const [markingId, setMarkingId] = useState<string | null>(null);
 
   async function handleMarkDelivered(stop: DeliveryStop) {
@@ -48,22 +58,22 @@ export function Deliveries() {
       <header className={styles.header}>
         <div className={styles.titleSection}>
           <Button type="button" variant="tertiary" icon="chevronLeft" onClick={() => navigate(backTo)}>
-            Back
+            {t("Back")}
           </Button>
-          <h1 className={styles.title}>Deliveries</h1>
+          <h1 className={styles.title}>{t("Deliveries")}</h1>
         </div>
       </header>
 
       {loading ? (
-        <div className={styles.muted}>Loading deliveries…</div>
+        <div className={styles.muted}>{t("Loading deliveries…")}</div>
       ) : error ? (
         <div className={styles.error}>{error}</div>
       ) : stops.length === 0 ? (
-        <div className={styles.muted}>No stops on your run right now.</div>
+        <div className={styles.muted}>{t("No stops on your run right now.")}</div>
       ) : (
         <>
           <div>
-            <h2 className={styles.sectionLabel}>Next stop</h2>
+            <h2 className={styles.sectionLabel}>{t("Next stop")}</h2>
             <Card className={styles.heroCard}>
               <div className={styles.heroTop}>
                 <div className={styles.heroLeft}>
@@ -85,7 +95,7 @@ export function Deliveries() {
                     {currency.format(nextStop.amount)}
                   </span>
                 ) : (
-                  <span className={styles.noCash}>No Cash</span>
+                  <span className={styles.noCash}>{t("No Cash")}</span>
                 )}
               </div>
               <div className={styles.heroActions}>
@@ -97,7 +107,7 @@ export function Deliveries() {
                   buttonStyle="fullWidth"
                   onClick={() => window.open(mapsUrl(nextStop.address ?? nextStop.customerName), "_blank", "noopener")}
                 >
-                  Navigate
+                  {t("Navigate")}
                 </Button>
                 {canMarkDelivered && (
                   <Button
@@ -109,7 +119,7 @@ export function Deliveries() {
                     disabled={markingId === nextStop.orderId}
                     onClick={() => handleMarkDelivered(nextStop)}
                   >
-                    {markingId === nextStop.orderId ? "Saving…" : "Mark delivered"}
+                    {markingId === nextStop.orderId ? t("Saving…") : t("Mark delivered")}
                   </Button>
                 )}
               </div>
@@ -118,7 +128,7 @@ export function Deliveries() {
 
           {rest.length > 0 && (
             <div>
-              <h2 className={styles.sectionLabel}>Then</h2>
+              <h2 className={styles.sectionLabel}>{t("Then")}</h2>
               <div className={styles.thenList}>
                 {rest.map((stop) => (
                   <Card key={stop.orderId} className={styles.stopCard}>
@@ -136,7 +146,7 @@ export function Deliveries() {
                     {stop.isCOD ? (
                       <span className={styles.codAmountLight}>{currency.format(stop.amount)}</span>
                     ) : (
-                      <span className={styles.noCashLight}>No Cash</span>
+                      <span className={styles.noCashLight}>{t("No Cash")}</span>
                     )}
                     <Button
                       type="button"
@@ -144,7 +154,7 @@ export function Deliveries() {
                       size="sm"
                       icon="navigation"
                       iconOnly
-                      aria-label={`Navigate to ${stop.customerName}`}
+                      aria-label={`${t("Navigate")} — ${stop.customerName}`}
                       onClick={() => window.open(mapsUrl(stop.address ?? stop.customerName), "_blank", "noopener")}
                     />
                   </Card>

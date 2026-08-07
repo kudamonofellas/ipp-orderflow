@@ -19,28 +19,14 @@
   display: flex;
   flex-direction: row;
   gap: var(--space-md);
+  flex: 1;
   color: var(--accent-primary);
 }
 
-.rangeToggle {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-xs);
-  background: var(--bg-surface);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  padding: 6px var(--space-sm);
-  font: var(--text-label);
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition:
-    background-color var(--duration-fast) var(--ease-default),
-    border-color var(--duration-fast) var(--ease-default);
-}
-
-.rangeToggle:hover {
-  background: var(--bg-surface-hover);
-  border-color: var(--accent-primary);
+.rangeButton {
+  width: 100%;
+  min-width: 110px;
+  justify-content: space-between;
 }
 
 .rangeStatic {

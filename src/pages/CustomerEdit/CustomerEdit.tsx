@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { Card } from "../../components/Card/Card";
 import { Button } from "../../components/Button/Button";
 import { useAuth } from "../../hooks/useAuth";
+import { useLanguage } from "../../hooks/useLanguage";
 import {
   readCustomers,
   updateCustomer,
@@ -14,6 +15,7 @@ export function CustomerEdit() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const auth = useAuth();
+  const { t } = useLanguage();
 
   const isNew = id === "new";
   const canEdit = auth.can("manage_customers");
@@ -164,11 +166,11 @@ export function CustomerEdit() {
     }
   };
 
-  if (loading) return <div className={styles.container}>Loading…</div>;
+  if (loading) return <div className={styles.container}>{t("Loading…")}</div>;
   if (error)
     return (
       <div className={styles.container} style={{ color: "var(--state-error)" }}>
-        {error}
+        {t(error)}
       </div>
     );
 
@@ -184,10 +186,10 @@ export function CustomerEdit() {
               icon="chevronLeft"
               onClick={handleCancel}
             >
-              Back to customer
+              {t("Back to customer")}
             </Button>
             <div className={styles.titleRow}>
-              <h2 className={styles.title}>Edit Customer</h2>
+              <h2 className={styles.title}>{t("Edit Customer")}</h2>
             </div>
           </div>
           <div className={styles.actions}>
@@ -197,7 +199,7 @@ export function CustomerEdit() {
               onClick={handleCancel}
               disabled={saving}
             >
-              Cancel
+              {t("Cancel")}
             </Button>
             <Button
               type="button"
@@ -206,20 +208,20 @@ export function CustomerEdit() {
               disabled={!canSave}
               onClick={handleSave}
             >
-              {saving ? "Saving…" : "Save Changes"}
+              {saving ? t("Saving…") : t("Save Changes")}
             </Button>
           </div>
         </header>
 
-        {error && <div className={styles.error}>{error}</div>}
+        {error && <div className={styles.error}>{t(error)}</div>}
 
         {/* ── Identity ── */}
         <Card>
-          <h3 className={styles.heading}>Customer Details</h3>
+          <h3 className={styles.heading}>{t("Customer Details")}</h3>
           <div className={styles.fields}>
             <div className={styles.row}>
               <label className={styles.field}>
-                <span className={styles.label}>Restaurant / Outlet Name *</span>
+                <span className={styles.label}>{t("Restaurant / Outlet Name")} *</span>
                 <input
                   type="text"
                   className={styles.input}
@@ -232,7 +234,7 @@ export function CustomerEdit() {
                 />
               </label>
               <label className={styles.field}>
-                <span className={styles.label}>Company Name (PT / CV for Invoice)</span>
+                <span className={styles.label}>{t("Company Name (PT / CV for Invoice)")}</span>
                 <input
                   type="text"
                   className={styles.input}
@@ -245,21 +247,21 @@ export function CustomerEdit() {
             </div>
             <div className={styles.row}>
               <label className={styles.field}>
-                <span className={styles.label}>Channel</span>
+                <span className={styles.label}>{t("Channel")}</span>
                 <select
                   className={styles.select}
                   value={channel}
                   onChange={(e) => setChannel(e.target.value)}
                   disabled={saving}
                 >
-                  <option value="horeca">Horeca</option>
-                  <option value="b2b">B2B</option>
-                  <option value="retail">Retail</option>
-                  <option value="other">Other</option>
+                  <option value="horeca">{t("Horeca")}</option>
+                  <option value="b2b">{t("B2B")}</option>
+                  <option value="retail">{t("Retail")}</option>
+                  <option value="other">{t("Other")}</option>
                 </select>
               </label>
               <label className={styles.field}>
-                <span className={styles.label}>Area</span>
+                <span className={styles.label}>{t("Area")}</span>
                 <input
                   type="text"
                   className={styles.input}
@@ -271,7 +273,7 @@ export function CustomerEdit() {
               </label>
             </div>
             <label className={styles.field}>
-              <span className={styles.label}>Delivery Address</span>
+              <span className={styles.label}>{t("Delivery Address")}</span>
               <textarea
                 className={styles.input}
                 style={{
@@ -286,7 +288,7 @@ export function CustomerEdit() {
               />
             </label>
             <label className={styles.field}>
-              <span className={styles.label}>Phone / Contact</span>
+              <span className={styles.label}>{t("Phone / Contact")}</span>
               <input
                 type="text"
                 className={styles.input}
@@ -301,12 +303,12 @@ export function CustomerEdit() {
 
         {/* ── Finance ── */}
         <Card>
-          <h3 className={styles.heading}>Finance</h3>
+          <h3 className={styles.heading}>{t("Finance")}</h3>
           <div className={styles.fields}>
 
             <div className={styles.row}>
               <label className={styles.field}>
-                <span className={styles.label}>Sales Rep</span>
+                <span className={styles.label}>{t("Sales Rep")}</span>
                 <input
                   type="text"
                   className={styles.input}
@@ -317,35 +319,35 @@ export function CustomerEdit() {
                 />
               </label>
               <label className={styles.field}>
-                <span className={styles.label}>Payment Timing</span>
+                <span className={styles.label}>{t("Payment Timing")}</span>
                 <select
                   className={styles.select}
                   value={payTiming}
                   onChange={(e) => setPayTiming(e.target.value)}
                   disabled={saving}
                 >
-                  <option value="upfront">Upfront</option>
-                  <option value="cod">COD</option>
-                  <option value="terms">Terms</option>
+                  <option value="upfront">{t("Upfront")}</option>
+                  <option value="cod">{t("COD")}</option>
+                  <option value="terms">{t("Terms")}</option>
                 </select>
               </label>
             </div>
             <div className={styles.row}>
               <label className={styles.field}>
-                <span className={styles.label}>Payment Method</span>
+                <span className={styles.label}>{t("Payment Method")}</span>
                 <select
                   className={styles.select}
                   value={payMethod}
                   onChange={(e) => setPayMethod(e.target.value)}
                   disabled={saving}
                 >
-                  <option value="transfer">Transfer</option>
-                  <option value="cash">Cash</option>
-                  <option value="giro">Giro</option>
+                  <option value="transfer">{t("Transfer")}</option>
+                  <option value="cash">{t("Cash")}</option>
+                  <option value="giro">{t("Giro")}</option>
                 </select>
               </label>
               <label className={styles.field}>
-                <span className={styles.label}>Credit Limit (IDR)</span>
+                <span className={styles.label}>{t("Credit Limit (IDR)")}</span>
                 <input
                   type="text"
                   inputMode="numeric"
@@ -361,7 +363,7 @@ export function CustomerEdit() {
             </div>
             <div className={styles.row}>
               <label className={styles.field}>
-                <span className={styles.label}>Terms (days)</span>
+                <span className={styles.label}>{t("Terms (days)")}</span>
                 <input
                   type="number"
                   className={styles.input}
