@@ -1,24 +1,25 @@
 /**
  * Cash-up — the desk's COD reconciliation queue. Pools every order out for
  * delivery or delivered (not cancelled) whose customer pays COD
- * (`customers.pay_timing === 'cod'`), grouped by the courier holding the
- * cash (`orders.taken_by`), so the desk settles one person at a time.
+ * (`customers.pay_timing === 'cod'`) and hasn't been reconciled yet
+ * (`orders.cod_reconciled`), grouped by the courier holding the cash
+ * (`orders.taken_by`), so the desk settles one person at a time.
  *
  * The per-order amount is the order total (sum of `order_lines` qty×price —
  * same calculation as OrderDetail's `orderTotal`), since neither `orders`
  * nor `delivery_proofs` has a dedicated COD-amount column in the live schema.
  *
- * "Confirm" is intentionally NOT persisted — no `cod_reconciled`-style field
- * exists on `orders` or `delivery_proofs` yet (confirmed against
- * context/schema/snapshot.json), and writing to a field that doesn't exist
- * hard-errors in Directus. Adding that field is schema-first work (a
- * separate unit per ai-workflow-rules.md), so this hook exposes a local,
- * ephemeral `confirm()` — Collected/Remaining update for the current visit
- * only, same pattern as the Pick List checklist.
+ * "Confirm" writes `orders.cod_reconciled = true` for real (added 2026-08-09
+ * — `orders.cod_reconciled` didn't exist on the live schema before that;
+ * Finance's `orders.update` permission was also field-restricted and had to
+ * be extended to allow it, mirroring how `payment_confirmed` is granted).
+ * A matching `order_history` entry is appended, same as every other order
+ * mutation in this app.
  */
 
 import { useEffect, useState } from 'react';
-import { readOrders, readCustomers, readOrderLines, readAllUsers } from '../lib/directus';
+import { readOrders, readCustomers, readOrderLines, readAllUsers, updateOrder, appendOrderHistory } from '../lib/directus';
+import { useCurrentUserId } from './useAuth';
 
 export interface CashUpOrderRow {
   orderId: string;
@@ -39,7 +40,8 @@ interface UseCashUpResult {
   collected: number;
   remaining: number;
   confirmedIds: Set<string>;
-  confirm: (orderId: string) => void;
+  confirmingIds: Set<string>;
+  confirm: (orderId: string) => Promise<{ error: string | null }>;
   loading: boolean;
   error: string | null;
   refetch: () => void;
@@ -56,9 +58,11 @@ function isCOD(payTiming: string | null | undefined): boolean {
 }
 
 export function useCashUp(): UseCashUpResult {
+  const userId = useCurrentUserId();
   const [rows, setRows] = useState<CashUpOrderRow[]>([]);
   const [rowsByCourier, setRowsByCourier] = useState<Map<string, CashUpOrderRow[]>>(new Map());
   const [confirmedIds, setConfirmedIds] = useState<Set<string>>(() => new Set());
+  const [confirmingIds, setConfirmingIds] = useState<Set<string>>(() => new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [nonce, setNonce] = useState(0);
@@ -78,6 +82,7 @@ export function useCashUp(): UseCashUpResult {
             { stage: { _in: ['dispatch', 'delivered'] } },
             { cancelled: { _neq: true } },
             { taken_by: { _nnull: true } },
+            { cod_reconciled: { _neq: true } },
           ],
         },
         fields: ['id', 'no', 'customer_id', 'customer_name', 'taken_by'],
@@ -179,12 +184,30 @@ export function useCashUp(): UseCashUpResult {
     };
   }, [nonce]);
 
-  function confirm(orderId: string) {
-    setConfirmedIds((prev) => {
+  async function confirm(orderId: string): Promise<{ error: string | null }> {
+    setConfirmingIds((prev) => new Set(prev).add(orderId));
+    const res = await updateOrder(orderId, { cod_reconciled: true });
+    if (res.error) {
+      setConfirmingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(orderId);
+        return next;
+      });
+      return { error: res.error };
+    }
+    await appendOrderHistory({
+      order_id: orderId,
+      what: 'COD cash reconciled',
+      who: userId,
+      stage: null,
+    });
+    setConfirmingIds((prev) => {
       const next = new Set(prev);
-      next.add(orderId);
+      next.delete(orderId);
       return next;
     });
+    setConfirmedIds((prev) => new Set(prev).add(orderId));
+    return { error: null };
   }
 
   const groups: CashUpCourierGroup[] = [...rowsByCourier.entries()]
@@ -199,5 +222,5 @@ export function useCashUp(): UseCashUpResult {
   const collected = rows.filter((r) => confirmedIds.has(r.orderId)).reduce((sum, r) => sum + r.amount, 0);
   const remaining = expected - collected;
 
-  return { groups, expected, collected, remaining, confirmedIds, confirm, loading, error, refetch };
+  return { groups, expected, collected, remaining, confirmedIds, confirmingIds, confirm, loading, error, refetch };
 }

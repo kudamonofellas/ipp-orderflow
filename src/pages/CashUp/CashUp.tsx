@@ -35,11 +35,14 @@ export function CashUp() {
     if (!canView) navigate("/", { replace: true });
   }, [canView, navigate]);
 
-  const { groups, expected, collected, remaining, confirmedIds, confirm, loading, error } = useCashUp();
+  const { groups, expected, collected, remaining, confirmedIds, confirmingIds, confirm, loading, error } =
+    useCashUp();
 
-  function handleConfirm(orderId: string, customerName: string, amount: number) {
-    if (window.confirm(`Confirm ${currency.format(amount)} received from ${customerName}?`)) {
-      confirm(orderId);
+  async function handleConfirm(orderId: string, customerName: string, amount: number) {
+    if (!window.confirm(`Confirm ${currency.format(amount)} received from ${customerName}?`)) return;
+    const res = await confirm(orderId);
+    if (res.error) {
+      window.alert(`Failed to confirm: ${res.error}`);
     }
   }
 
@@ -83,6 +86,7 @@ export function CashUp() {
             <Card flush className={styles.ordersCard}>
               {group.orders.map((o) => {
                 const isConfirmed = confirmedIds.has(o.orderId);
+                const isConfirming = confirmingIds.has(o.orderId);
                 return (
                   <div
                     key={o.orderId}
@@ -98,10 +102,10 @@ export function CashUp() {
                       variant="secondary"
                       size="sm"
                       icon="tick"
-                      disabled={isConfirmed}
+                      disabled={isConfirmed || isConfirming}
                       onClick={() => handleConfirm(o.orderId, o.customerName, o.amount)}
                     >
-                      {isConfirmed ? t("Confirmed") : t("Confirm")}
+                      {isConfirmed ? t("Confirmed") : isConfirming ? t("Saving…") : t("Confirm")}
                     </Button>
                   </div>
                 );

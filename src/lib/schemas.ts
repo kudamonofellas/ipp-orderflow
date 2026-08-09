@@ -52,6 +52,7 @@ export const OrdersCollectionSchema = z.object({
   pickup: z.boolean().nullable().optional(),
   third_party: z.boolean().nullable().optional(),
   payment_confirmed: z.boolean().nullable().optional(),
+  cod_reconciled: z.boolean().nullable().optional(),
   docs_returned: z.boolean().nullable().optional(),
   return_received: z.boolean().nullable().optional(),
   return_settle: z.string().nullable().optional(),

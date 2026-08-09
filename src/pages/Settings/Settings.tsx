@@ -8,6 +8,7 @@ import { useAuth, useCurrentUserName } from "../../hooks/useAuth";
 import { useLanguage } from "../../hooks/useLanguage";
 import { useSettings } from "../../hooks/useSettings";
 import { useTeamSettings } from "../../hooks/useTeamSettings";
+import { useCorrections } from "../../hooks/useCorrections";
 import {
   updateTeamMember,
   deleteTeamMember,
@@ -35,6 +36,13 @@ export function Settings() {
   const { role, logout, can, refreshPermissions } = auth;
   const name = useCurrentUserName();
   const { settings, learnedMatches, loading, error, update } = useSettings();
+  const {
+    rows: correctionRows,
+    loading: correctionsLoading,
+    error: correctionsError,
+    deletingIds: deletingCorrectionIds,
+    remove: removeCorrection,
+  } = useCorrections();
   const { lang, setLang, t } = useLanguage();
   const {
     members,
@@ -114,6 +122,18 @@ export function Settings() {
     }
     setEditingId(null);
     reloadTeam();
+  }
+
+  async function handleDeleteCorrection(id: string, tokenKey: string) {
+    if (
+      !window.confirm(`${t("Remove learned match")} "${tokenKey}"? ${t("This cannot be undone.")}`)
+    ) {
+      return;
+    }
+    const res = await removeCorrection(id);
+    if (res.error) {
+      window.alert(res.error);
+    }
   }
 
   async function handleToggleActive(m: TeamMember, nextActive: boolean) {
@@ -389,12 +409,56 @@ export function Settings() {
               </span>
               <span className={styles.rowNote}>
                 {t(
-                  "Shared knowledge base — every correction your team makes is kept and reused. Cannot be cleared.",
+                  "Shared knowledge base — every correction your team makes is kept and reused, reviewed here.",
                 )}
               </span>
             </div>
           </div>
         </Card>
+
+        {correctionsLoading ? (
+          <div className={styles.muted}>{t("Loading learned matches…")}</div>
+        ) : correctionsError ? (
+          <div className={styles.error}>{correctionsError}</div>
+        ) : correctionRows.length === 0 ? (
+          <div className={styles.muted}>{t("No learned matches yet.")}</div>
+        ) : (
+          <Card className={styles.correctionsCard} flush>
+            {correctionRows.map((c) => (
+              <div key={c.id} className={styles.correctionRow}>
+                <div className={styles.correctionInfo}>
+                  <span className={styles.correctionToken}>
+                    "{c.tokenKey}"<span className={styles.correctionArrow}>→</span>
+                    {c.productName}
+                  </span>
+                  <span className={styles.correctionMeta}>
+                    {t("Added by")} {c.createdBy}
+                    {c.dateCreated ? ` · ${new Date(c.dateCreated).toLocaleDateString("en-US")}` : ""}
+                  </span>
+                </div>
+                <div className={styles.correctionRight}>
+                  <span className={styles.correctionCount}>
+                    {c.timesUsed} {c.timesUsed === 1 ? t("use") : t("uses")}
+                  </span>
+                  {canManageSettings && (
+                    <Button
+                      type="button"
+                      variant="tertiary"
+                      size="sm"
+                      iconOnly
+                      icon="trash"
+                      title={t("Remove learned match")}
+                      disabled={deletingCorrectionIds.has(c.id)}
+                      onClick={() => handleDeleteCorrection(c.id, c.tokenKey)}
+                    >
+                      {t("Remove")}
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </Card>
+        )}
       </section>
 
       {loading ? (

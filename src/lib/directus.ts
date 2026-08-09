@@ -39,6 +39,7 @@ import {
   CustomersCollectionSchema,
   CustomersCollectionArraySchema,
   CorrectionsCollectionSchema,
+  CorrectionsCollectionArraySchema,
   MessagesCollectionArraySchema,
   OrderHistoryCollectionSchema,
   OrderHistoryCollectionArraySchema,
@@ -63,6 +64,7 @@ import {
   LineReturnPhotosCollectionArraySchema,
   ReturnDocumentsCollectionSchema,
   ReturnDocumentsCollectionArraySchema,
+  DeliveryProofsCollectionSchema,
   DeliveryProofsCollectionArraySchema,
   SettingsCollectionSchema,
 } from "./schemas";
@@ -1475,6 +1477,72 @@ export async function readDeliveryProofs(
       };
     }
     return { data: parsed.data, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+export interface CreateDeliveryProofInput {
+  order_id: string;
+  cond_photo?: string | null;
+  recv_photo?: string | null;
+  signed_photo?: string | null;
+  cod?: boolean;
+  name?: string | null; // receiver's name
+}
+
+/** Records a courier's delivery-confirmation proof set. */
+export async function createDeliveryProof(
+  input: CreateDeliveryProofInput,
+): Promise<DirectusResult<DeliveryProofsCollection>> {
+  try {
+    const raw = await getClient().request(
+      createItem("delivery_proofs", input as never),
+    );
+    const parsed = DeliveryProofsCollectionSchema.safeParse(raw);
+    if (!parsed.success) {
+      return {
+        data: null,
+        error: `Invalid delivery_proofs response: ${parsed.error.message}`,
+      };
+    }
+    return { data: parsed.data, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+/** Read every learned correction (intake parser's token_key → product_id map), most-used first. */
+export async function readCorrections(): Promise<
+  DirectusResult<CorrectionsCollection[]>
+> {
+  try {
+    const raw = await getClient().request(
+      readItems("corrections", {
+        sort: ["-times_used"] as never,
+        limit: -1,
+      }),
+    );
+    const parsed = CorrectionsCollectionArraySchema.safeParse(raw);
+    if (!parsed.success) {
+      return {
+        data: null,
+        error: `Invalid corrections response: ${parsed.error.message}`,
+      };
+    }
+    return { data: parsed.data, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+/** Delete a learned correction (forgets a bad token→product mapping). */
+export async function deleteCorrection(
+  id: string,
+): Promise<DirectusResult<void>> {
+  try {
+    await getClient().request(deleteItem("corrections", id));
+    return { data: undefined, error: null };
   } catch (err) {
     return { data: null, error: errMsg(err) };
   }

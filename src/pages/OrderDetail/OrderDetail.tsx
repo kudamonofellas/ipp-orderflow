@@ -6,6 +6,7 @@ import { Button } from "../../components/Button/Button";
 import { Avatar } from "../../components/Avatar/Avatar";
 import { useAuth, useCurrentUserId } from "../../hooks/useAuth";
 import { useLanguage } from "../../hooks/useLanguage";
+import { useSettings } from "../../hooks/useSettings";
 import { getInitials } from "../../lib/initials";
 import {
   readOrder,
@@ -35,6 +36,7 @@ import {
   createLineReturnPhoto,
   readReturnDocuments,
   createReturnDocument,
+  createDeliveryProof,
 } from "../../lib/directus";
 import type {
   OrdersCollection,
@@ -197,6 +199,8 @@ export function OrderDetail() {
   const auth = useAuth();
   const userId = useCurrentUserId();
   const { t } = useLanguage();
+  const { settings: opsSettings } = useSettings();
+  const proofRequired = opsSettings?.dispatch_proof_required === true;
 
   /* ── data state ── */
   const [order, setOrder] = useState<OrdersCollection | null>(null);
@@ -245,6 +249,18 @@ export function OrderDetail() {
   const [confirmingSettle, setConfirmingSettle] = useState(false);
   const [signedDocFileId, setSignedDocFileId] = useState<string | null>(null);
   const [closingSigned, setClosingSigned] = useState(false);
+
+  /* ── delivery proof (Mark as Delivered) state ── */
+  const [showDeliveryProofForm, setShowDeliveryProofForm] = useState(false);
+  const [condPhoto, setCondPhoto] = useState<{ fileId: string; url: string } | null>(null);
+  const [recvPhoto, setRecvPhoto] = useState<{ fileId: string; url: string } | null>(null);
+  const [signedProofPhoto, setSignedProofPhoto] = useState<{ fileId: string; url: string } | null>(null);
+  const [receiverName, setReceiverName] = useState("");
+  const [proofCod, setProofCod] = useState(false);
+  const [uploadingProofSlot, setUploadingProofSlot] = useState<
+    "cond" | "recv" | "signed" | null
+  >(null);
+  const [submittingProof, setSubmittingProof] = useState(false);
 
   /* ── document form ── */
   const [docType, setDocType] = useState<string>("DO");
@@ -796,6 +812,84 @@ export function OrderDetail() {
       window.alert(`Failed to send back: ${res.error}`);
     }
     setAdvancing(false);
+  }
+
+  /** Opens the delivery-proof capture form, defaulting COD from the customer's pay_timing. */
+  function openDeliveryProofForm() {
+    setCondPhoto(null);
+    setRecvPhoto(null);
+    setSignedProofPhoto(null);
+    setReceiverName("");
+    setProofCod(matchedCustomer?.pay_timing === "cod");
+    setShowDeliveryProofForm(true);
+  }
+
+  async function handleUploadProofPhoto(
+    slot: "cond" | "recv" | "signed",
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingProofSlot(slot);
+    const uploadRes = await uploadFile(file);
+    setUploadingProofSlot(null);
+    if (uploadRes.error || !uploadRes.data) {
+      window.alert(`Photo upload failed: ${uploadRes.error}`);
+      e.target.value = "";
+      return;
+    }
+    const photo = { fileId: uploadRes.data.id, url: getAssetUrl(uploadRes.data.id) };
+    if (slot === "cond") setCondPhoto(photo);
+    else if (slot === "recv") setRecvPhoto(photo);
+    else setSignedProofPhoto(photo);
+    e.target.value = "";
+  }
+
+  /** Records the courier's delivery-confirmation proof set, then advances the order to Delivered. */
+  async function handleConfirmDelivery() {
+    if (!id || submittingProof) return;
+    if (proofRequired && (!condPhoto || !recvPhoto || !signedProofPhoto)) {
+      window.alert(
+        t(
+          "Condition, receiver, and signed-invoice photos are all required before marking delivered.",
+        ),
+      );
+      return;
+    }
+    if (!receiverName.trim()) {
+      window.alert(t("Enter the receiver's name."));
+      return;
+    }
+    setSubmittingProof(true);
+    const proofRes = await createDeliveryProof({
+      order_id: id,
+      cond_photo: condPhoto?.fileId ?? null,
+      recv_photo: recvPhoto?.fileId ?? null,
+      signed_photo: signedProofPhoto?.fileId ?? null,
+      cod: proofCod,
+      name: receiverName.trim(),
+    });
+    if (proofRes.error) {
+      window.alert(`Failed to save delivery proof: ${proofRes.error}`);
+      setSubmittingProof(false);
+      return;
+    }
+    const res = await updateOrder(id, { stage: "delivered" });
+    if (!res.error && res.data) {
+      setOrder(res.data);
+      await appendOrderHistory({
+        order_id: id,
+        what: `Stage advanced: ${stage} → delivered`,
+        who: userId,
+        stage: "delivered",
+      });
+      const hRes = await readOrderHistory(id);
+      if (!hRes.error) setHistory(hRes.data ?? []);
+      setShowDeliveryProofForm(false);
+    } else {
+      window.alert(`Failed to advance stage: ${res.error}`);
+    }
+    setSubmittingProof(false);
   }
 
   async function handleCancel() {
@@ -1900,12 +1994,12 @@ export function OrderDetail() {
               <div
                 style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}
               >
-                {flow?.next && canAdvance && (
+                {flow?.next && canAdvance && !(stage === "dispatch" && showDeliveryProofForm) && (
                   <Button
                     type="button"
                     variant="primary"
                     size="lg"
-                    onClick={handleAdvance}
+                    onClick={stage === "dispatch" ? openDeliveryProofForm : handleAdvance}
                     disabled={advancing}
                     className={styles.actionBtn}
                   >
@@ -1937,6 +2031,86 @@ export function OrderDetail() {
                   </Button>
                 )}
               </div>
+
+              {showDeliveryProofForm && (
+                <Card style={{ marginTop: "0.75rem" }}>
+                  <div className={styles.heading}>
+                    <span>{t("Delivery proof")}</span>
+                  </div>
+                  <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", marginBottom: "0.75rem" }}>
+                    {(
+                      [
+                        { slot: "cond" as const, label: t("Condition photo"), photo: condPhoto },
+                        { slot: "recv" as const, label: t("Receiver photo"), photo: recvPhoto },
+                        {
+                          slot: "signed" as const,
+                          label: proofRequired ? t("Signed doc") : t("Signed doc (optional)"),
+                          photo: signedProofPhoto,
+                        },
+                      ]
+                    ).map(({ slot, label, photo }) => (
+                      <div key={slot} style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
+                        <span className="tiny muted">{label}</span>
+                        <label
+                          className={styles.actionBtn}
+                          style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: "0.5rem" }}
+                        >
+                          <input
+                            type="file"
+                            accept="image/*"
+                            style={{ display: "none" }}
+                            onChange={(e) => handleUploadProofPhoto(slot, e)}
+                          />
+                          <Icon name="camera" size={16} />
+                          {uploadingProofSlot === slot ? t("Uploading…") : t("Upload")}
+                        </label>
+                        {photo && (
+                          <img
+                            src={photo.url}
+                            alt=""
+                            className={styles.thumbnailImg}
+                            style={{ width: 64, height: 64 }}
+                          />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <input
+                    type="text"
+                    className={styles.editInput}
+                    placeholder={t("Receiver's name")}
+                    value={receiverName}
+                    onChange={(e) => setReceiverName(e.target.value)}
+                    style={{ width: "100%", marginBottom: "0.75rem" }}
+                  />
+                  <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.75rem" }}>
+                    <input
+                      type="checkbox"
+                      checked={proofCod}
+                      onChange={(e) => setProofCod(e.target.checked)}
+                    />
+                    {t("COD collected")}
+                  </label>
+                  <div style={{ display: "flex", gap: "0.75rem" }}>
+                    <Button
+                      type="button"
+                      variant="primary"
+                      onClick={handleConfirmDelivery}
+                      disabled={submittingProof}
+                    >
+                      {submittingProof ? t("Saving…") : t("Confirm delivery")}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => setShowDeliveryProofForm(false)}
+                      disabled={submittingProof}
+                    >
+                      {t("Cancel")}
+                    </Button>
+                  </div>
+                </Card>
+              )}
 
               {showRefuseForm && (
                 <Card style={{ marginTop: "0.75rem" }}>
