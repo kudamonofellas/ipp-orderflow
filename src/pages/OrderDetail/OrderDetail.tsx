@@ -4,6 +4,8 @@ import { Card } from "../../components/Card/Card";
 import { Icon } from "../../components/Icon/Icon";
 import { Button } from "../../components/Button/Button";
 import { Avatar } from "../../components/Avatar/Avatar";
+import { CourierLiveLocation } from "../../components/CourierLiveLocation/CourierLiveLocation";
+import { useDriverLive } from "../../components/CourierLiveLocation/useDriverLive";
 import { useAuth, useCurrentUserId } from "../../hooks/useAuth";
 import { useLanguage } from "../../hooks/useLanguage";
 import { useSettings } from "../../hooks/useSettings";
@@ -48,7 +50,11 @@ import type {
   LineCutsCollection,
   ReturnDocumentsCollection,
 } from "../../types/directus";
-import { ACTOR, returnBucketsForOrder, type ReturnStage } from "../../lib/pipeline";
+import {
+  ACTOR,
+  returnBucketsForOrder,
+  type ReturnStage,
+} from "../../lib/pipeline";
 import { ImageDetailsModal } from "../../components/ImageDetailsModal/ImageDetailsModal";
 import styles from "./OrderDetail.module.css";
 
@@ -58,10 +64,26 @@ import styles from "./OrderDetail.module.css";
  * closes. Ported from the prototype's RETURN_DOC_OPTIONS (OrderDetail.jsx).
  */
 const RETURN_DOC_OPTIONS = [
-  { key: "return-note", label: "Sales Return Note (no replacement)", replacement: false },
-  { key: "revise-return", label: "Revise DO/SI — return only", replacement: false },
-  { key: "single-replace", label: "Revised DO/SI — return + replacement", replacement: true },
-  { key: "separate-replace", label: "Sales Return Note + replacement with new DO/SI", replacement: true },
+  {
+    key: "return-note",
+    label: "Sales Return Note (no replacement)",
+    replacement: false,
+  },
+  {
+    key: "revise-return",
+    label: "Revise DO/SI — return only",
+    replacement: false,
+  },
+  {
+    key: "single-replace",
+    label: "Revised DO/SI — return + replacement",
+    replacement: true,
+  },
+  {
+    key: "separate-replace",
+    label: "Sales Return Note + replacement with new DO/SI",
+    replacement: true,
+  },
 ] as const;
 
 /* ─────────────────────────────────────── pipeline definition ── */
@@ -153,6 +175,15 @@ const STAGE_FLOW: Record<
 
 const DOC_TYPES = ["DO", "SI", "Return Note", "PO", "Other"] as const;
 
+/** 3rd-party hand-off service options — brand names, not translated. */
+const THIRD_PARTY_SERVICES = [
+  "Gojek",
+  "Grab",
+  "Paxel",
+  "Lalamove",
+  "Other",
+] as const;
+
 /* ─────────────────────────────────────── helpers ── */
 
 const currency = new Intl.NumberFormat("id-ID", {
@@ -195,12 +226,14 @@ export function OrderDetail() {
    *  Dashboard, a customer's order history, a notification). Falls back to
    *  the orders list rather than `navigate(-1)`, which can land on an
    *  intermediate page like the just-submitted "New Order" form. */
-  const backTo = (location.state as { from?: string } | null)?.from ?? "/orders";
+  const backTo =
+    (location.state as { from?: string } | null)?.from ?? "/orders";
   const auth = useAuth();
   const userId = useCurrentUserId();
   const { t } = useLanguage();
   const { settings: opsSettings } = useSettings();
   const proofRequired = opsSettings?.dispatch_proof_required === true;
+  const requirePhoto = opsSettings?.require_photo === true;
 
   /* ── data state ── */
   const [order, setOrder] = useState<OrdersCollection | null>(null);
@@ -243,18 +276,36 @@ export function OrderDetail() {
     Record<string, { id: string; fileId: string; url: string }[]>
   >({});
   const [submittingRefusal, setSubmittingRefusal] = useState(false);
-  const [receiveQtyMap, setReceiveQtyMap] = useState<Record<string, string>>({});
+  const [receiveQtyMap, setReceiveQtyMap] = useState<Record<string, string>>(
+    {},
+  );
   const [confirmingReceive, setConfirmingReceive] = useState(false);
   const [selectedDocType, setSelectedDocType] = useState<string>("");
   const [confirmingSettle, setConfirmingSettle] = useState(false);
   const [signedDocFileId, setSignedDocFileId] = useState<string | null>(null);
   const [closingSigned, setClosingSigned] = useState(false);
 
-  /* ── delivery proof (Mark as Delivered) state ── */
-  const [showDeliveryProofForm, setShowDeliveryProofForm] = useState(false);
-  const [condPhoto, setCondPhoto] = useState<{ fileId: string; url: string } | null>(null);
-  const [recvPhoto, setRecvPhoto] = useState<{ fileId: string; url: string } | null>(null);
-  const [signedProofPhoto, setSignedProofPhoto] = useState<{ fileId: string; url: string } | null>(null);
+  /* ── hand-off mode chooser (dispatch stage) ── */
+  const [choosingMode, setChoosingMode] = useState(false);
+  const [showThirdPartyForm, setShowThirdPartyForm] = useState(false);
+  const [thirdPartyService, setThirdPartyService] = useState<string>(
+    THIRD_PARTY_SERVICES[0],
+  );
+  const [thirdPartyRef, setThirdPartyRef] = useState("");
+
+  /* ── delivery proof (Mark as Delivered / picked up / handed over) state ── */
+  const [condPhoto, setCondPhoto] = useState<{
+    fileId: string;
+    url: string;
+  } | null>(null);
+  const [recvPhoto, setRecvPhoto] = useState<{
+    fileId: string;
+    url: string;
+  } | null>(null);
+  const [signedProofPhoto, setSignedProofPhoto] = useState<{
+    fileId: string;
+    url: string;
+  } | null>(null);
   const [receiverName, setReceiverName] = useState("");
   const [proofCod, setProofCod] = useState(false);
   const [uploadingProofSlot, setUploadingProofSlot] = useState<
@@ -410,6 +461,16 @@ export function OrderDetail() {
     };
   }, [id]);
 
+  // Silent GPS publisher — only active for the courier who owns this
+  // dispatch-stage delivery. Called unconditionally (before the loading/error
+  // guards below) per the Rules of Hooks; `order` may still be null here, so
+  // every field access is optional-chained.
+  useDriverLive(
+    order?.stage === "dispatch" &&
+      !!order?.taken_by &&
+      order.taken_by === userId,
+  );
+
   /* ────────────── guards ── */
   if (loading)
     return <div className={styles.muted}>{t("Loading order details…")}</div>;
@@ -456,6 +517,18 @@ export function OrderDetail() {
   const canProcessReturns = auth.can("processReturns");
   const canSeePrices = auth.can("seePrices");
   const canSeeCustomerContact = auth.can("seeCustomerContact");
+  const canConfirmDocsReturned = auth.can("confirmDocsReturned");
+  const canTrackCourier = auth.can("trackCourier");
+
+  // Hand-off mode at the dispatch stage — null until the courier/dispatcher
+  // picks one of the 3 ways this order leaves the building.
+  const handoffMode: "delivery" | "pickup" | "third" | null = order.taken_by
+    ? "delivery"
+    : order.pickup
+      ? "pickup"
+      : order.third_party
+        ? "third"
+        : null;
 
   // Who currently "has the ball" for this stage (ported from the prototype's
   // ACTOR — see F-04-adjacent "Stage → actor" gap in prototype-audit.md).
@@ -465,7 +538,12 @@ export function OrderDetail() {
   const stageActor = ACTOR[stage];
   const isStageActor = auth.role === "Owner" || auth.role === stageActor;
   const showActorNotice =
-    !!stageActor && !isStageActor && !canAdvance && !isCancelled && !isDelivered && !isReturned;
+    !!stageActor &&
+    !isStageActor &&
+    !canAdvance &&
+    !isCancelled &&
+    !isDelivered &&
+    !isReturned;
 
   /* ────────────── Returns sub-flow: which parallel bucket(s) is this order in? ── */
   const returnBuckets: ReturnStage[] = returnBucketsForOrder({
@@ -776,6 +854,19 @@ export function OrderDetail() {
   /* ────────────── Stage Flow Actions ── */
   async function handleAdvance() {
     if (!id || !flow?.next || advancing) return;
+    if (stage === "cold" && requirePhoto) {
+      const hasAnyItemPhoto = lines.some(
+        (line) => line.id && (itemPhotosMap[line.id]?.length ?? 0) > 0,
+      );
+      if (!hasAnyItemPhoto) {
+        window.alert(
+          t(
+            "Attach at least one item photo before releasing from Cold Storage.",
+          ),
+        );
+        return;
+      }
+    }
     setAdvancing(true);
     const res = await updateOrder(id, { stage: flow.next });
     if (!res.error && res.data) {
@@ -815,13 +906,85 @@ export function OrderDetail() {
   }
 
   /** Opens the delivery-proof capture form, defaulting COD from the customer's pay_timing. */
-  function openDeliveryProofForm() {
+  function resetProofState() {
     setCondPhoto(null);
     setRecvPhoto(null);
     setSignedProofPhoto(null);
     setReceiverName("");
     setProofCod(matchedCustomer?.pay_timing === "cod");
-    setShowDeliveryProofForm(true);
+  }
+
+  /** Writes a hand-off field patch + history entry, then resets the proof form for the new mode. */
+  async function commitHandoff(
+    patch: Record<string, unknown>,
+    historyWhat: string,
+  ) {
+    if (!id || choosingMode) return;
+    setChoosingMode(true);
+    const res = await updateOrder(id, patch);
+    if (!res.error && res.data) {
+      setOrder(res.data);
+      await appendOrderHistory({
+        order_id: id,
+        what: historyWhat,
+        who: userId,
+        stage,
+      });
+      const hRes = await readOrderHistory(id);
+      if (!hRes.error) setHistory(hRes.data ?? []);
+      resetProofState();
+      setShowThirdPartyForm(false);
+    } else {
+      window.alert(`Failed to record hand-off: ${res.error}`);
+    }
+    setChoosingMode(false);
+  }
+
+  function handleChooseOwnCourier() {
+    commitHandoff({ taken_by: userId }, "Handover: own courier");
+  }
+
+  function handleChoosePickup() {
+    commitHandoff({ pickup: true }, "Handover: customer pickup");
+  }
+
+  function handleConfirmThirdParty() {
+    const service = `${thirdPartyService}${thirdPartyRef.trim() ? ` · ${thirdPartyRef.trim()}` : ""}`;
+    commitHandoff(
+      { third_party: true, courier_service: service },
+      `Handover: 3rd-party — ${service}`,
+    );
+  }
+
+  /** Resets the hand-off choice back to the 3-way chooser — proof photos already taken are kept. */
+  function handleChangeMethod() {
+    commitHandoff(
+      {
+        taken_by: null,
+        pickup: false,
+        third_party: false,
+        courier_service: null,
+      },
+      "Handover method reset",
+    );
+  }
+
+  async function handleConfirmDocsReturned() {
+    if (!id) return;
+    const res = await updateOrder(id, { docs_returned: true });
+    if (!res.error && res.data) {
+      setOrder(res.data);
+      await appendOrderHistory({
+        order_id: id,
+        what: "DO/SI returned & filed",
+        who: userId,
+        stage,
+      });
+      const hRes = await readOrderHistory(id);
+      if (!hRes.error) setHistory(hRes.data ?? []);
+    } else {
+      window.alert(`Failed to confirm documents returned: ${res.error}`);
+    }
   }
 
   async function handleUploadProofPhoto(
@@ -838,21 +1001,36 @@ export function OrderDetail() {
       e.target.value = "";
       return;
     }
-    const photo = { fileId: uploadRes.data.id, url: getAssetUrl(uploadRes.data.id) };
+    const photo = {
+      fileId: uploadRes.data.id,
+      url: getAssetUrl(uploadRes.data.id),
+    };
     if (slot === "cond") setCondPhoto(photo);
     else if (slot === "recv") setRecvPhoto(photo);
     else setSignedProofPhoto(photo);
     e.target.value = "";
   }
 
-  /** Records the courier's delivery-confirmation proof set, then advances the order to Delivered. */
+  /**
+   * Records the courier/dispatcher's proof set, then advances the order to
+   * Delivered. Requirements vary by hand-off mode: a 3rd-party courier only
+   * ever needs the handover/condition photo (the service — not this app —
+   * owns the rest of that hand-off); own-courier and customer-pickup both
+   * need the full set whenever `proofRequired` is on.
+   */
   async function handleConfirmDelivery() {
     if (!id || submittingProof) return;
-    if (proofRequired && (!condPhoto || !recvPhoto || !signedProofPhoto)) {
+    const photosOk =
+      handoffMode === "third"
+        ? !!condPhoto
+        : !proofRequired || (!!condPhoto && !!recvPhoto && !!signedProofPhoto);
+    if (!photosOk) {
       window.alert(
-        t(
-          "Condition, receiver, and signed-invoice photos are all required before marking delivered.",
-        ),
+        handoffMode === "third"
+          ? t("A handover photo is required before marking handed over.")
+          : t(
+              "Condition, receiver, and signed-invoice photos are all required before marking delivered.",
+            ),
       );
       return;
     }
@@ -866,7 +1044,7 @@ export function OrderDetail() {
       cond_photo: condPhoto?.fileId ?? null,
       recv_photo: recvPhoto?.fileId ?? null,
       signed_photo: signedProofPhoto?.fileId ?? null,
-      cod: proofCod,
+      cod: handoffMode === "third" ? false : proofCod,
       name: receiverName.trim(),
     });
     if (proofRes.error) {
@@ -885,7 +1063,6 @@ export function OrderDetail() {
       });
       const hRes = await readOrderHistory(id);
       if (!hRes.error) setHistory(hRes.data ?? []);
-      setShowDeliveryProofForm(false);
     } else {
       window.alert(`Failed to advance stage: ${res.error}`);
     }
@@ -1040,7 +1217,9 @@ export function OrderDetail() {
     });
     if (!res.error && res.data) {
       setOrder(res.data);
-      const linesRes = await readOrderLines({ filter: { order_id: { _eq: id } } });
+      const linesRes = await readOrderLines({
+        filter: { order_id: { _eq: id } },
+      });
       if (!linesRes.error) setLines(linesRes.data ?? []);
       await appendOrderHistory({
         order_id: id,
@@ -1098,10 +1277,15 @@ export function OrderDetail() {
         return;
       }
     }
-    const res = await updateOrder(id, { return_received: true, return_inbound: false });
+    const res = await updateOrder(id, {
+      return_received: true,
+      return_inbound: false,
+    });
     if (!res.error && res.data) {
       setOrder(res.data);
-      const linesRes = await readOrderLines({ filter: { order_id: { _eq: id } } });
+      const linesRes = await readOrderLines({
+        filter: { order_id: { _eq: id } },
+      });
       if (!linesRes.error) setLines(linesRes.data ?? []);
       await appendOrderHistory({
         order_id: id,
@@ -1142,7 +1326,9 @@ export function OrderDetail() {
       });
       if (!res.error && res.data) {
         setOrder(res.data);
-        const linesRes = await readOrderLines({ filter: { order_id: { _eq: id } } });
+        const linesRes = await readOrderLines({
+          filter: { order_id: { _eq: id } },
+        });
         if (!linesRes.error) setLines(linesRes.data ?? []);
         await appendOrderHistory({
           order_id: id,
@@ -1156,7 +1342,10 @@ export function OrderDetail() {
         window.alert(`Failed to process the replacement: ${res.error}`);
       }
     } else if (doc.key === "revise-return") {
-      const res = await updateOrder(id, { return_doc: doc.label, return_settle: "sign" });
+      const res = await updateOrder(id, {
+        return_doc: doc.label,
+        return_settle: "sign",
+      });
       if (!res.error && res.data) {
         setOrder(res.data);
         await appendOrderHistory({
@@ -1172,7 +1361,10 @@ export function OrderDetail() {
       }
     } else {
       // return-note: nothing physical goes out — closes immediately.
-      const res = await updateOrder(id, { return_doc: doc.label, return_settle: "done" });
+      const res = await updateOrder(id, {
+        return_doc: doc.label,
+        return_settle: "done",
+      });
       if (!res.error && res.data) {
         setOrder(res.data);
         await appendOrderHistory({
@@ -1339,7 +1531,9 @@ export function OrderDetail() {
               </Button>
 
               <div className={styles.titleRow}>
-                <h3 className={styles.title}>{t("Order")} {order.no}</h3>
+                <h3 className={styles.title}>
+                  {t("Order")} {order.no}
+                </h3>
                 {isCancelled && (
                   <span
                     style={{
@@ -1530,18 +1724,7 @@ export function OrderDetail() {
                 <div className={styles.detailItem}>
                   <span className={styles.detailLabel}>{t("Contact")}</span>
                   <span className={styles.detailValue}>
-                    {order.customer_contact ?? "—"}
-                  </span>
-                </div>
-              )}
-              {canSeeCustomerContact && order.customer_address && (
-                <div
-                  className={styles.detailItem}
-                  style={{ gridColumn: "1 / -1" }}
-                >
-                  <span className={styles.detailLabel}>{t("Address")}</span>
-                  <span className={styles.detailValue}>
-                    {order.customer_address}
+                    {order.customer_contact || matchedCustomer?.contact || "—"}
                   </span>
                 </div>
               )}
@@ -1775,6 +1958,19 @@ export function OrderDetail() {
                           onChange={(e) => handleUploadItemPhoto(line.id, e)}
                         />
                       </label>
+                      {stage === "cold" &&
+                        requirePhoto &&
+                        itemPhotos.length === 0 && (
+                          <span
+                            className="tiny"
+                            style={{
+                              color: "var(--state-warning)",
+                              marginLeft: "0.5rem",
+                            }}
+                          >
+                            {t("Needs photo")}
+                          </span>
+                        )}
                       {itemPhotos.length > 0 && (
                         <div
                           className={styles.thumbnailsContainer}
@@ -1982,9 +2178,35 @@ export function OrderDetail() {
             )}
           </Card>
 
+          {isDelivered && !order.docs_returned && canConfirmDocsReturned && (
+            <Card style={{ marginTop: "0.75rem" }}>
+              <div className={styles.heading}>
+                <span>{t("Signed DO & SI returned?")}</span>
+              </div>
+              <p className="tiny muted">
+                {t(
+                  "Make sure the signed Delivery Order & Sales Invoice come back to the office and are filed.",
+                )}
+              </p>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={handleConfirmDocsReturned}
+              >
+                {t("Confirm signed DO & SI returned")}
+              </Button>
+            </Card>
+          )}
+          {isDelivered && order.docs_returned && (
+            <p className="tiny muted" style={{ margin: "0.5rem 0" }}>
+              ✓ {t("Signed DO & SI returned")}
+            </p>
+          )}
+
           {showActorNotice && (
             <div className={styles.actorNotice}>
-              {t("This order is currently with")} <strong>{t(stageActor ?? "")}</strong>.
+              {t("This order is currently with")}{" "}
+              <strong>{t(stageActor ?? "")}</strong>.
             </div>
           )}
 
@@ -1994,12 +2216,12 @@ export function OrderDetail() {
               <div
                 style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}
               >
-                {flow?.next && canAdvance && !(stage === "dispatch" && showDeliveryProofForm) && (
+                {flow?.next && canAdvance && stage !== "dispatch" && (
                   <Button
                     type="button"
                     variant="primary"
                     size="lg"
-                    onClick={stage === "dispatch" ? openDeliveryProofForm : handleAdvance}
+                    onClick={handleAdvance}
                     disabled={advancing}
                     className={styles.actionBtn}
                   >
@@ -2015,7 +2237,9 @@ export function OrderDetail() {
                     disabled={advancing}
                     className={styles.actionBtn}
                   >
-                    {flow.sendBackLabel ? t(flow.sendBackLabel) : t("Send Back")}
+                    {flow.sendBackLabel
+                      ? t(flow.sendBackLabel)
+                      : t("Send Back")}
                   </Button>
                 )}
                 {stage === "dispatch" && canAdvance && !showRefuseForm && (
@@ -2032,28 +2256,148 @@ export function OrderDetail() {
                 )}
               </div>
 
-              {showDeliveryProofForm && (
+              {/* Hand-off mode chooser — dispatch stage, no mode picked yet */}
+              {stage === "dispatch" && canAdvance && !handoffMode && (
+                <Card>
+                  <div className={styles.heading}>{t("Delivery")} </div>
+                  <div className={styles.deliveryActions}>
+                    <Button
+                      type="button"
+                      variant="primary"
+                      icon="navigation"
+                      onClick={handleChooseOwnCourier}
+                      disabled={choosingMode}
+                    >
+                      {t("Take this delivery")}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={handleChoosePickup}
+                      disabled={choosingMode}
+                    >
+                      {t("Customer is picking up")}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => setShowThirdPartyForm((v) => !v)}
+                      disabled={choosingMode}
+                    >
+                      {t("Send by online courier (Gojek / Grab …)")}
+                    </Button>
+                  </div>
+                  {showThirdPartyForm && (
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: "0.75rem",
+                        flexWrap: "wrap",
+                        alignItems: "center",
+                        marginTop: "0.75rem",
+                      }}
+                    >
+                      <select
+                        className={styles.editInput}
+                        aria-label={t("Courier service")}
+                        value={thirdPartyService}
+                        onChange={(e) => setThirdPartyService(e.target.value)}
+                      >
+                        {THIRD_PARTY_SERVICES.map((svc) => (
+                          <option key={svc} value={svc}>
+                            {svc === "Other" ? t("Other") : svc}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        type="text"
+                        className={styles.editInput}
+                        placeholder={t("Tracking / order ref (optional)")}
+                        value={thirdPartyRef}
+                        onChange={(e) => setThirdPartyRef(e.target.value)}
+                        style={{ flex: 1, minWidth: 160 }}
+                      />
+                      <Button
+                        type="button"
+                        variant="primary"
+                        onClick={handleConfirmThirdParty}
+                        disabled={choosingMode}
+                      >
+                        {choosingMode ? t("Saving…") : t("Confirm")}
+                      </Button>
+                    </div>
+                  )}
+                </Card>
+              )}
+
+              {/* Proof capture — mode chosen, relabeled per mode */}
+              {stage === "dispatch" && canAdvance && handoffMode && (
                 <Card style={{ marginTop: "0.75rem" }}>
                   <div className={styles.heading}>
-                    <span>{t("Delivery proof")}</span>
+                    <span>
+                      {handoffMode === "pickup"
+                        ? t("Proof of pickup")
+                        : handoffMode === "third"
+                          ? `${t("Handed to")} ${order.courier_service ?? ""}`
+                          : t("Delivery proof")}
+                    </span>
                   </div>
-                  <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", marginBottom: "0.75rem" }}>
-                    {(
-                      [
-                        { slot: "cond" as const, label: t("Condition photo"), photo: condPhoto },
-                        { slot: "recv" as const, label: t("Receiver photo"), photo: recvPhoto },
-                        {
-                          slot: "signed" as const,
-                          label: proofRequired ? t("Signed doc") : t("Signed doc (optional)"),
-                          photo: signedProofPhoto,
-                        },
-                      ]
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: "0.75rem",
+                      flexWrap: "wrap",
+                      marginBottom: "0.75rem",
+                    }}
+                  >
+                    {(handoffMode === "third"
+                      ? [
+                          {
+                            slot: "cond" as const,
+                            label: t("Condition photo"),
+                            photo: condPhoto,
+                          },
+                        ]
+                      : [
+                          {
+                            slot: "cond" as const,
+                            label: t("Condition photo"),
+                            photo: condPhoto,
+                          },
+                          {
+                            slot: "recv" as const,
+                            label:
+                              handoffMode === "pickup"
+                                ? t("Photo of who collected")
+                                : t("Receiver photo"),
+                            photo: recvPhoto,
+                          },
+                          {
+                            slot: "signed" as const,
+                            label: proofRequired
+                              ? t("Signed doc")
+                              : t("Signed doc (optional)"),
+                            photo: signedProofPhoto,
+                          },
+                        ]
                     ).map(({ slot, label, photo }) => (
-                      <div key={slot} style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
+                      <div
+                        key={slot}
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "0.375rem",
+                        }}
+                      >
                         <span className="tiny muted">{label}</span>
                         <label
                           className={styles.actionBtn}
-                          style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: "0.5rem" }}
+                          style={{
+                            cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "0.5rem",
+                          }}
                         >
                           <input
                             type="file"
@@ -2062,7 +2406,9 @@ export function OrderDetail() {
                             onChange={(e) => handleUploadProofPhoto(slot, e)}
                           />
                           <Icon name="camera" size={16} />
-                          {uploadingProofSlot === slot ? t("Uploading…") : t("Upload")}
+                          {uploadingProofSlot === slot
+                            ? t("Uploading…")
+                            : t("Upload")}
                         </label>
                         {photo && (
                           <img
@@ -2078,39 +2424,70 @@ export function OrderDetail() {
                   <input
                     type="text"
                     className={styles.editInput}
-                    placeholder={t("Receiver's name")}
+                    placeholder={
+                      handoffMode === "pickup"
+                        ? t("Collected by")
+                        : t("Receiver's name")
+                    }
                     value={receiverName}
                     onChange={(e) => setReceiverName(e.target.value)}
                     style={{ width: "100%", marginBottom: "0.75rem" }}
                   />
-                  <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.75rem" }}>
-                    <input
-                      type="checkbox"
-                      checked={proofCod}
-                      onChange={(e) => setProofCod(e.target.checked)}
-                    />
-                    {t("COD collected")}
-                  </label>
-                  <div style={{ display: "flex", gap: "0.75rem" }}>
+                  {handoffMode !== "third" && (
+                    <label
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.5rem",
+                        marginBottom: "0.75rem",
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={proofCod}
+                        onChange={(e) => setProofCod(e.target.checked)}
+                      />
+                      {t("COD collected")}
+                    </label>
+                  )}
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: "0.75rem",
+                      flexWrap: "wrap",
+                    }}
+                  >
                     <Button
                       type="button"
                       variant="primary"
                       onClick={handleConfirmDelivery}
                       disabled={submittingProof}
                     >
-                      {submittingProof ? t("Saving…") : t("Confirm delivery")}
+                      {submittingProof
+                        ? t("Saving…")
+                        : handoffMode === "pickup"
+                          ? t("Mark picked up")
+                          : handoffMode === "third"
+                            ? t("Mark handed over")
+                            : t("Confirm delivery")}
                     </Button>
                     <Button
                       type="button"
-                      variant="secondary"
-                      onClick={() => setShowDeliveryProofForm(false)}
-                      disabled={submittingProof}
+                      variant="ghost"
+                      onClick={handleChangeMethod}
+                      disabled={submittingProof || choosingMode}
                     >
-                      {t("Cancel")}
+                      {t("Change method")}
                     </Button>
                   </div>
                 </Card>
               )}
+
+              {canTrackCourier &&
+                handoffMode === "delivery" &&
+                order.taken_by && (
+                  <CourierLiveLocation courierId={order.taken_by} />
+                )}
 
               {showRefuseForm && (
                 <Card style={{ marginTop: "0.75rem" }}>
@@ -2143,7 +2520,10 @@ export function OrderDetail() {
                         }
                       />
                       <span className="tiny muted">{l.unit}</span>
-                      <label className={styles.actionBtn} style={{ cursor: "pointer" }}>
+                      <label
+                        className={styles.actionBtn}
+                        style={{ cursor: "pointer" }}
+                      >
                         <input
                           type="file"
                           accept="image/*"
@@ -2168,9 +2548,19 @@ export function OrderDetail() {
                     placeholder={t("Reason for return")}
                     value={refuseReason}
                     onChange={(e) => setRefuseReason(e.target.value)}
-                    style={{ width: "100%", minHeight: 60, marginTop: "0.5rem" }}
+                    style={{
+                      width: "100%",
+                      minHeight: 60,
+                      marginTop: "0.5rem",
+                    }}
                   />
-                  <div style={{ display: "flex", gap: "0.75rem", marginTop: "0.75rem" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: "0.75rem",
+                      marginTop: "0.75rem",
+                    }}
+                  >
                     <Button
                       type="button"
                       variant="primary"
@@ -2200,7 +2590,9 @@ export function OrderDetail() {
                 <span>{t("Customer Return")}</span>
               </div>
               {order.returned_reason && (
-                <p className="tiny muted">{t("Reason:")} {order.returned_reason}</p>
+                <p className="tiny muted">
+                  {t("Reason:")} {order.returned_reason}
+                </p>
               )}
 
               {inReceiveBucket && (
@@ -2236,12 +2628,17 @@ export function OrderDetail() {
                         />
                         <span className="tiny muted">{l.unit}</span>
                         {canProcessReturns && (
-                          <label className={styles.actionBtn} style={{ cursor: "pointer" }}>
+                          <label
+                            className={styles.actionBtn}
+                            style={{ cursor: "pointer" }}
+                          >
                             <input
                               type="file"
                               accept="image/*"
                               style={{ display: "none" }}
-                              onChange={(e) => handleUploadReceiveWeighPhoto(l.id, e)}
+                              onChange={(e) =>
+                                handleUploadReceiveWeighPhoto(l.id, e)
+                              }
                             />
                             <Icon name="camera" size={16} />
                           </label>
@@ -2263,7 +2660,9 @@ export function OrderDetail() {
                       onClick={handleConfirmReceive}
                       disabled={confirmingReceive}
                     >
-                      {confirmingReceive ? "Saving…" : "Confirm received & weighed"}
+                      {confirmingReceive
+                        ? "Saving…"
+                        : "Confirm received & weighed"}
                     </Button>
                   )}
                 </div>
@@ -2271,13 +2670,20 @@ export function OrderDetail() {
 
               {inSettleBucket && (
                 <div style={{ marginBottom: "1rem" }}>
-                  <h4 style={{ margin: "0.5rem 0" }}>{t("Admin Action Required")}</h4>
+                  <h4 style={{ margin: "0.5rem 0" }}>
+                    {t("Admin Action Required")}
+                  </h4>
                   {canProcessReturns ? (
                     <>
                       {RETURN_DOC_OPTIONS.map((opt) => (
                         <label
                           key={opt.key}
-                          style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.375rem" }}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "0.5rem",
+                            marginBottom: "0.375rem",
+                          }}
                         >
                           <input
                             type="radio"
@@ -2308,21 +2714,30 @@ export function OrderDetail() {
 
               {inSignBucket && (
                 <div style={{ marginBottom: "1rem" }}>
-                  <h4 style={{ margin: "0.5rem 0" }}>{t("Awaiting Signed DO/SI")}</h4>
+                  <h4 style={{ margin: "0.5rem 0" }}>
+                    {t("Awaiting Signed DO/SI")}
+                  </h4>
                   {latestSignedDoc ? (
                     <p className="tiny muted">
-                      {t("Signed document on file — order closes once received.")}
+                      {t(
+                        "Signed document on file — order closes once received.",
+                      )}
                     </p>
                   ) : canProcessReturns ? (
                     <>
-                      <label className={styles.actionBtn} style={{ cursor: "pointer", display: "inline-block" }}>
+                      <label
+                        className={styles.actionBtn}
+                        style={{ cursor: "pointer", display: "inline-block" }}
+                      >
                         <input
                           type="file"
                           accept="image/*"
                           style={{ display: "none" }}
                           onChange={handleUploadSignedDoc}
                         />
-                        {signedDocFileId ? t("Photo attached ✓") : t("Attach signed document")}
+                        {signedDocFileId
+                          ? t("Photo attached ✓")
+                          : t("Attach signed document")}
                       </label>
                       <div style={{ marginTop: "0.5rem" }}>
                         <Button
@@ -2331,12 +2746,16 @@ export function OrderDetail() {
                           onClick={handleMarkSignedAndClose}
                           disabled={!signedDocFileId || closingSigned}
                         >
-                          {closingSigned ? t("Saving…") : t("Mark signed & close")}
+                          {closingSigned
+                            ? t("Saving…")
+                            : t("Mark signed & close")}
                         </Button>
                       </div>
                     </>
                   ) : (
-                    <p className="tiny muted">{t("Revised DO/SI is out with the customer to sign.")}</p>
+                    <p className="tiny muted">
+                      {t("Revised DO/SI is out with the customer to sign.")}
+                    </p>
                   )}
                 </div>
               )}
@@ -2345,7 +2764,10 @@ export function OrderDetail() {
                 <p className="tiny muted">
                   {t("Replacement re-entered the pipeline and is currently at")}{" "}
                   <strong>
-                    {t(PIPELINE_STAGES.find((s) => s.key === stage)?.label ?? stage)}
+                    {t(
+                      PIPELINE_STAGES.find((s) => s.key === stage)?.label ??
+                        stage,
+                    )}
                   </strong>
                   .
                 </p>
@@ -2404,7 +2826,9 @@ export function OrderDetail() {
             className={styles.panelToggleBtn}
             isActive={isPanelOpen}
             onClick={() => setIsPanelOpen((prev) => !prev)}
-            title={isPanelOpen ? t("Collapse side panel") : t("Expand side panel")}
+            title={
+              isPanelOpen ? t("Collapse side panel") : t("Expand side panel")
+            }
           />
 
           <div

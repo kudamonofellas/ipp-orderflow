@@ -19,6 +19,13 @@ export const LANGS: { id: Lang; label: string }[] = [
 ];
 
 const ID: Record<string, string> = {
+  "Your role can only change Out of Stock here.": "Peran Anda hanya bisa mengubah Stok Habis di sini.",
+  "Needs photo": "Perlu foto",
+  "Attach at least one item photo before releasing from Cold Storage.": "Lampirkan minimal satu foto item sebelum melepas dari Cold Storage.",
+  "collected": "terkumpul",
+  "Done today": "Selesai hari ini",
+  "tap to act": "ketuk untuk bertindak",
+  "Needs attention today": "Perlu perhatian hari ini",
   "— how is this settled in Accurate? —": "— bagaimana diselesaikan di Accurate? —",
   "· edit anything": "· ubah apa saja",
   "(PT / CV — for the invoice)": "(PT / CV — untuk faktur)",
@@ -972,6 +979,15 @@ const ID: Record<string, string> = {
   "Add note for the team...": "Tambah catatan untuk tim...",
   "No history yet.": "Belum ada riwayat.",
   "to pick": "untuk diambil",
+  "A handover photo is required before marking handed over.": "Foto serah terima wajib sebelum menandai diserahkan.",
+  "Courier service": "Jasa kurir",
+  "No location yet": "Belum ada lokasi",
+  "live": "live",
+  "ago": "lalu",
+  "Courier location": "Lokasi kurir",
+  "New Today": "Baru Hari Ini",
+  "New Orders Today": "Pesanan Baru Hari Ini",
+  "No orders created today.": "Tidak ada pesanan dibuat hari ini.",
 };
 
 export function t(key: string, lang: Lang): string {

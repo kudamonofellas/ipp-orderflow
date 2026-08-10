@@ -1,0 +1,52 @@
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--duration-fast) var(--ease-default);
+}
+
+.tile:hover {
+  background: var(--bg-surface-hover);
+  border-color: var(--accent-primary);
+}
+
+.tileLoud {
+  background: color-mix(in srgb, var(--state-warning) 10%, var(--bg-surface));
+  border-color: var(--state-warning);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.value {
+  font: 700 20px/1.2 var(--font-sans);
+  font-variant-numeric: tabular-nums;
+}
+
+.tileLoud .value {
+  color: var(--state-warning);
+}
+
+.chevron {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.label {
+  font: var(--text-body);
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+}

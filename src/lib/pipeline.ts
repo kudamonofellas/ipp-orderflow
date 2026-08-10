@@ -144,6 +144,54 @@ export function openOrdersFilter(): Record<string, unknown> {
 }
 
 /**
+ * Every order with at least one active return bucket (mirrors
+ * `returnBucketsForOrder`'s own field logic, as a Directus filter instead of
+ * a client-side scan). A single `_or` of the 4 bucket conditions — not the
+ * 4 buckets' counts summed — so an order sitting in two buckets at once
+ * (e.g. `awaiting_return` ∥ `admin_action`) is still counted once. Used by
+ * the "Today" digest's "returns in flight" tile, which needs a genuine
+ * distinct-order count, unlike the Dashboard's Returns Workflow strip
+ * (which intentionally shows each bucket's own count, overlaps and all).
+ */
+export function returnsInFlightFilter(): Record<string, unknown> {
+  return {
+    _or: [
+      {
+        _and: [
+          { stage: { _eq: 'returned' } },
+          {
+            _or: [
+              { return_received: { _neq: true } },
+              { return_inbound: { _eq: true } },
+            ],
+          },
+          { return_settle: { _neq: 'done' } },
+        ],
+      },
+      {
+        _and: [
+          { stage: { _eq: 'returned' } },
+          { return_settle: { _null: true } },
+          { return_doc: { _null: true } },
+        ],
+      },
+      {
+        _and: [
+          { stage: { _eq: 'returned' } },
+          { return_settle: { _eq: 'sign' } },
+        ],
+      },
+      {
+        _and: [
+          { is_replacement: { _eq: true } },
+          { stage: { _nin: ['delivered', 'cancelled'] } },
+        ],
+      },
+    ],
+  };
+}
+
+/**
  * Stages each role "owns" — rendered with the main blue accent on the
  * dashboard (both the pipeline strip and the returns panel) so a user sees
  * at a glance which buckets need their action. One shared map drives both

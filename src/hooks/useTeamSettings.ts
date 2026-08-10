@@ -4,7 +4,7 @@
  * and role_permissions (the live override table behind `can()`).
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import {
   readTeamMembers,
   readAllRoles,
@@ -21,6 +21,16 @@ interface UseTeamSettingsResult {
   loading: boolean;
   error: string | null;
   reload: () => void;
+  /**
+   * Patch `permRows`/`members` directly (optimistic update after a single-row
+   * write), without bumping `nonce` — a full `reload()` refetches members +
+   * roles + permRows together and flips `loading` for all three, which
+   * visibly unmounts/remounts the unrelated Team section on every single grid
+   * click or member toggle. Reserve `reload()` for genuine full-refresh cases
+   * (member added/removed, role reassigned).
+   */
+  setPermRows: Dispatch<SetStateAction<RolePermissionRow[]>>;
+  setMembers: Dispatch<SetStateAction<TeamMember[]>>;
 }
 
 export function useTeamSettings(): UseTeamSettingsResult {
@@ -62,5 +72,14 @@ export function useTeamSettings(): UseTeamSettingsResult {
     };
   }, [nonce]);
 
-  return { members, roles, permRows, loading, error, reload };
+  return {
+    members,
+    roles,
+    permRows,
+    loading,
+    error,
+    reload,
+    setPermRows,
+    setMembers,
+  };
 }

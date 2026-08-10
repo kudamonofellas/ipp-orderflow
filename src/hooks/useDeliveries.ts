@@ -1,10 +1,11 @@
 /**
- * Deliveries — the current courier's run-sheet. Pools orders at `dispatch`
- * assigned to the signed-in user (matched by `taken_by`, a UUID FK to
- * `directus_users.id` — not the display name) or unassigned (ported from the
- * prototype's `myDeliveries`/`takenByMe` predicate — unassigned dispatch
- * orders count as "mine" for anyone, same caveat the prototype had), ordered
- * by delivery time as a stand-in sequence (the live schema has no
+ * Deliveries — the current courier's run-sheet, split into `mine` (assigned
+ * to the signed-in user, or unassigned — ported from the prototype's
+ * `myDeliveries`/`takenByMe` predicate: unassigned dispatch orders count as
+ * "mine" for anyone, same caveat the prototype had) and `others` (assigned to
+ * a different courier, read-only — "With other drivers"). Both pulled from a
+ * single `stage='dispatch'` query and partitioned client-side by `taken_by`,
+ * ordered by delivery time as a stand-in sequence (the live schema has no
  * `runSeq`-style column yet — see prototype-audit.md's Deliveries notes).
  *
  * COD-ness and the amount to collect use the same source as `useCashUp`:
@@ -14,7 +15,14 @@
  */
 
 import { useEffect, useState } from 'react';
-import { readOrders, readCustomers, readOrderLines, updateOrder, appendOrderHistory } from '../lib/directus';
+import {
+  readOrders,
+  readCustomers,
+  readOrderLines,
+  readAllUsers,
+  updateOrder,
+  appendOrderHistory,
+} from '../lib/directus';
 
 export interface DeliveryStop {
   orderId: string;
@@ -24,10 +32,13 @@ export interface DeliveryStop {
   isCOD: boolean;
   amount: number;
   sequence: number;
+  /** Display name of the courier holding this stop, or null if unassigned. */
+  takenByName: string | null;
 }
 
 interface UseDeliveriesResult {
-  stops: DeliveryStop[];
+  mine: DeliveryStop[];
+  others: DeliveryStop[];
   loading: boolean;
   error: string | null;
   markDelivered: (orderId: string, userId: string | null) => Promise<{ error: string | null }>;
@@ -45,7 +56,8 @@ function isCOD(payTiming: string | null | undefined): boolean {
 }
 
 export function useDeliveries(courierId: string | null): UseDeliveriesResult {
-  const [stops, setStops] = useState<DeliveryStop[]>([]);
+  const [mine, setMine] = useState<DeliveryStop[]>([]);
+  const [others, setOthers] = useState<DeliveryStop[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [nonce, setNonce] = useState(0);
@@ -59,20 +71,9 @@ export function useDeliveries(courierId: string | null): UseDeliveriesResult {
       setLoading(true);
       setError(null);
 
-      // `orders.taken_by` is a UUID FK to directus_users.id, not a display
-      // name — comparing it against a name string makes Postgres reject the
-      // uuid cast (surfaces as a generic "unexpected error"). Filter on the
-      // signed-in user's id instead.
-      const takenByOr: Record<string, unknown>[] = [{ taken_by: { _null: true } }];
-      if (courierId) takenByOr.push({ taken_by: { _eq: courierId } });
-
       const ordersRes = await readOrders({
         filter: {
-          _and: [
-            { stage: { _eq: 'dispatch' } },
-            { cancelled: { _neq: true } },
-            { _or: takenByOr },
-          ],
+          _and: [{ stage: { _eq: 'dispatch' } }, { cancelled: { _neq: true } }],
         },
         fields: [
           'id',
@@ -82,6 +83,7 @@ export function useDeliveries(courierId: string | null): UseDeliveriesResult {
           'customer_address',
           'deliver_at',
           'delivery_date',
+          'taken_by',
         ],
         sort: ['deliver_at'],
         limit: -1,
@@ -94,7 +96,8 @@ export function useDeliveries(courierId: string | null): UseDeliveriesResult {
       }
       const orders = ordersRes.data ?? [];
       if (orders.length === 0) {
-        setStops([]);
+        setMine([]);
+        setOthers([]);
         setLoading(false);
         return;
       }
@@ -102,7 +105,7 @@ export function useDeliveries(courierId: string | null): UseDeliveriesResult {
       const customerIds = [...new Set(orders.map((o) => o.customer_id).filter((id): id is string => !!id))];
       const orderIds = orders.map((o) => o.id);
 
-      const [customersRes, linesRes] = await Promise.all([
+      const [customersRes, linesRes, usersRes] = await Promise.all([
         customerIds.length === 0
           ? Promise.resolve({ data: [], error: null })
           : readCustomers({
@@ -119,6 +122,7 @@ export function useDeliveries(courierId: string | null): UseDeliveriesResult {
           fields: ['id', 'order_id', 'qty', 'price'],
           limit: -1,
         }),
+        readAllUsers(),
       ]);
       if (cancelled) return;
       if (customersRes.error) {
@@ -141,18 +145,32 @@ export function useDeliveries(courierId: string | null): UseDeliveriesResult {
           (totalByOrder.get(line.order_id) ?? 0) + toNumber(line.qty) * toNumber(line.price),
         );
       }
+      const nameByUserId = new Map(
+        (usersRes.data ?? []).map((u) => [
+          u.id,
+          `${u.first_name ?? ''} ${u.last_name ?? ''}`.trim() || u.email,
+        ]),
+      );
 
-      const built: DeliveryStop[] = orders.map((order, i) => ({
-        orderId: order.id,
-        orderNo: order.no ?? '—',
-        customerName: order.customer_name ?? '—',
-        address: order.customer_address ?? null,
-        isCOD: order.customer_id ? (codByCustomer.get(order.customer_id) ?? false) : false,
-        amount: totalByOrder.get(order.id) ?? 0,
-        sequence: i + 1,
-      }));
+      const mineBuilt: DeliveryStop[] = [];
+      const othersBuilt: DeliveryStop[] = [];
+      orders.forEach((order, i) => {
+        const stop: DeliveryStop = {
+          orderId: order.id,
+          orderNo: order.no ?? '—',
+          customerName: order.customer_name ?? '—',
+          address: order.customer_address ?? null,
+          isCOD: order.customer_id ? (codByCustomer.get(order.customer_id) ?? false) : false,
+          amount: totalByOrder.get(order.id) ?? 0,
+          sequence: i + 1,
+          takenByName: order.taken_by ? (nameByUserId.get(order.taken_by) ?? null) : null,
+        };
+        const isMine = !order.taken_by || order.taken_by === courierId;
+        (isMine ? mineBuilt : othersBuilt).push(stop);
+      });
 
-      setStops(built);
+      setMine(mineBuilt);
+      setOthers(othersBuilt);
       setLoading(false);
     }
 
@@ -178,5 +196,5 @@ export function useDeliveries(courierId: string | null): UseDeliveriesResult {
     return { error: null };
   }
 
-  return { stops, loading, error, markDelivered, refetch };
+  return { mine, others, loading, error, markDelivered, refetch };
 }

@@ -51,6 +51,7 @@ export const OrdersCollectionSchema = z.object({
   cutting_started: z.boolean().nullable().optional(),
   pickup: z.boolean().nullable().optional(),
   third_party: z.boolean().nullable().optional(),
+  courier_service: z.string().nullable().optional(),
   payment_confirmed: z.boolean().nullable().optional(),
   cod_reconciled: z.boolean().nullable().optional(),
   docs_returned: z.boolean().nullable().optional(),
@@ -251,6 +252,18 @@ export const CorrectionsCollectionSchema = z.object({
   date_created: z.string().nullable().optional(),
   times_used: z.number().nullable().optional(),
 });
+
+/** Directus `courier_locations` collection row — one GPS ping, keyed by `user_created` (the courier). */
+export const CourierLocationsCollectionSchema = z.object({
+  id: z.string(),
+  lat: numeric,
+  lng: numeric,
+  at: z.string().nullable().optional(),
+  user_created: z.string().nullable().optional(),
+});
+export const CourierLocationsCollectionArraySchema = z.array(
+  CourierLocationsCollectionSchema,
+);
 
 /** Directus `delivery_proofs` collection row — courier's 3-photo proof set + COD flag. */
 export const DeliveryProofsCollectionSchema = z.object({

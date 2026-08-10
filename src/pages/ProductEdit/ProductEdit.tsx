@@ -29,6 +29,14 @@ export function ProductEdit() {
 
   const isNew = id === 'new';
   const canManage = auth.can('manage_products');
+  // Narrower than canManage — lets a Warehouse-only user reach this page to
+  // flip Out of Stock without granting the rest of the form (see
+  // flag_out_of_stock's doc comment in domain.ts / F-10).
+  const canToggleOOS = auth.can('flag_out_of_stock');
+  const canEditOtherFields = canManage;
+  // Creating a brand-new product is always a full-manage action — the OOS
+  // capability only ever applies to an existing product's flag.
+  const canAccess = isNew ? canManage : canManage || canToggleOOS;
 
   const [loading, setLoading] = useState(!isNew);
   const [error, setError] = useState<string | null>(null);
@@ -121,10 +129,10 @@ export function ProductEdit() {
 
   // ── Redirect unauthorized users away ──
   useEffect(() => {
-    if (!loading && !canManage) {
+    if (!loading && !canAccess) {
       navigate(isNew ? '/products' : `/products/${id}`, { replace: true });
     }
-  }, [loading, canManage, navigate, id, isNew]);
+  }, [loading, canAccess, navigate, id, isNew]);
 
   // ── Change detection ──
   const hasChanges =
@@ -148,7 +156,7 @@ export function ProductEdit() {
     if (!canSave) return;
 
     setSaving(true);
-    const payload = {
+    const fullPayload = {
       name: name.trim(),
       accurate_name: accurateName.trim() || name.trim(),
       category: category.trim() || null,
@@ -161,10 +169,18 @@ export function ProductEdit() {
 
     let res;
     if (isNew) {
+      // Creating a new product is always a full-manage action (canAccess
+      // above only allows isNew when canManage is true), so the full
+      // payload is always safe here.
       const generatedId = `${slugify(name) || 'product'}-${Date.now().toString(36)}`;
-      res = await createProduct({ id: generatedId, ...payload });
+      res = await createProduct({ id: generatedId, ...fullPayload });
     } else if (id) {
-      res = await updateProduct(id, payload);
+      // An OOS-only user's Directus permission is scoped to the `oos` field
+      // alone — a payload naming any other field (even unchanged) gets the
+      // whole write rejected, same as every other role-scoped field mismatch
+      // fixed this session. Other fields are also disabled in the form for
+      // this user, so their values never actually changed anyway.
+      res = await updateProduct(id, canEditOtherFields ? fullPayload : { oos });
     }
 
     setSaving(false);
@@ -217,7 +233,7 @@ export function ProductEdit() {
             </div>
           </div>
           <div className={styles.actions}>
-            {!isNew && (
+            {!isNew && canManage && (
               <Button
                 type="button"
                 variant="secondary"
@@ -258,7 +274,7 @@ export function ProductEdit() {
                 required
                 autoFocus={isNew}
                 placeholder="Aus Wagyu Striploin 8-9"
-                disabled={saving}
+                disabled={saving || !canEditOtherFields}
               />
             </label>
             <label className={styles.field}>
@@ -269,7 +285,7 @@ export function ProductEdit() {
                 value={accurateName}
                 onChange={(e) => setAccurateName(e.target.value)}
                 placeholder="WAGYU STRIPLOIN 8-9"
-                disabled={saving}
+                disabled={saving || !canEditOtherFields}
               />
             </label>
             <div className={styles.row}>
@@ -280,7 +296,7 @@ export function ProductEdit() {
                   className={styles.input}
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
-                  disabled={saving}
+                  disabled={saving || !canEditOtherFields}
                 />
               </label>
               <label className={styles.field}>
@@ -290,7 +306,7 @@ export function ProductEdit() {
                   className={styles.input}
                   value={origin}
                   onChange={(e) => setOrigin(e.target.value)}
-                  disabled={saving}
+                  disabled={saving || !canEditOtherFields}
                 />
               </label>
             </div>
@@ -302,7 +318,7 @@ export function ProductEdit() {
                   className={styles.input}
                   value={grade}
                   onChange={(e) => setGrade(e.target.value)}
-                  disabled={saving}
+                  disabled={saving || !canEditOtherFields}
                 />
               </label>
               <label className={styles.field}>
@@ -312,7 +328,7 @@ export function ProductEdit() {
                   className={styles.input}
                   value={brand}
                   onChange={(e) => setBrand(e.target.value)}
-                  disabled={saving}
+                  disabled={saving || !canEditOtherFields}
                 />
               </label>
             </div>
@@ -323,7 +339,7 @@ export function ProductEdit() {
                 className={styles.checkbox}
                 checked={catchWeight}
                 onChange={(e) => setCatchWeight(e.target.checked)}
-                disabled={saving}
+                disabled={saving || !canEditOtherFields}
               />
               <span>{t('Catch-weight (sold by actual weight)')}</span>
             </label>
@@ -334,12 +350,18 @@ export function ProductEdit() {
                 label={t('Out of Stock')}
                 checked={oos}
                 onChange={setOos}
-                disabled={saving}
+                disabled={saving || !(canManage || canToggleOOS)}
               />
               <span style={oos ? { color: 'var(--state-error)', fontWeight: 600 } : undefined}>
                 {t('Out of Stock (warn when someone orders this)')}
               </span>
             </label>
+
+            {!canEditOtherFields && (
+              <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-muted)' }}>
+                {t('Your role can only change Out of Stock here.')}
+              </p>
+            )}
 
             {!isNew && usedBy > 0 && (
               <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-muted)' }}>

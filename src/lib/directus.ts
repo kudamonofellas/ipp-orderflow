@@ -34,6 +34,8 @@ import {
   updateUser,
   deleteUser,
   readRoles,
+  updateSingleton,
+  readSingleton,
 } from "@directus/sdk";
 import {
   CustomersCollectionSchema,
@@ -67,6 +69,8 @@ import {
   DeliveryProofsCollectionSchema,
   DeliveryProofsCollectionArraySchema,
   SettingsCollectionSchema,
+  CourierLocationsCollectionSchema,
+  CourierLocationsCollectionArraySchema,
 } from "./schemas";
 import type {
   CorrectionsCollection,
@@ -86,6 +90,7 @@ import type {
   ReturnDocumentsCollection,
   DeliveryProofsCollection,
   SettingsCollection,
+  CourierLocationsCollection,
 } from "../types/directus";
 import { buildOrderNo, parseOrderNo } from "./orderNo";
 
@@ -817,22 +822,31 @@ export async function readRolePermissionRows(): Promise<DirectusResult<RolePermi
   }
 }
 
-/** Create or update a single (role, capability) override cell. */
+/**
+ * Create or update a single (role, capability) override cell. Returns the
+ * row's id (the existing one on update, or the newly created one) so callers
+ * can patch their local `permRows` state directly instead of refetching the
+ * whole team-settings resource set on every toggle.
+ */
 export async function setRolePermission(
   existingId: string | null,
   role: string,
   capability: string,
   allowed: boolean,
-): Promise<DirectusResult<null>> {
+): Promise<DirectusResult<string>> {
   try {
     if (existingId) {
       await getClient().request(updateItem("role_permissions", existingId, { allowed } as never));
-    } else {
-      await getClient().request(
-        createItem("role_permissions", { role, capability, allowed } as never),
-      );
+      return { data: existingId, error: null };
     }
-    return { data: null, error: null };
+    const created = await getClient().request(
+      createItem("role_permissions", { role, capability, allowed } as never),
+    );
+    const id = (created as { id?: string })?.id;
+    if (!id) {
+      return { data: null, error: "Permission created but no id was returned." };
+    }
+    return { data: id, error: null };
   } catch (err) {
     return { data: null, error: errMsg(err) };
   }
@@ -1512,6 +1526,57 @@ export async function createDeliveryProof(
   }
 }
 
+/**
+ * Writes one GPS ping. `user_created` is auto-populated by Directus from the
+ * authenticated session — no explicit courier id is passed, matching how
+ * `readLatestCourierLocation` looks the row back up by that same field.
+ */
+export async function createCourierLocation(
+  lat: number,
+  lng: number,
+): Promise<DirectusResult<CourierLocationsCollection>> {
+  try {
+    const raw = await getClient().request(
+      createItem("courier_locations", { lat, lng, at: new Date().toISOString() } as never),
+    );
+    const parsed = CourierLocationsCollectionSchema.safeParse(raw);
+    if (!parsed.success) {
+      return {
+        data: null,
+        error: `Invalid courier_locations response: ${parsed.error.message}`,
+      };
+    }
+    return { data: parsed.data, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+/** Most recent location ping for a courier (by `directus_users.id`), or null if they've never sent one. */
+export async function readLatestCourierLocation(
+  courierId: string,
+): Promise<DirectusResult<CourierLocationsCollection | null>> {
+  try {
+    const raw = await getClient().request(
+      readItems("courier_locations", {
+        filter: { user_created: { _eq: courierId } } as never,
+        sort: ["-at"] as never,
+        limit: 1,
+      }),
+    );
+    const parsed = CourierLocationsCollectionArraySchema.safeParse(raw);
+    if (!parsed.success) {
+      return {
+        data: null,
+        error: `Invalid courier_locations response: ${parsed.error.message}`,
+      };
+    }
+    return { data: parsed.data[0] ?? null, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
 /** Read every learned correction (intake parser's token_key → product_id map), most-used first. */
 export async function readCorrections(): Promise<
   DirectusResult<CorrectionsCollection[]>
@@ -1549,17 +1614,21 @@ export async function deleteCorrection(
 }
 
 /**
- * Read the `settings` singleton (always the one row with id 1). Returns
- * `null` data (no error) if the row doesn't exist yet rather than failing.
+ * Read the `settings` singleton. `settings` is a Directus singleton
+ * collection — `GET /items/settings` always returns a single object, never
+ * an array (confirmed live via curl), regardless of `limit`/query params.
+ * This used to call `readItems("settings", {limit: 1})` and check
+ * `Array.isArray(raw)`, which is always false for a singleton response — so
+ * this silently returned `{data: null}` on every single call, which cascaded
+ * into every Settings-page write failing its `if (!settings) return
+ * {error: 'Settings not loaded yet'}` guard. `readSingleton` returns the
+ * object directly, matching `updateSettings`'s `updateSingleton` fix.
  */
 export async function readSettings(): Promise<DirectusResult<SettingsCollection | null>> {
   try {
-    const raw = await getClient().request(
-      readItems("settings", { limit: 1 } as never),
-    );
-    const rows = Array.isArray(raw) ? raw : [];
-    if (rows.length === 0) return { data: null, error: null };
-    const parsed = SettingsCollectionSchema.safeParse(rows[0]);
+    const raw = await getClient().request(readSingleton("settings" as never));
+    if (!raw) return { data: null, error: null };
+    const parsed = SettingsCollectionSchema.safeParse(raw);
     if (!parsed.success) {
       return {
         data: null,
@@ -1572,14 +1641,21 @@ export async function readSettings(): Promise<DirectusResult<SettingsCollection 
   }
 }
 
-/** Update the `settings` singleton row. */
+/**
+ * Update the `settings` singleton row. `settings` is a Directus *singleton*
+ * collection (exactly one row, no meaningful item id) — it has no
+ * `/items/settings/:id` route, only `/items/settings`. `updateItem(id, ...)`
+ * 404s ("Route /settings/1 doesn't exist") for singletons; `updateSingleton`
+ * hits the right endpoint. This was silently failing on every write (the
+ * caller's error wasn't surfaced), so every Settings-page toggle appeared to
+ * do nothing.
+ */
 export async function updateSettings(
-  id: number,
   patch: Record<string, unknown>,
 ): Promise<DirectusResult<SettingsCollection>> {
   try {
     const raw = await getClient().request(
-      updateItem("settings", id, patch as never),
+      updateSingleton("settings", patch as never),
     );
     const parsed = SettingsCollectionSchema.safeParse(raw);
     if (!parsed.success) {

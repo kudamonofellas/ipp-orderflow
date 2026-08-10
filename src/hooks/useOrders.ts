@@ -13,6 +13,7 @@ import { useCallback, useEffect, useState } from "react";
 import { aggregateOrders, readOrderLines, readOrders } from "../lib/directus";
 import { financeParallelQueueFilter, openOrdersFilter } from "../lib/pipeline";
 import type { OpenOrder, OpenOrderLine } from "../types/dashboard";
+import { useCan } from "./useAuth";
 
 /** Max orders per page in the Orders list. */
 export const ORDERS_PAGE_SIZE = 20;
@@ -133,6 +134,9 @@ export function useOrders(
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [nonce, setNonce] = useState(0);
+  const can = useCan();
+  const seeCustomerContact = can("seeCustomerContact");
+  const seePrices = can("seePrices");
 
   const refetch = useCallback(() => setNonce((n) => n + 1), []);
 
@@ -210,6 +214,25 @@ export function useOrders(
             ],
           },
         ];
+      } else if (stageFilter === "today") {
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+        const todayEnd = new Date(todayStart);
+        todayEnd.setDate(todayEnd.getDate() + 1);
+        filter._or = [
+          {
+            _and: [
+              { order_date: { _gte: todayStart.toISOString() } },
+              { order_date: { _lt: todayEnd.toISOString() } },
+            ],
+          },
+          {
+            _and: [
+              { created_at: { _gte: todayStart.toISOString() } },
+              { created_at: { _lt: todayEnd.toISOString() } },
+            ],
+          },
+        ];
       } else if (stageFilter !== "all") {
         // Try the `stage` field first; fall back to legacy `status` for old rows.
         filter._or = [
@@ -230,20 +253,37 @@ export function useOrders(
         ];
       }
 
+      // Only request fields the current role's Directus ACL actually allows
+      // reading — Warehouse/Production can't read `sales_rep` (matches their
+      // denied seeCustomerContact), Courier can't read `price` (matches its
+      // denied seePrices). Directus rejects the *whole* request if it names a
+      // field outside a restricted role's field list, so requesting these
+      // unconditionally 403'd the entire query for those roles.
+      const orderFields = [
+        "id",
+        "no",
+        "stage",
+        "status",
+        "order_date",
+        "delivery_date",
+        "customer_name",
+        "created_at",
+        ...(seeCustomerContact ? ["sales_rep"] : []),
+      ];
+      const lineFields = [
+        "id",
+        "order_id",
+        "name",
+        "qty",
+        "unit",
+        "sort_order",
+        ...(seePrices ? ["price"] : []),
+      ];
+
       const [pageResult, countResult] = await Promise.all([
         readOrders({
           filter,
-          fields: [
-            "id",
-            "no",
-            "stage",
-            "status",
-            "order_date",
-            "delivery_date",
-            "sales_rep",
-            "customer_name",
-            "created_at",
-          ],
+          fields: orderFields,
           sort: [sort],
           limit: ORDERS_PAGE_SIZE,
           offset: (page - 1) * ORDERS_PAGE_SIZE,
@@ -269,15 +309,7 @@ export function useOrders(
       if (orderIds.length > 0) {
         const linesResult = await readOrderLines({
           filter: { order_id: { _in: orderIds } },
-          fields: [
-            "id",
-            "order_id",
-            "name",
-            "qty",
-            "unit",
-            "price",
-            "sort_order",
-          ],
+          fields: lineFields,
           sort: ["sort_order"],
           limit: -1,
         });
@@ -308,7 +340,7 @@ export function useOrders(
     return () => {
       cancelled = true;
     };
-  }, [page, nonce, stageFilter, search, sort]);
+  }, [page, nonce, stageFilter, search, sort, seeCustomerContact, seePrices]);
 
   return {
     orders,

@@ -15,6 +15,7 @@ import { useCallback, useEffect, useState } from "react";
 import { aggregateOrders, readOrderLines, readOrders } from "../lib/directus";
 import { openOrdersFilter } from "../lib/pipeline";
 import type { OpenOrder, OpenOrderLine } from "../types/dashboard";
+import { useCan } from "./useAuth";
 
 /** Max orders per page in the Open Orders panel. */
 export const OPEN_ORDERS_PAGE_SIZE = 20;
@@ -133,6 +134,9 @@ export function useOpenOrders(sort: string = "-no"): UseOpenOrdersResult {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [nonce, setNonce] = useState(0);
+  const can = useCan();
+  const seeCustomerContact = can("seeCustomerContact");
+  const seePrices = can("seePrices");
 
   const refetch = useCallback(() => setNonce((n) => n + 1), []);
 
@@ -145,21 +149,38 @@ export function useOpenOrders(sort: string = "-no"): UseOpenOrdersResult {
 
       const filter = openOrdersFilter();
 
+      // Only request fields the current role's Directus ACL actually allows
+      // reading — Warehouse/Production can't read `sales_rep` (matches their
+      // denied seeCustomerContact), Courier can't read `price` (matches its
+      // denied seePrices). Directus rejects the *whole* request if it names a
+      // field outside a restricted role's field list, so requesting these
+      // unconditionally 403'd the entire query for those roles.
+      const orderFields = [
+        "id",
+        "no",
+        "stage",
+        "status",
+        "order_date",
+        "delivery_date",
+        "customer_name",
+        "created_at",
+        ...(seeCustomerContact ? ["sales_rep"] : []),
+      ];
+      const lineFields = [
+        "id",
+        "order_id",
+        "name",
+        "qty",
+        "unit",
+        "sort_order",
+        ...(seePrices ? ["price"] : []),
+      ];
+
       // Fetch the current page of orders + the total count in parallel.
       const [pageResult, countResult] = await Promise.all([
         readOrders({
           filter,
-          fields: [
-            "id",
-            "no",
-            "stage",
-            "status",
-            "order_date",
-            "delivery_date",
-            "sales_rep",
-            "customer_name",
-            "created_at",
-          ],
+          fields: orderFields,
           sort: [sort],
           limit: OPEN_ORDERS_PAGE_SIZE,
           offset: (page - 1) * OPEN_ORDERS_PAGE_SIZE,
@@ -186,15 +207,7 @@ export function useOpenOrders(sort: string = "-no"): UseOpenOrdersResult {
       if (orderIds.length > 0) {
         const linesResult = await readOrderLines({
           filter: { order_id: { _in: orderIds } },
-          fields: [
-            "id",
-            "order_id",
-            "name",
-            "qty",
-            "unit",
-            "price",
-            "sort_order",
-          ],
+          fields: lineFields,
           sort: ["sort_order"],
           limit: -1,
         });
@@ -225,7 +238,7 @@ export function useOpenOrders(sort: string = "-no"): UseOpenOrdersResult {
     return () => {
       cancelled = true;
     };
-  }, [page, nonce, sort]);
+  }, [page, nonce, sort, seeCustomerContact, seePrices]);
 
   return {
     orders,

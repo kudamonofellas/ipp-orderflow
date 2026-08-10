@@ -98,6 +98,23 @@ export function OrderEdit() {
   const [isAddItemModalOpen, setIsAddItemModalOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
+  // Same gate as OrderDetail.tsx's own "Edit" button (which is how this page
+  // is normally reached) — mirrored here as a self-guard, matching
+  // CustomerEdit.tsx/ProductEdit.tsx's pattern. Previously this page had no
+  // route guard AND no self-guard: a role without editOrderLines (Warehouse,
+  // Production, Courier) could open /orders/:id/edit directly via URL and
+  // interact with the whole form — only the final Save button was disabled.
+  const stage = order?.stage ?? "intake";
+  const isCancelled = order?.cancelled === true || stage === "cancelled";
+  const isDelivered = stage === "delivered";
+  const canEdit = auth.can("editOrderLines") && !isCancelled && !isDelivered;
+
+  useEffect(() => {
+    if (!loading && !canEdit) {
+      navigate(`/orders/${id}`, { replace: true });
+    }
+  }, [loading, canEdit, navigate, id]);
+
   useEffect(() => {
     const orderId = id as string;
     if (!orderId) return;
@@ -504,7 +521,7 @@ export function OrderEdit() {
                 type="button"
                 variant="primary"
                 disabled={
-                  !hasEditChanges || submitting || !auth.can("editOrderLines")
+                  !hasEditChanges || submitting || !canEdit
                 }
                 icon="save"
                 onClick={handleSaveAllEdits}

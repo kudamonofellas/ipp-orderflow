@@ -20,6 +20,7 @@ const STAGE_OPTIONS = [
   { key: "pending-docs", label: "Signed DO/SI not returned yet" },
   { key: "completed", label: "Completed" },
   { key: "late", label: "Past delivery date" },
+  { key: "today", label: "New Today" },
   ...PIPELINE_STAGES.map((s) => ({ key: s.key, label: s.label })),
   { key: "outstanding", label: "Outstanding" },
   { key: "awaiting", label: "Awaiting stock" },
@@ -45,6 +46,7 @@ const STAGE_COPY: Record<string, { headline: string; empty: string }> = {
   },
   completed: { headline: "Completed Orders", empty: "No completed orders." },
   late: { headline: "Past Delivery Date", empty: "No overdue orders." },
+  today: { headline: "New Orders Today", empty: "No orders created today." },
   intake: { headline: "New Orders", empty: "No new orders." },
   cold: {
     headline: "Cold Storage Picking",

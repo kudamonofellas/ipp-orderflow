@@ -18,7 +18,8 @@ export function Products() {
   const navigate = useNavigate();
   const { can } = useAuth();
   const { t } = useLanguage();
-  const canToggleOOS = can('manage_products');
+  const canManageProducts = can('manage_products');
+  const canToggleOOS = can('flag_out_of_stock');
   const canView = can('browseProducts');
 
   // Defence-in-depth: the route is already wrapped in <Guarded cap="browseProducts">
@@ -139,6 +140,7 @@ export function Products() {
       setProducts((prev) =>
         prev.map((p) => (p.id === product.id ? { ...p, oos: product.oos } : p)),
       );
+      window.alert(res.error);
     }
     setTogglingId(null);
   };
@@ -187,7 +189,7 @@ export function Products() {
               onChange={(e) => handleSearchChange(e.target.value)}
             />
           </div>
-          {canToggleOOS && (
+          {canManageProducts && (
             <button
               type="button"
               className={styles.addBtn}

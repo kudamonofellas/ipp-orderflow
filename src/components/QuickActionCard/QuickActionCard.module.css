@@ -5,7 +5,7 @@
   gap: var(--space-md);
   padding: var(--space-md) var(--space-lg);
   border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   cursor: pointer;
   text-align: left;
   transition: background-color var(--duration-fast) var(--ease-default);

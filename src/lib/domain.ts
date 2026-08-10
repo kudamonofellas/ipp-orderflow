@@ -40,6 +40,13 @@ export type Capability =
   | 'manageRoles'
   | 'manageSettings'
   | 'manage_products'
+  // Narrower than manage_products: flipping a product's out-of-stock flag,
+  // without the rest of create/edit/delete. Split out so Warehouse can keep
+  // the OOS toggle it needs without the broader grant the
+  // Settings-Owner.png design shows it as unchecked for (see F-10 —
+  // previously both the Products list toggle and this capability's write
+  // shared manage_products, a split-authority gate on one field).
+  | 'flag_out_of_stock'
   | 'manage_customers'
   | 'cancelOrders'
   | 'seePrices'
@@ -89,6 +96,7 @@ export const ALLOW: Record<Exclude<Role, 'Owner'>, Partial<Record<Capability, bo
     printDocuments: true,
     processReturns: true,
     manage_products: true,
+    flag_out_of_stock: true,
     manage_customers: true,
     cancelOrders: true,
     seePrices: true,
@@ -116,7 +124,10 @@ export const ALLOW: Record<Exclude<Role, 'Owner'>, Partial<Record<Capability, bo
     weighColdStorage: true,
     packWarehouse: true,
     advanceStage: true,
-    manage_products: true,
+    // NOT manage_products (see F-10 / the flag_out_of_stock doc comment
+    // above) — Settings-Owner.png shows Warehouse unchecked for full
+    // create/edit/delete. Warehouse only gets the narrower OOS-flip grant.
+    flag_out_of_stock: true,
     // Warehouse completes the "receive" bucket of a return (weigh the goods
     // back in) — no Owner Settings page exists yet to grant this per-role,
     // so it defaults on rather than blocking the workflow.
@@ -182,6 +193,7 @@ export const CAPABILITIES: Capability[] = [
   'manageRoles',
   'manageSettings',
   'manage_products',
+  'flag_out_of_stock',
   'manage_customers',
   'seePrices',
   'seeCustomerContact',

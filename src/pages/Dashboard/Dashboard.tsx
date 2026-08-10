@@ -3,7 +3,9 @@ import { useNavigate } from "react-router-dom";
 import type { IconName } from "../../components/Icon/icons";
 import { Button } from "../../components/Button/Button";
 import { ChannelSelectModal } from "../../components/ChannelSelectModal/ChannelSelectModal";
+import { Icon } from "../../components/Icon/Icon";
 import { IntakeModal } from "../../components/IntakeModal/IntakeModal";
+import { DigestTile } from "../../components/DigestTile/DigestTile";
 import { MetricCard } from "../../components/MetricCard/MetricCard";
 import { NotificationsPopover } from "../../components/NotificationsPopover/NotificationsPopover";
 import { QuickActionCard } from "../../components/QuickActionCard/QuickActionCard";
@@ -26,6 +28,7 @@ import { useDeliveries } from "../../hooks/useDeliveries";
 import { useIntakeMessages } from "../../hooks/useIntakeMessages";
 import { useOpenOrders } from "../../hooks/useOpenOrders";
 import { usePickList } from "../../hooks/usePickList";
+import { useTodayDigest } from "../../hooks/useTodayDigest";
 import { AttentionPanel } from "./sections/AttentionPanel";
 import { IntakePanel } from "./sections/IntakePanel";
 import { OpenOrdersPanel } from "./sections/OpenOrdersPanel";
@@ -44,6 +47,15 @@ function formatRupiahShort(amount: number): string {
   return `Rp ${(amount / 1_000_000).toFixed(2)} jt`;
 }
 
+/** Full-Rupiah formatter for the "Needs attention today" digest — these are
+ * figures reconciled against real cash/documents, not a glance-only metric,
+ * so they're spelled out in full (unlike formatRupiahShort above). */
+const currency = new Intl.NumberFormat("id-ID", {
+  style: "currency",
+  currency: "IDR",
+  minimumFractionDigits: 0,
+});
+
 const METRIC_ICONS: Record<string, IconName> = {
   open: "total",
   total: "store",
@@ -56,16 +68,16 @@ export function Dashboard() {
   const navigate = useNavigate();
   const [sortBy, setSortBy] = useState("-no");
   const [totalRange, setTotalRange] = useState<RangeWithLabel>({
-    val: { type: "all" },
-    label: "All time",
+    val: { type: "today" },
+    label: "Today",
   });
   const [deliveredRange, setDeliveredRange] = useState<RangeWithLabel>({
-    val: { type: "all" },
-    label: "All time",
+    val: { type: "today" },
+    label: "Today",
   });
   const [cancelledRange, setCancelledRange] = useState<RangeWithLabel>({
-    val: { type: "all" },
-    label: "All time",
+    val: { type: "today" },
+    label: "Today",
   });
 
   const {
@@ -106,14 +118,66 @@ export function Dashboard() {
   // Same source of truth as each respective page, so the counts always match
   // what the user sees after clicking through (usePickList's `orderCount` in
   // particular — the Pick List page's own header badge reads the same field).
-  const { stops: deliveryStops } = useDeliveries(currentUserId);
+  const { mine: deliveryStops } = useDeliveries(currentUserId);
   const { orderCount: pickListOrderCount } = usePickList(todayISO());
-  const { remaining: cashUpRemaining } = useCashUp();
+  const {
+    remaining: cashUpRemaining,
+    groups: cashUpGroups,
+    confirmedIds: cashUpConfirmedIds,
+  } = useCashUp();
   const quickActionCount = [
     canViewDeliveryRun,
     canViewPickList,
     canReconcileCOD,
   ].filter(Boolean).length;
+
+  // "Needs attention today" digest — an Admin's day-to-day tool (they chase
+  // COD and missing DO/SI), not an ownership-scoped view, so it's gated on
+  // capability-adjacent role rather than Owner-only.
+  const showDigest = role === "Admin" || role === "Owner";
+  const digest = useTodayDigest(showDigest);
+  const codPendingCount = cashUpGroups.reduce(
+    (sum, g) =>
+      sum + g.orders.filter((o) => !cashUpConfirmedIds.has(o.orderId)).length,
+    0,
+  );
+  const digestTiles = [
+    {
+      key: "cod",
+      value: currency.format(cashUpRemaining),
+      label: t("COD pending"),
+      loud: codPendingCount > 0,
+      onClick: () => navigate("/cashup"),
+    },
+    {
+      key: "docs",
+      value: digest.docsNotBack,
+      label: t("DO/SI not back"),
+      loud: digest.docsNotBack > 0,
+      onClick: () => navigate("/orders?stage=pending-docs"),
+    },
+    {
+      key: "road",
+      value: digest.onTheRoad,
+      label: t("On the road"),
+      loud: false,
+      onClick: () => navigate("/orders?stage=dispatch"),
+    },
+    {
+      key: "returns",
+      value: digest.returnsInFlight,
+      label: t("Returns in flight"),
+      loud: false,
+      onClick: () => navigate("/orders?stage=returned"),
+    },
+    {
+      key: "new",
+      value: digest.newOrdersToday,
+      label: t("New orders"),
+      loud: false,
+      onClick: () => navigate("/orders?stage=today"),
+    },
+  ];
 
   // Multi-step "Add New Order" flow:
   // step 0: idle, step 1: channel selection, step 2: intake
@@ -215,14 +279,18 @@ export function Dashboard() {
               <div
                 className={styles.quickActionsRow}
                 style={
-                  { "--quick-action-count": quickActionCount } as React.CSSProperties
+                  {
+                    "--quick-action-count": quickActionCount,
+                  } as React.CSSProperties
                 }
               >
                 {canViewDeliveryRun && (
                   <QuickActionCard
                     icon="navigation"
                     label={t("My deliveries")}
-                    value={deliveryStops.length > 0 ? deliveryStops.length : "-"}
+                    value={
+                      deliveryStops.length > 0 ? deliveryStops.length : "-"
+                    }
                     suffix={t("to deliver")}
                     title={t("See the delivery run-sheet")}
                     onClick={() => navigate("/deliveries")}
@@ -248,6 +316,37 @@ export function Dashboard() {
                     onClick={() => navigate("/cashup")}
                   />
                 )}
+              </div>
+            )}
+            {showDigest && !digest.loading && (
+              <div className={styles.digestSection}>
+                <div className={styles.sectionHeading}>
+                  {t("Needs attention today")}
+                </div>
+                <div className={styles.digestGrid}>
+                  {digestTiles.map((tile) => (
+                    <DigestTile
+                      key={tile.key}
+                      value={tile.value}
+                      label={tile.label}
+                      loud={tile.loud}
+                      onClick={tile.onClick}
+                    />
+                  ))}
+                </div>
+                <div className={styles.doneRow}>
+                  <span className={styles.doneLabel}>{t("Done today")}</span>
+                  <span className={styles.separator} />
+                  <span className={styles.doneItem}>
+                    <Icon name="check" size={16} />
+                    {digest.deliveredToday} {t("delivered")}
+                  </span>
+                  <span className={styles.doneItem}>
+                    <Icon name="cash" size={16} />
+                    {currency.format(digest.codCollectedTodayAmount)}{" "}
+                    {t("collected")}
+                  </span>
+                </div>
               </div>
             )}
 

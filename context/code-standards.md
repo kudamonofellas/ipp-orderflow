@@ -41,6 +41,8 @@
 - Realtime subscriptions use `client.realtime.subscribe()` and are cleaned up in the effect that created them.
 - File uploads use `client.request(uploadFiles())` — never base64-encode a photo into a JSON field.
 - Pagination is cursor-based for infinite lists, offset-based for tables with known counts.
+- **Singleton collections** (e.g. `settings` — exactly one row, id always 1) use `readSingleton()`/`updateSingleton()`, never `readItems()`/`updateItem(id, ...)`. `GET /items/<singleton>` always returns a single object, not an array, so `Array.isArray(raw)` checks silently break; `PATCH /items/<singleton>/:id` 404s (no such route). Found live 2026-08-10 after every `settings` read/write had been silently failing.
+- A restricted (non-`*`) Directus field-permission rejects the **whole** request if it names any field outside the allowed list — even one unrequested/unchanged field 403s the entire read or write, not just that field. When a hook's `fields`/payload is shared across roles with different field ACLs (e.g. `orders.sales_rep`, `order_lines.price`), build it conditionally off the relevant `can()` capability rather than requesting everything unconditionally.
 
 ## Styling
 

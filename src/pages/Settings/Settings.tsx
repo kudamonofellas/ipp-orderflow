@@ -51,6 +51,8 @@ export function Settings() {
     loading: teamLoading,
     error: teamError,
     reload: reloadTeam,
+    setPermRows,
+    setMembers,
   } = useTeamSettings();
 
   const canManageSettings = can("manageSettings");
@@ -70,6 +72,18 @@ export function Settings() {
     // persists to Directus, it doesn't touch the render-time t() the rest
     // of the app reads from.
     setLang(next);
+  }
+
+  /**
+   * `update()` (useSettings) can fail silently if not awaited — surface any
+   * error instead of letting a toggle/input appear to do nothing. Found via
+   * a real bug: `updateSettings()` used to PATCH `/items/settings/:id`,
+   * which 404s for a Directus singleton collection (no such route), so every
+   * settings write here failed with the error never shown to anyone.
+   */
+  async function handleSettingUpdate(patch: Record<string, unknown>) {
+    const res = await update(patch);
+    if (res.error) window.alert(res.error);
   }
 
   async function handleLogout() {
@@ -126,7 +140,9 @@ export function Settings() {
 
   async function handleDeleteCorrection(id: string, tokenKey: string) {
     if (
-      !window.confirm(`${t("Remove learned match")} "${tokenKey}"? ${t("This cannot be undone.")}`)
+      !window.confirm(
+        `${t("Remove learned match")} "${tokenKey}"? ${t("This cannot be undone.")}`,
+      )
     ) {
       return;
     }
@@ -137,14 +153,22 @@ export function Settings() {
   }
 
   async function handleToggleActive(m: TeamMember, nextActive: boolean) {
-    const res = await updateTeamMember(m.id, {
-      status: nextActive ? "active" : "suspended",
-    });
+    const prevStatus = m.status;
+    const nextStatus = nextActive ? "active" : "suspended";
+    // Optimistic, same reasoning as toggleCell below: reloadTeam() would
+    // refetch members + roles + permRows together and flip teamLoading,
+    // flickering "Loading team…" over the whole section for a single-row
+    // status flip.
+    setMembers((prev) =>
+      prev.map((x) => (x.id === m.id ? { ...x, status: nextStatus } : x)),
+    );
+    const res = await updateTeamMember(m.id, { status: nextStatus });
     if (res.error) {
+      setMembers((prev) =>
+        prev.map((x) => (x.id === m.id ? { ...x, status: prevStatus } : x)),
+      );
       window.alert(res.error);
-      return;
     }
-    reloadTeam();
   }
 
   function permValue(
@@ -166,6 +190,28 @@ export function Settings() {
     const existing = permRows.find(
       (r) => normalizeRole(r.role) === gridRole && r.capability === cap,
     );
+
+    // Optimistic: flip immediately, persist in the background, revert on
+    // error only. Patches `permRows` directly instead of routing through
+    // `reloadTeam()` — that refetches members + roles + permRows together
+    // and flips `teamLoading`, which visibly flickers the unrelated Team
+    // section on every single grid click.
+    if (existing) {
+      setPermRows((prev) =>
+        prev.map((r) => (r.id === existing.id ? { ...r, allowed: next } : r)),
+      );
+    } else {
+      setPermRows((prev) => [
+        ...prev,
+        {
+          id: `pending-${gridRole}-${cap}`,
+          role: gridRole,
+          capability: cap,
+          allowed: next,
+        },
+      ]);
+    }
+
     const res = await setRolePermission(
       existing?.id ?? null,
       gridRole,
@@ -173,10 +219,32 @@ export function Settings() {
       next,
     );
     if (res.error) {
+      // Revert the optimistic change.
+      if (existing) {
+        setPermRows((prev) =>
+          prev.map((r) =>
+            r.id === existing.id ? { ...r, allowed: existing.allowed } : r,
+          ),
+        );
+      } else {
+        setPermRows((prev) =>
+          prev.filter((r) => r.id !== `pending-${gridRole}-${cap}`),
+        );
+      }
       window.alert(res.error);
       return;
     }
-    reloadTeam();
+    // A newly created row's real id comes back from the write — swap it in
+    // for the placeholder so a follow-up toggle on the same cell updates
+    // instead of creating a duplicate row.
+    if (!existing && res.data) {
+      const realId = res.data;
+      setPermRows((prev) =>
+        prev.map((r) =>
+          r.id === `pending-${gridRole}-${cap}` ? { ...r, id: realId } : r,
+        ),
+      );
+    }
     await refreshPermissions();
   }
 
@@ -188,12 +256,19 @@ export function Settings() {
     ) {
       return;
     }
-    const res = await deleteRolePermissionRows(permRows.map((r) => r.id));
+    // Real ids only — a still-pending optimistic row from toggleCell (id
+    // prefixed "pending-") has nothing persisted yet to delete.
+    const idsToDelete = permRows
+      .map((r) => r.id)
+      .filter((id) => !id.startsWith("pending-"));
+    const previousRows = permRows;
+    setPermRows([]);
+    const res = await deleteRolePermissionRows(idsToDelete);
     if (res.error) {
+      setPermRows(previousRows);
       window.alert(res.error);
       return;
     }
-    reloadTeam();
     await refreshPermissions();
   }
 
@@ -253,7 +328,7 @@ export function Settings() {
                           {t("Edit")}
                         </Button>
                         <Toggle
-                          size="sm"
+                          size="md"
                           label={
                             m.status === "active"
                               ? t("Deactivate member")
@@ -302,7 +377,7 @@ export function Settings() {
                             <Button
                               type="button"
                               variant="secondary"
-                              size="sm"
+                              size="md"
                               onClick={cancelEdit}
                             >
                               {t("Cancel")}
@@ -310,7 +385,7 @@ export function Settings() {
                             <Button
                               type="button"
                               variant="primary"
-                              size="sm"
+                              size="md"
                               disabled={savingMember}
                               onClick={() => saveEdit(m.id)}
                             >
@@ -428,12 +503,15 @@ export function Settings() {
               <div key={c.id} className={styles.correctionRow}>
                 <div className={styles.correctionInfo}>
                   <span className={styles.correctionToken}>
-                    "{c.tokenKey}"<span className={styles.correctionArrow}>→</span>
+                    "{c.tokenKey}"
+                    <span className={styles.correctionArrow}>→</span>
                     {c.productName}
                   </span>
                   <span className={styles.correctionMeta}>
                     {t("Added by")} {c.createdBy}
-                    {c.dateCreated ? ` · ${new Date(c.dateCreated).toLocaleDateString("en-US")}` : ""}
+                    {c.dateCreated
+                      ? ` · ${new Date(c.dateCreated).toLocaleDateString("en-US")}`
+                      : ""}
                   </span>
                 </div>
                 <div className={styles.correctionRight}>
@@ -444,7 +522,7 @@ export function Settings() {
                     <Button
                       type="button"
                       variant="tertiary"
-                      size="sm"
+                      size="md"
                       iconOnly
                       icon="trash"
                       title={t("Remove learned match")}
@@ -486,7 +564,9 @@ export function Settings() {
                     <Toggle
                       label={t("Require a proof photo on every item")}
                       checked={settings?.require_photo === true}
-                      onChange={(next) => update({ require_photo: next })}
+                      onChange={(next) =>
+                        handleSettingUpdate({ require_photo: next })
+                      }
                     />
                   </div>
 
@@ -506,7 +586,9 @@ export function Settings() {
                           max={100}
                           value={settings?.tol_below_pct ?? 10}
                           onChange={(e) =>
-                            update({ tol_below_pct: Number(e.target.value) })
+                            handleSettingUpdate({
+                              tol_below_pct: Number(e.target.value),
+                            })
                           }
                         />
                       </label>
@@ -521,7 +603,9 @@ export function Settings() {
                           max={100}
                           value={settings?.tol_above_pct ?? 10}
                           onChange={(e) =>
-                            update({ tol_above_pct: Number(e.target.value) })
+                            handleSettingUpdate({
+                              tol_above_pct: Number(e.target.value),
+                            })
                           }
                         />
                       </label>
@@ -553,7 +637,7 @@ export function Settings() {
                       label={t("Require delivery proof photos")}
                       checked={settings?.dispatch_proof_required === true}
                       onChange={(next) =>
-                        update({ dispatch_proof_required: next })
+                        handleSettingUpdate({ dispatch_proof_required: next })
                       }
                     />
                   </div>

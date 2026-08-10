@@ -71,7 +71,7 @@ export function useSettings(): UseSettingsResult {
   async function update(patch: Record<string, unknown>) {
     if (!settings) return { error: 'Settings not loaded yet' };
     setSaving(true);
-    const res = await updateSettings(settings.id, patch);
+    const res = await updateSettings(patch);
     setSaving(false);
     if (res.error) return { error: res.error };
     setSettings(res.data);

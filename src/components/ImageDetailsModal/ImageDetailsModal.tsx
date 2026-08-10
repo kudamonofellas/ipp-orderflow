@@ -1,6 +1,5 @@
-import { Icon } from '../Icon/Icon';
-import { Button } from '../Button/Button';
-import styles from './ImageDetailsModal.module.css';
+import { Button } from "../Button/Button";
+import styles from "./ImageDetailsModal.module.css";
 
 interface ImageDetailsModalProps {
   open: boolean;
@@ -17,7 +16,7 @@ export function ImageDetailsModal({
   url,
   onClose,
   onDelete,
-  deleteLabel = 'Delete Image',
+  deleteLabel = "Delete Image",
 }: ImageDetailsModalProps) {
   if (!open) return null;
 
@@ -26,45 +25,48 @@ export function ImageDetailsModal({
       <div className={styles.modalContent} onClick={(e) => e.stopPropagation()}>
         <div className={styles.modalHeader}>
           <span>{title}</span>
-          <Button
-            type="button"
-            size="sm"
-            iconOnly
-            style={{
-              color: 'var(--bg-surface)',
-              backgroundColor: 'transparent',
-              border: '1px solid',
-              borderColor: 'var(--bg-surface)',
-              borderRadius: 'var(--space-3xl)',
-            }}
-            onClick={onClose}
-          >
-            <Icon name="close" size={16} />
-          </Button>
-        </div>
-        <div className={styles.modalBody}>
-          <img src={url} alt={title || 'Detail preview'} className={styles.modalImage} />
-        </div>
-        <div className={styles.modalFooter}>
-          {onDelete && (
+          <div className={styles.modalActions}>
+            {onDelete && (
+              <Button
+                type="button"
+                variant="secondary"
+                icon="trash"
+                iconOnly
+                title={deleteLabel}
+                style={{
+                  color: "var(--bg-surface)",
+                  backgroundColor: "transparent",
+                  border: "1px solid",
+                  borderColor: "var(--bg-surface)",
+                  borderRadius: "var(--space-3xl)",
+                }}
+                onClick={() => {
+                  onDelete();
+                }}
+              />
+            )}
             <Button
               type="button"
-              variant="secondary"
+              size="md"
+              icon="close"
+              iconOnly
               style={{
-                color: 'var(--bg-surface)',
-                backgroundColor: 'transparent',
-                borderColor: 'var(--bg-surface)',
+                color: "var(--bg-surface)",
+                backgroundColor: "transparent",
+                border: "1px solid",
+                borderColor: "var(--bg-surface)",
+                borderRadius: "var(--space-3xl)",
               }}
-              onClick={() => {
-                onDelete();
-              }}
-            >
-              <Icon name="trash" size={16} /> {deleteLabel}
-            </Button>
-          )}
-          <Button type="button" variant="secondary" onClick={onClose}>
-            Close
-          </Button>
+              onClick={onClose}
+            ></Button>
+          </div>
+        </div>
+        <div className={styles.modalBody}>
+          <img
+            src={url}
+            alt={title || "Detail preview"}
+            className={styles.modalImage}
+          />
         </div>
       </div>
     </div>
