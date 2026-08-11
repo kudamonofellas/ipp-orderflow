@@ -3,15 +3,12 @@ import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { Card } from "../../components/Card/Card";
 import { Icon } from "../../components/Icon/Icon";
 import { Button } from "../../components/Button/Button";
-import { ChannelSelectModal } from "../../components/ChannelSelectModal/ChannelSelectModal";
-import { IntakeModal } from "../../components/IntakeModal/IntakeModal";
 import { OrderRows } from "../../components/OrderRows/OrderRows";
 import { useCan } from "../../hooks/useAuth";
 import { useLanguage } from "../../hooks/useLanguage";
 import { useOrders } from "../../hooks/useOrders";
 import { PIPELINE_STAGES, RETURN_STAGES } from "../../lib/pipeline";
 import type { OpenOrder } from "../../types/dashboard";
-import type { ParsedOrderDraft } from "../../lib/directus";
 import styles from "./Orders.module.css";
 
 const STAGE_OPTIONS = [
@@ -130,28 +127,8 @@ export function Orders() {
   const stageDropdownRef = useRef<HTMLDivElement>(null);
   const sortDropdownRef = useRef<HTMLDivElement>(null);
 
-  // Multi-step "Add New Order" flow: step 0: idle, step 1: channel selection, step 2: intake
-  const [orderStep, setOrderStep] = useState<0 | 1 | 2>(0);
-
   function startNewOrder() {
-    setOrderStep(1);
-  }
-  function closeAll() {
-    setOrderStep(0);
-  }
-  function handleChannelSelect(_channel: "horeca") {
-    void _channel;
-    setOrderStep(2);
-  }
-  function handleParsed(
-    draft: ParsedOrderDraft,
-    rawText: string,
-    attachments: File[],
-  ) {
-    setOrderStep(0);
-    navigate("/orders/new", {
-      state: { prefill: draft, rawText, attachments, from: location.pathname },
-    });
+    navigate("/orders/new", { state: { from: location.pathname } });
   }
 
   const {
@@ -404,19 +381,6 @@ export function Orders() {
           </>
         )}
       </Card>
-
-      <ChannelSelectModal
-        open={orderStep === 1}
-        onClose={closeAll}
-        onSelect={handleChannelSelect}
-      />
-
-      <IntakeModal
-        open={orderStep === 2}
-        channel="horeca"
-        onClose={closeAll}
-        onParsed={handleParsed}
-      />
     </div>
   );
 }

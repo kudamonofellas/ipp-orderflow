@@ -112,6 +112,9 @@ function toOpenOrder(
     sales_rep?: string | null;
     customer_name?: string | null;
     created_at?: string | null;
+    taken_by?: string | null;
+    pickup?: boolean | null;
+    third_party?: boolean | null;
   },
   linesByOrderId: Map<string, OpenOrderLine[]>,
 ): OpenOrder {
@@ -124,6 +127,9 @@ function toOpenOrder(
     salesRep: row.sales_rep ?? "—",
     customerName: row.customer_name ?? "—",
     lines: linesByOrderId.get(row.id) ?? [],
+    takenBy: row.taken_by ?? null,
+    pickup: row.pickup === true,
+    thirdParty: row.third_party === true,
   };
 }
 
@@ -164,6 +170,9 @@ export function useOpenOrders(sort: string = "-no"): UseOpenOrdersResult {
         "delivery_date",
         "customer_name",
         "created_at",
+        "taken_by",
+        "pickup",
+        "third_party",
         ...(seeCustomerContact ? ["sales_rep"] : []),
       ];
       const lineFields = [

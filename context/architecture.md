@@ -9,11 +9,11 @@
 | UI          | HugeIcons via Iconify (`@iconify/react` + `@iconify-json/hugeicons`) + plain CSS | Icons + styling. No Tailwind. Light/dark theme (built), EN/Bahasa i18n (not yet built). |
 | Backend API | Directus 12.0.2 (headless CMS)     | REST/GraphQL API, auth, file storage, role ACLs, realtime. Replaces Firebase. |
 | Database    | PostgreSQL (`horeca_orders_dev` / `horeca_orders` db) | Dev vs Prod databases on Postgres. Single source of truth for all business data. |
-| Automation  | n8n (+ its own Postgres)           | WhatsApp intake workflow: parses group messages → draft orders in Directus.   |
-| WhatsApp    | Evolution API (+ Postgres + Redis) | WhatsApp integration; webhooks → n8n.                                         |
+| Automation  | n8n (+ its own Postgres)           | WhatsApp intake workflow: parses group messages → draft orders in Directus. **Orphaned as of 2026-08-11** — the frontend's WhatsApp intake UI was fully removed (see `progress-tracker.md`); nothing reads the `messages`/draft-order rows this workflow writes anymore. Backend workflow itself was not touched. |
+| WhatsApp    | Evolution API (+ Postgres + Redis) | WhatsApp integration; webhooks → n8n. Same orphan status as Automation above.  |
 | Files       | Directus Files (`directus_files`)  | Proof photos, attachments — visible across devices.                           |
 | Proxy/TLS   | Traefik + Let's Encrypt            | Reverse proxy, auto-HTTPS on `*.kudafellas.cloud`.                            |
-| Parsing Svc | Shared Parser REST API             | Node endpoint at `/order-api/parse-order` for copy-paste WhatsApp intake parsing. |
+| Parsing Svc | Shared Parser REST API             | Node endpoint at `/order-api/parse-order`. **No longer called by the frontend** (2026-08-11 removal) — the in-app copy-paste-and-parse flow was removed; only the n8n automation path may still call it. |
 | Mobile      | Capacitor 8 (later phase)          | Android APK — NOT in Phase 1, but remains a goal.                             |
 | LLM gateway | Hermes (GPT-4o)                    | **On hold** per user — not wired in Phase 1.                                  |
 
@@ -23,8 +23,8 @@
 - `context/` — Project documentation (overview, architecture, schema snapshots). Not shipped.
 - `.agents/memories/` — Imported session notes + project context. Not shipped.
 - **Directus (prod `admin.kudafellas.cloud` / dev `dev-admin.kudafellas.cloud`)** — Owns all business collections, auth, roles, file storage, realtime subscriptions. The frontend talks to this via `@directus/sdk`.
-- **Shared Parsing Service (`dev-admin.kudafellas.cloud/order-api/parse-order`)** — A server-side REST endpoint that parses raw WhatsApp order text into a structured draft (customer match, delivery date, item lines with match status). Called by the frontend copy-paste intake flow using the `x-internal-token` header (`VITE_INTERNAL_TOKEN` in `.env`). This same parsing logic is also invoked by the n8n WhatsApp automation flow — one implementation shared by both paths. The frontend does NOT call n8n directly.
-- **n8n** — Owns the WhatsApp intake automation. Reads from Evolution API webhooks, calls the shared parsing service, and writes draft orders + messages into Directus. The frontend does NOT call n8n directly.
+- **Shared Parsing Service (`dev-admin.kudafellas.cloud/order-api/parse-order`)** — A server-side REST endpoint that parses raw WhatsApp order text into a structured draft (customer match, delivery date, item lines with match status). **No longer called by the frontend** (the in-app copy-paste intake flow that used the `x-internal-token` header / `VITE_INTERNAL_TOKEN` was removed 2026-08-11). May still be invoked by the n8n WhatsApp automation flow independently — not verified as part of this removal since that's backend/n8n scope, not frontend.
+- **n8n** — Owns the WhatsApp intake automation. Reads from Evolution API webhooks, calls the shared parsing service, and writes draft orders + messages into Directus. The frontend does NOT call n8n directly, and (as of 2026-08-11) no longer reads what this workflow writes either — see the Automation row in Stack above.
 - **Evolution API** — Owns the WhatsApp connection. Sends webhooks to n8n. The frontend does NOT talk to Evolution API.
 - **Postgres `horeca_orders_dev`** (dev) / **`horeca_orders`** (prod) — The business database Directus sits on top of. Not accessed directly by the frontend (always via Directus). We are currently in development using `horeca_orders_dev`.
 
@@ -101,8 +101,8 @@ Directus-adapted version.
 #### Existing collections (intake — kept, extended)
 
 - **`orders`** — extended with the pipeline fields below (done). `status` (legacy) coexists with `stage` (current); `stage`'s default maps to `intake`.
-- **`messages`** — kept as-is (WhatsApp intake log). `order_uuid` already links to `orders`.
-- **`attachments`** — kept as-is (per-message files). `order_uuid` + `message_id` already link out.
+- **`messages`** — WhatsApp intake log, still written by the n8n automation. **No longer read anywhere in the frontend** (2026-08-11 — the dashboard triage panel that read this collection was removed along with the rest of the in-app WhatsApp intake UI). `order_uuid` still links to `orders`.
+- **`attachments`** — kept, and still actively used — this collection is shared: some rows are WhatsApp-sourced (`message_id` set, from the n8n OCR pipeline), others are manually-logged documents added in-app (`message_id` null). `order_uuid` + `message_id` link out.
 
 #### Pipeline collections (built — see the 2026-08-07 note above for what's confirmed live)
 
@@ -121,7 +121,7 @@ Directus-adapted version.
 - **`courier_locations`** — ephemeral live courier GPS (replaces BroadcastChannel `ipp-live-loc`). Upserted per ping. Fields: `courier` (→ `directus_users`), `lat` NUMERIC(9,6), `lng` NUMERIC(9,6), `at` TIMESTAMPTZ. Prefer Directus realtime subscriptions over polling.
 - **`role_permissions`** — Owner-configurable per-role capability overrides (replaces `settings.permissions`). Composite PK (`capability`, `role`). Owner is always allowed and not stored here. Absence of a row falls back to the coded default in the domain layer.
 - **`settings`** — singleton operational settings (replaces `DEFAULT_SETTINGS`). Fields: `require_photo` BOOL, `tol_below_pct` INT, `tol_above_pct` INT, `dispatch_proof_required` BOOL, `lang` TEXT.
-- **`corrections`** — Learned product-matching corrections. When Admin manually assigns a product to a parser-unrecognized line, the correction is saved here so every future parse benefits from it. Fields: `id` UUID PK, `token_key` VARCHAR(500) UNIQUE (normalized token string from the raw line text), `product_id` UUID (→ `products`), `created_by` UUID (→ `directus_users`), `date_created` TIMESTAMPTZ, `times_used` INT. The shared parsing service reads this table before doing fuzzy matching.
+- **`corrections`** — Learned product-matching corrections (raw-text-token → product). **No longer written or read by the frontend** (2026-08-11 — the Settings "Intake Learning" review UI and the write path from the in-app parsed-order flow were both removed). Fields: `id` UUID PK, `token_key` VARCHAR(500) UNIQUE, `product_id` UUID (→ `products`), `created_by` UUID (→ `directus_users`), `date_created` TIMESTAMPTZ, `times_used` INT. May still be read by the shared parsing service on the n8n automation path, independent of this app.
 
 #### `orders` extensions (done — live in `snapshot.json`)
 
@@ -189,7 +189,7 @@ erDiagram
 
 1. **Directus is the only backend the frontend talks to.** The frontend never connects to Postgres, n8n, or Evolution API directly. All reads/writes go through `@directus/sdk`.
 2. **Postgres `horeca_orders` is the single source of truth.** No localStorage or IndexedDB as source of truth (the prototype's pattern is dropped). The frontend may cache for offline-tolerance, but Directus wins on conflict.
-3. **WhatsApp intake is asynchronous.** Evolution API → n8n → Directus is a one-way pipeline. The frontend polls/subscribes to Directus for new draft orders; it does not wait on n8n.
+3. **WhatsApp intake, where it still runs, is asynchronous and backend-only.** Evolution API → n8n → Directus was a one-way pipeline; the frontend never waited on n8n. As of 2026-08-11 the frontend no longer has any UI that reads from this pipeline at all (no draft-order triage panel, no polling) — see the Automation row in Stack and the `messages`/`corrections` notes above.
 4. **Every order has a status from the pipeline enum.** Stable keys: `intake → cold → finance → production → packing → finalise → dispatch → delivered` (current UI labels: `New Orders`, `Cold Storage Picking`, `Finance Review`, `Processing`, `Packing`, `Print DO/SI`, `Dispatch`, `Delivered`). Off-pipeline states: `outstanding`, `awaiting`, `cancelled`, `returned`. Return workflow stages (parallel buckets, not sequential) are tracked separately: `awaiting_return`, `admin_action`, `awaiting_signed_doc`, `replacement_transit` — see `src/lib/pipeline.ts`. The legacy schema's default `'Draft'` maps to `intake`.
 5. **Proof photos live in Directus Files, not on the device.** Warehouse weigh photos and courier delivery photos are uploaded to `directus_files` and referenced by UUID — visible to every role, every device. Replaces the prototype's separate `photos` table + IndexedDB `ipp-photos` store.
 6. **The target schema is normalized.** `order_items` is not a text blob — it's the `order_lines` collection. Customer fields are not denormalized on `orders` — they reference `customers.id`. The existing denormalized fields on `orders` are kept only as historical snapshots.

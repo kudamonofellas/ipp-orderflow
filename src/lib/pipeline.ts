@@ -70,6 +70,49 @@ export const STAGE_LABELS: Record<Stage, string> = {
 } as Record<Stage, string>;
 
 /**
+ * Dispatch sub-status — NOT a stage. An order reading "out for delivery" is
+ * still `stage === 'dispatch'`; this is a presentational annotation derived
+ * from the 3 hand-off booleans, not something the stage enum, stage filters,
+ * or pipeline counts should ever know about. Single source of truth for the
+ * same predicate `OrderDetail.tsx`'s `handoffMode` already computes — don't
+ * fork a second copy of this check anywhere.
+ */
+export type DispatchSubStatus = 'out_for_delivery' | 'awaiting_driver';
+
+export function dispatchSubStatus(order: {
+  stage?: string | null;
+  taken_by?: string | null;
+  pickup?: boolean | null;
+  third_party?: boolean | null;
+}): DispatchSubStatus | null {
+  if (order.stage !== 'dispatch') return null;
+  return order.taken_by || order.pickup || order.third_party
+    ? 'out_for_delivery'
+    : 'awaiting_driver';
+}
+
+export const DISPATCH_SUBSTATUS_LABELS: Record<DispatchSubStatus, string> = {
+  out_for_delivery: 'Out for delivery',
+  awaiting_driver: 'Awaiting driver',
+};
+
+/**
+ * Convenience wrapper for callers (StatusPill's `subLabel` prop) that just
+ * want the label string, not the typed enum — still routes through the one
+ * `dispatchSubStatus()` predicate above, not a second copy of the check.
+ * Returns the untranslated dictionary key; callers pass it through `t()`.
+ */
+export function dispatchSubLabel(order: {
+  stage?: string | null;
+  taken_by?: string | null;
+  pickup?: boolean | null;
+  third_party?: boolean | null;
+}): string | null {
+  const sub = dispatchSubStatus(order);
+  return sub ? DISPATCH_SUBSTATUS_LABELS[sub] : null;
+}
+
+/**
  * Which return-workflow bucket(s) an order currently sits in. A return isn't
  * a forward pipeline stage - it's an off-pipeline loop with parallel
  * hand-offs (the same principle as Finance running alongside Cold Storage):
@@ -234,3 +277,46 @@ export const ACTOR: Record<string, Role> = {
   outstanding: 'Admin',
   awaiting: 'Admin',
 };
+
+/** Which role owns each return-workflow bucket — a separate keyspace from
+ *  `ACTOR` above (return buckets aren't `order.stage` values; `stage` stays
+ *  `'returned'` throughout, see `returnBucketsForOrder`). Used by
+ *  `statusColor()` only — not merged into `ACTOR` itself, to keep `ACTOR`'s
+ *  scope (pipeline `stage` field) unambiguous. */
+const RETURN_BUCKET_ACTOR: Record<ReturnStage, Role> = {
+  awaiting_return: 'Warehouse',
+  admin_action: 'Admin',
+  awaiting_signed_doc: 'Admin',
+  replacement_transit: 'Warehouse',
+};
+
+/** Role → `StatusPill` dot/text colour (CSS custom property). One colour per
+ *  role, all six pairwise-distinct — see the `--role-*` tokens in
+ *  `tokens.css`. */
+export const ROLE_COLOR: Record<Role, string> = {
+  Admin: 'var(--role-admin)',
+  Warehouse: 'var(--role-warehouse)',
+  Finance: 'var(--role-finance)',
+  Production: 'var(--role-production)',
+  Courier: 'var(--role-courier)',
+  Owner: 'var(--role-owner)',
+};
+
+/**
+ * Resolve any `orders.stage` value (or return-bucket key) to its
+ * `StatusPill` colour, via the role responsible for it — NOT a per-stage
+ * colour. Stages owned by the same role intentionally render identically
+ * (intake and finalise are both Admin → both `--role-admin`; cold and
+ * packing are both Warehouse → both `--role-warehouse`). Terminal states
+ * (delivered/returned/cancelled/awaiting) aren't owned by a role, so they
+ * get their own dedicated `--state-*` tokens instead of an `ACTOR` lookup.
+ */
+export function statusColor(key: string): string {
+  if (key === 'delivered') return 'var(--state-done)';
+  if (key === 'returned') return 'var(--state-returned)';
+  if (key === 'cancelled' || key === 'awaiting') return 'var(--state-neutral)';
+  const returnActor = RETURN_BUCKET_ACTOR[key as ReturnStage];
+  if (returnActor) return ROLE_COLOR[returnActor];
+  const actor = ACTOR[key];
+  return actor ? ROLE_COLOR[actor] : 'var(--state-neutral)';
+}

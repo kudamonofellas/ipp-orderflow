@@ -211,35 +211,6 @@
 }
 
 /* ===== Checkbox ===== */
-.checkbox {
-  width: 22px;
-  height: 22px;
-  flex-shrink: 0;
-  border-radius: var(--radius-sm);
-  border: 1.5px solid var(--border-default);
-  background: var(--bg-surface);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition:
-    border-color var(--duration-fast) var(--ease-default),
-    background-color var(--duration-fast) var(--ease-default);
-}
-
-.checkbox:hover {
-  border-color: var(--accent-primary);
-}
-
-.checkboxChecked {
-  border-color: var(--accent-primary);
-  background: var(--accent-primary);
-}
-
-.checkboxIcon {
-  color: var(--text-on-accent);
-}
-
 /* ===== Badges under the product name ===== */
 .cuttingPill {
   display: inline-flex;

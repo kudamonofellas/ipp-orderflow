@@ -66,21 +66,6 @@ export const OrdersCollectionSchema = z.object({
   updated_at: z.string().nullable().optional(),
 });
 
-/** Directus `messages` collection row. */
-export const MessagesCollectionSchema = z.object({
-  id: z.union([z.number(), z.string()]).transform(String),
-  message_id: z.string(),
-  sender_number: z.string().nullable().optional(),
-  content: z.string().nullable().optional(),
-  caption: z.string().nullable().optional(),
-  has_attachment: z.boolean().optional(),
-  is_edited: z.boolean().optional(),
-  is_deleted: z.boolean().optional(),
-  order_uuid: z.string().nullable().optional(),
-  order_id: z.string().nullable().optional(),
-  created_at: z.string().nullable().optional(),
-});
-
 /** Directus serializes NUMERIC / INT columns as strings in JSON responses,
  *  so numeric fields accept both string and number. z.coerce.number() would
  *  drop nulls; this union keeps nullability intact. */
@@ -243,16 +228,6 @@ export const ReturnDocumentsCollectionArraySchema = z.array(
   ReturnDocumentsCollectionSchema,
 );
 
-/** Directus `corrections` collection row (learned product-match corrections). */
-export const CorrectionsCollectionSchema = z.object({
-  id: z.string(),
-  token_key: z.string(),
-  product_id: z.string(),
-  created_by: z.string().nullable().optional(),
-  date_created: z.string().nullable().optional(),
-  times_used: z.number().nullable().optional(),
-});
-
 /** Directus `courier_locations` collection row — one GPS ping, keyed by `user_created` (the courier). */
 export const CourierLocationsCollectionSchema = z.object({
   id: z.string(),
@@ -304,16 +279,12 @@ export const UserBriefArraySchema = z.array(UserBriefSchema);
 
 /** Array validators for list responses. */
 export const OrdersCollectionArraySchema = z.array(OrdersCollectionSchema);
-export const MessagesCollectionArraySchema = z.array(MessagesCollectionSchema);
 export const CustomersCollectionArraySchema = z.array(
   CustomersCollectionSchema,
 );
 export const ProductsCollectionArraySchema = z.array(ProductsCollectionSchema);
 export const OrderLinesCollectionArraySchema = z.array(
   OrderLinesCollectionSchema,
-);
-export const CorrectionsCollectionArraySchema = z.array(
-  CorrectionsCollectionSchema,
 );
 export const OrderHistoryCollectionArraySchema = z.array(
   OrderHistoryCollectionSchema,

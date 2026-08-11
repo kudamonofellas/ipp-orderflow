@@ -1,6 +1,7 @@
 import { Fragment, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card } from "../../components/Card/Card";
+import { Checkbox } from "../../components/Checkbox/Checkbox";
 import { Icon } from "../../components/Icon/Icon";
 import { Button } from "../../components/Button/Button";
 import { Toggle } from "../../components/Toggle/Toggle";
@@ -8,7 +9,6 @@ import { useAuth, useCurrentUserName } from "../../hooks/useAuth";
 import { useLanguage } from "../../hooks/useLanguage";
 import { useSettings } from "../../hooks/useSettings";
 import { useTeamSettings } from "../../hooks/useTeamSettings";
-import { useCorrections } from "../../hooks/useCorrections";
 import {
   updateTeamMember,
   deleteTeamMember,
@@ -29,20 +29,13 @@ import styles from "./Settings.module.css";
 const NOT_AVAILABLE =
   "Not available yet — this feature has no backing implementation.";
 
-/** Full Settings page — Account, Team, Roles & Permissions, Intake Learning, Cold Storage, Dispatch, General, and Data sections. */
+/** Full Settings page — Account, Team, Roles & Permissions, Cold Storage, Dispatch, General, and Data sections. */
 export function Settings() {
   const navigate = useNavigate();
   const auth = useAuth();
   const { role, logout, can, refreshPermissions } = auth;
   const name = useCurrentUserName();
-  const { settings, learnedMatches, loading, error, update } = useSettings();
-  const {
-    rows: correctionRows,
-    loading: correctionsLoading,
-    error: correctionsError,
-    deletingIds: deletingCorrectionIds,
-    remove: removeCorrection,
-  } = useCorrections();
+  const { settings, loading, error, update } = useSettings();
   const { lang, setLang, t } = useLanguage();
   const {
     members,
@@ -136,20 +129,6 @@ export function Settings() {
     }
     setEditingId(null);
     reloadTeam();
-  }
-
-  async function handleDeleteCorrection(id: string, tokenKey: string) {
-    if (
-      !window.confirm(
-        `${t("Remove learned match")} "${tokenKey}"? ${t("This cannot be undone.")}`,
-      )
-    ) {
-      return;
-    }
-    const res = await removeCorrection(id);
-    if (res.error) {
-      window.alert(res.error);
-    }
   }
 
   async function handleToggleActive(m: TeamMember, nextActive: boolean) {
@@ -437,20 +416,11 @@ export function Settings() {
                             const allowed = permValue(r, cap);
                             return (
                               <td key={r} className={styles.permCell}>
-                                <button
-                                  type="button"
-                                  className={[
-                                    styles.checkbox,
-                                    allowed ? styles.checkboxOn : "",
-                                  ]
-                                    .filter(Boolean)
-                                    .join(" ")}
-                                  aria-pressed={allowed}
-                                  aria-label={`${t(label)} — ${t(r)}`}
-                                  onClick={() => toggleCell(r, cap, !allowed)}
-                                >
-                                  {allowed && <Icon name="tick" size={14} />}
-                                </button>
+                                <Checkbox
+                                  checked={allowed}
+                                  onChange={(next) => toggleCell(r, cap, next)}
+                                  label={`${t(label)} — ${t(r)}`}
+                                />
                               </td>
                             );
                           })}
@@ -472,72 +442,6 @@ export function Settings() {
           </Card>
         </section>
       )}
-
-      <section>
-        <h2 className={styles.sectionHeading}>{t("Intake Learning")}</h2>
-        <Card>
-          <div className={styles.row}>
-            <Icon name="ai" size={20} className={styles.rowIcon} />
-            <div className={styles.rowInfo}>
-              <span className={styles.rowTitle}>
-                {learnedMatches} {t("learned matches")}
-              </span>
-              <span className={styles.rowNote}>
-                {t(
-                  "Shared knowledge base — every correction your team makes is kept and reused, reviewed here.",
-                )}
-              </span>
-            </div>
-          </div>
-        </Card>
-
-        {correctionsLoading ? (
-          <div className={styles.muted}>{t("Loading learned matches…")}</div>
-        ) : correctionsError ? (
-          <div className={styles.error}>{correctionsError}</div>
-        ) : correctionRows.length === 0 ? (
-          <div className={styles.muted}>{t("No learned matches yet.")}</div>
-        ) : (
-          <Card className={styles.correctionsCard} flush>
-            {correctionRows.map((c) => (
-              <div key={c.id} className={styles.correctionRow}>
-                <div className={styles.correctionInfo}>
-                  <span className={styles.correctionToken}>
-                    "{c.tokenKey}"
-                    <span className={styles.correctionArrow}>→</span>
-                    {c.productName}
-                  </span>
-                  <span className={styles.correctionMeta}>
-                    {t("Added by")} {c.createdBy}
-                    {c.dateCreated
-                      ? ` · ${new Date(c.dateCreated).toLocaleDateString("en-US")}`
-                      : ""}
-                  </span>
-                </div>
-                <div className={styles.correctionRight}>
-                  <span className={styles.correctionCount}>
-                    {c.timesUsed} {c.timesUsed === 1 ? t("use") : t("uses")}
-                  </span>
-                  {canManageSettings && (
-                    <Button
-                      type="button"
-                      variant="tertiary"
-                      size="md"
-                      iconOnly
-                      icon="trash"
-                      title={t("Remove learned match")}
-                      disabled={deletingCorrectionIds.has(c.id)}
-                      onClick={() => handleDeleteCorrection(c.id, c.tokenKey)}
-                    >
-                      {t("Remove")}
-                    </Button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </Card>
-        )}
-      </section>
 
       {loading ? (
         <div className={styles.muted}>{t("Loading settings…")}</div>

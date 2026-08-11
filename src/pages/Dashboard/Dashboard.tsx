@@ -2,9 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { IconName } from "../../components/Icon/icons";
 import { Button } from "../../components/Button/Button";
-import { ChannelSelectModal } from "../../components/ChannelSelectModal/ChannelSelectModal";
 import { Icon } from "../../components/Icon/Icon";
-import { IntakeModal } from "../../components/IntakeModal/IntakeModal";
 import { DigestTile } from "../../components/DigestTile/DigestTile";
 import { MetricCard } from "../../components/MetricCard/MetricCard";
 import { NotificationsPopover } from "../../components/NotificationsPopover/NotificationsPopover";
@@ -25,16 +23,13 @@ import {
   type RangeWithLabel,
 } from "../../hooks/useDashboardCounts";
 import { useDeliveries } from "../../hooks/useDeliveries";
-import { useIntakeMessages } from "../../hooks/useIntakeMessages";
 import { useOpenOrders } from "../../hooks/useOpenOrders";
 import { usePickList } from "../../hooks/usePickList";
 import { useTodayDigest } from "../../hooks/useTodayDigest";
 import { AttentionPanel } from "./sections/AttentionPanel";
-import { IntakePanel } from "./sections/IntakePanel";
 import { OpenOrdersPanel } from "./sections/OpenOrdersPanel";
 import { ReturnWorkflowsPanel } from "./sections/ReturnWorkflowsPanel";
 import styles from "./Dashboard.module.css";
-import type { ParsedOrderDraft } from "../../lib/directus";
 
 function todayISO(): string {
   const d = new Date();
@@ -96,14 +91,8 @@ export function Dashboard() {
   } = useDashboardCounts(totalRange, deliveredRange, cancelledRange);
   const { items: attentionItems, loading: attentionLoading } =
     useAttentionItems();
-  const {
-    messages: intakeMessages,
-    loading: intakeLoading,
-    error: intakeError,
-  } = useIntakeMessages();
   const can = useCan();
   const canCreateOrders = can("createOrders");
-  const canViewIntakePanel = can("viewIntakePanel");
   const canViewPickList = can("viewPickList");
   const canViewDeliveryRun = can("viewDeliveryRun");
   const canReconcileCOD = can("reconcileCOD");
@@ -131,10 +120,9 @@ export function Dashboard() {
     canReconcileCOD,
   ].filter(Boolean).length;
 
-  // "Needs attention today" digest — an Admin's day-to-day tool (they chase
-  // COD and missing DO/SI), not an ownership-scoped view, so it's gated on
-  // capability-adjacent role rather than Owner-only.
-  const showDigest = role === "Admin" || role === "Owner";
+  // "Needs attention today" digest — Owner-only per explicit instruction
+  // (reverses an earlier decision this session to also show it to Admin).
+  const showDigest = role === "Owner";
   const digest = useTodayDigest(showDigest);
   const codPendingCount = cashUpGroups.reduce(
     (sum, g) =>
@@ -179,34 +167,6 @@ export function Dashboard() {
     },
   ];
 
-  // Multi-step "Add New Order" flow:
-  // step 0: idle, step 1: channel selection, step 2: intake
-  const [orderStep, setOrderStep] = useState<0 | 1 | 2>(0);
-
-  function startNewOrder() {
-    setOrderStep(1);
-  }
-  function closeAll() {
-    setOrderStep(0);
-  }
-
-  function handleChannelSelect(_channel: "horeca") {
-    // channel stored for IntakeModal label — currently only horeca
-    void _channel;
-    setOrderStep(2);
-  }
-
-  function handleParsed(
-    draft: ParsedOrderDraft,
-    rawText: string,
-    attachments: File[],
-  ) {
-    setOrderStep(0); // close the intake modal
-    navigate("/orders/new", {
-      state: { prefill: draft, rawText, attachments, from: "/" },
-    });
-  }
-
   const isLoading = ordersLoading || countsLoading || attentionLoading;
 
   const currentPipeline = stageCounts.filter((stage) =>
@@ -236,7 +196,9 @@ export function Dashboard() {
                   <Button
                     variant="primary"
                     size="md"
-                    onClick={startNewOrder}
+                    onClick={() =>
+                      navigate("/orders/new", { state: { from: "/" } })
+                    }
                     title={t("Create a new order")}
                     icon="add"
                   >
@@ -335,7 +297,7 @@ export function Dashboard() {
                   ))}
                 </div>
                 <div className={styles.doneRow}>
-                  <span className={styles.doneLabel}>{t("Done today")}</span>
+                  <span className={styles.doneItem}>{t("Done today")}</span>
                   <span className={styles.separator} />
                   <span className={styles.doneItem}>
                     <Icon name="check" size={16} />
@@ -368,12 +330,8 @@ export function Dashboard() {
               </div>
             </div>
 
-            {/* 3-column panels: Return Workflows | Needs Attention | WhatsApp Intake (gated on viewIntakePanel). */}
-            <div
-              className={
-                canViewIntakePanel ? styles.panelsGrid : styles.panelsGridTwo
-              }
-            >
+            {/* 2-column panels: Return Workflows | Needs Attention. */}
+            <div className={styles.panelsGridTwo}>
               <ReturnWorkflowsPanel
                 stages={returnsWorkflow}
                 focusStages={focusStages}
@@ -385,13 +343,6 @@ export function Dashboard() {
                   navigate(`/orders?stage=${stageKey}`)
                 }
               />
-              {canViewIntakePanel && (
-                <IntakePanel
-                  messages={intakeMessages}
-                  loading={intakeLoading}
-                  error={intakeError}
-                />
-              )}
             </div>
 
             <OpenOrdersPanel
@@ -408,19 +359,6 @@ export function Dashboard() {
           </>
         )}
       </div>
-
-      <ChannelSelectModal
-        open={orderStep === 1}
-        onClose={closeAll}
-        onSelect={handleChannelSelect}
-      />
-
-      <IntakeModal
-        open={orderStep === 2}
-        channel="horeca"
-        onClose={closeAll}
-        onParsed={handleParsed}
-      />
     </div>
   );
 }

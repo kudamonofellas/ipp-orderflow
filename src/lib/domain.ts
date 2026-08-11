@@ -51,7 +51,6 @@ export type Capability =
   | 'cancelOrders'
   | 'seePrices'
   | 'seeCustomerContact'
-  | 'viewIntakePanel'
   | 'viewPickList'
   | 'viewDeliveryRun'
   | 'reconcileCOD'
@@ -101,7 +100,6 @@ export const ALLOW: Record<Exclude<Role, 'Owner'>, Partial<Record<Capability, bo
     cancelOrders: true,
     seePrices: true,
     seeCustomerContact: true,
-    viewIntakePanel: true,
     viewPickList: true,
     viewDeliveryRun: true,
     reconcileCOD: true,
@@ -197,7 +195,6 @@ export const CAPABILITIES: Capability[] = [
   'manage_customers',
   'seePrices',
   'seeCustomerContact',
-  'viewIntakePanel',
   'viewPickList',
   'viewDeliveryRun',
   'reconcileCOD',

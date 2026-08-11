@@ -47,7 +47,7 @@
 
   /* ===== Light Theme (default) ===== */
   /* Body is white; the soft grey (#f0f5f5) is used for muted surfaces such
-     as the navbar, intake message cards, and expanded row backgrounds. */
+     as the navbar and expanded row backgrounds. */
   --bg-base: #ffffff;
   --bg-surface: #ffffff;
   --bg-surface-hover: #f0f5f5;
@@ -79,6 +79,23 @@
   --notification-accent: #ef4444;
 
   --logo-mark: #030303;
+
+  /* ===== Role colours (StatusPill) =====
+     Colour encodes WHO is responsible for an order right now, not which
+     stage it's in — stages owned by the same role share one colour (cold +
+     packing are both Warehouse green; both dispatch sub-states are both
+     Courier red). All six must stay visually distinct from each other AND
+     from the terminal-state colours below (delivered/returned/cancelled
+     aren't roles). See lib/pipeline.ts's statusColor(). */
+  --role-admin: #3b82f6;
+  --role-warehouse: #10b981;
+  --role-finance: #8b5cf6;
+  --role-production: #20a7e6;
+  --role-courier: #4eb8c0;
+  --role-owner: #6366f1;
+  --state-done: #16a34a;
+  --state-returned: #dc2626;
+  --state-neutral: #9ca3af;
 
   /* ===== Shadows ===== */
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
@@ -147,6 +164,18 @@
   --notification-accent: #f87171;
 
   --logo-mark: #ffffff;
+
+  /* Role colours, lightened ~15-20% for dark backgrounds — same distinctness
+     requirement as the light-theme block above. */
+  --role-admin: #81b5f5;
+  --role-warehouse: #34d399;
+  --role-finance: #a78bfa;
+  --role-production: #41bdf7;
+  --role-courier: #7adae0;
+  --role-owner: #818cf8;
+  --state-done: #4ade80;
+  --state-returned: #fca5a5;
+  --state-neutral: #d1d5db;
 
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.4);

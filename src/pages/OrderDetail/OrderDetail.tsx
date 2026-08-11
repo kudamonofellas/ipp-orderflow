@@ -3,6 +3,7 @@ import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { Card } from "../../components/Card/Card";
 import { Icon } from "../../components/Icon/Icon";
 import { Button } from "../../components/Button/Button";
+import { Checkbox } from "../../components/Checkbox/Checkbox";
 import { Avatar } from "../../components/Avatar/Avatar";
 import { CourierLiveLocation } from "../../components/CourierLiveLocation/CourierLiveLocation";
 import { useDriverLive } from "../../components/CourierLiveLocation/useDriverLive";
@@ -39,6 +40,11 @@ import {
   readReturnDocuments,
   createReturnDocument,
   createDeliveryProof,
+  getNextOrderNo,
+  createOrder,
+  createOrderLines,
+  createLineCut,
+  type CreateOrderLineInput,
 } from "../../lib/directus";
 import type {
   OrdersCollection,
@@ -53,8 +59,11 @@ import type {
 import {
   ACTOR,
   returnBucketsForOrder,
+  STAGE_LABELS,
+  dispatchSubStatus,
   type ReturnStage,
 } from "../../lib/pipeline";
+import { dateCode } from "../../lib/orderNo";
 import { ImageDetailsModal } from "../../components/ImageDetailsModal/ImageDetailsModal";
 import styles from "./OrderDetail.module.css";
 
@@ -89,7 +98,7 @@ const RETURN_DOC_OPTIONS = [
 /* ─────────────────────────────────────── pipeline definition ── */
 
 const PIPELINE_STAGES = [
-  { key: "intake", label: "Intake" },
+  { key: "intake", label: "New Order" },
   { key: "cold", label: "Cold Storage" },
   { key: "finance", label: "Finance" },
   { key: "production", label: "Production" },
@@ -112,7 +121,6 @@ const STAGE_FLOW: Record<
       | "packWarehouse"
       | "dispatch";
     advanceLabel: string;
-    sendBackLabel?: string;
   }
 > = {
   intake: {
@@ -120,56 +128,48 @@ const STAGE_FLOW: Record<
     prev: null,
     capability: "advanceStage",
     advanceLabel: "Send to Cold Storage",
-    sendBackLabel: undefined,
   },
   cold: {
     next: "production",
     prev: "intake",
     capability: "weighColdStorage",
     advanceLabel: "Done — Send to Production",
-    sendBackLabel: "Return to Intake",
   },
   finance: {
     next: null,
     prev: null,
     capability: "approveFinance",
     advanceLabel: "Approve Payment",
-    sendBackLabel: undefined,
   },
   production: {
     next: "packing",
     prev: "cold",
     capability: "cutProduction",
     advanceLabel: "Done — Send to Packing",
-    sendBackLabel: "Return to Cold Storage",
   },
   packing: {
     next: "finalise",
     prev: "production",
     capability: "packWarehouse",
     advanceLabel: "Done — Send to Finalise",
-    sendBackLabel: "Return to Production",
   },
   finalise: {
     next: "dispatch",
     prev: "packing",
     capability: "advanceStage",
     advanceLabel: "Ready — Send to Dispatch",
-    sendBackLabel: "Return to Packing",
   },
   dispatch: {
     next: "delivered",
     prev: "finalise",
     capability: "dispatch",
     advanceLabel: "Mark as Delivered",
-    sendBackLabel: "Return to Finalise",
   },
   delivered: {
     next: null,
     prev: "dispatch",
     capability: "advanceStage",
     advanceLabel: "",
-    sendBackLabel: "Re-open to Dispatch",
   },
 };
 
@@ -264,6 +264,7 @@ export function OrderDetail() {
   /* ── action state ── */
   const [advancing, setAdvancing] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [reordering, setReordering] = useState(false);
   const [noteText, setNoteText] = useState("");
   const [savingNote, setSavingNote] = useState(false);
 
@@ -519,16 +520,29 @@ export function OrderDetail() {
   const canSeeCustomerContact = auth.can("seeCustomerContact");
   const canConfirmDocsReturned = auth.can("confirmDocsReturned");
   const canTrackCourier = auth.can("trackCourier");
+  // Weighing controls (weight inputs, scale-photo camera) are cold-storage's
+  // job only — ported from the prototype's `weighing = stage === 'cold' &&
+  // canWeighHere` (Dev-OrderDetail.jsx:172), which also gates the item-photo
+  // camera. At every other stage the item list is read-only (what was
+  // ordered / what was prepared). `weighColdStorage` naturally excludes
+  // Finance — at cold, Finance's only job is clearing the payment gate.
+  const canWeighHere = stage === "cold" && auth.can("weighColdStorage");
+  const canReorder = auth.can("createOrders");
 
   // Hand-off mode at the dispatch stage — null until the courier/dispatcher
-  // picks one of the 3 ways this order leaves the building.
-  const handoffMode: "delivery" | "pickup" | "third" | null = order.taken_by
-    ? "delivery"
-    : order.pickup
-      ? "pickup"
-      : order.third_party
-        ? "third"
-        : null;
+  // picks one of the 3 ways this order leaves the building. The "is
+  // something assigned yet" half of this reuses the same shared predicate
+  // as the Orders/Dashboard dispatch sub-status label (dispatchSubStatus) —
+  // this just additionally distinguishes *which* of the 3 modes, which the
+  // list-view sub-status doesn't need to.
+  const handoffMode: "delivery" | "pickup" | "third" | null =
+    dispatchSubStatus(order) === "out_for_delivery"
+      ? order.taken_by
+        ? "delivery"
+        : order.pickup
+          ? "pickup"
+          : "third"
+      : null;
 
   // Who currently "has the ball" for this stage (ported from the prototype's
   // ACTOR — see F-04-adjacent "Stage → actor" gap in prototype-audit.md).
@@ -888,7 +902,21 @@ export function OrderDetail() {
   async function handleSendBack() {
     if (!id || !flow?.prev || advancing) return;
     setAdvancing(true);
-    const res = await updateOrder(id, { stage: flow.prev });
+    // Sending back from dispatch (e.g. to reprint DO/SI) must also clear the
+    // hand-off fields — ported from the prototype's HANDOVER_RESET — or the
+    // order returns to finalise still marked as taken by a courier, and the
+    // 3-way hand-off chooser never shows again when it comes back around.
+    const patch: Record<string, unknown> =
+      stage === "dispatch"
+        ? {
+            stage: flow.prev,
+            taken_by: null,
+            pickup: false,
+            third_party: false,
+            courier_service: null,
+          }
+        : { stage: flow.prev };
+    const res = await updateOrder(id, patch);
     if (!res.error && res.data) {
       setOrder(res.data);
       await appendOrderHistory({
@@ -903,6 +931,23 @@ export function OrderDetail() {
       window.alert(`Failed to send back: ${res.error}`);
     }
     setAdvancing(false);
+  }
+
+  /**
+   * Send-back button text, derived from the shared pipeline stage-label map
+   * (never hardcoded per-stage) so it can't drift from the Dashboard's
+   * pipeline-tile names. "Re-open" is used specifically for the delivered →
+   * dispatch case (the "Reopen closed orders" action), "Send back" for every
+   * mid-pipeline override.
+   */
+  function sendBackLabel(): string {
+    if (!flow?.prev) return t("Send Back");
+    const target = t(
+      STAGE_LABELS[flow.prev as keyof typeof STAGE_LABELS] ?? flow.prev,
+    );
+    return stage === "delivered"
+      ? `${t("Re-open to")} ${target}`
+      : `${t("Send back to")} ${target}`;
   }
 
   /** Opens the delivery-proof capture form, defaulting COD from the customer's pay_timing. */
@@ -1136,6 +1181,115 @@ export function OrderDetail() {
     } else {
       window.alert(`Failed to restore order: ${res.error}`);
     }
+  }
+
+  /**
+   * Clone this order into a new intake-stage order for the same customer —
+   * the weekly Horeca-repeat use case (Dev-OrderDetail.jsx:501). Reuses the
+   * exact same Directus-backed order/line/cut creation path as OrderNew.tsx
+   * (getNextOrderNo, createOrder, createOrderLines, createLineCut) rather
+   * than the prototype's client-side order-number scan, since order lines
+   * are separate rows here, not a nested array to deep-copy.
+   */
+  async function handleReorder() {
+    if (!id || !order || reordering) return;
+    if (!order.customer_id) {
+      window.alert(t("This order has no customer on file — can't reorder."));
+      return;
+    }
+    if (
+      !window.confirm(
+        t("Create a new order with the same items for this customer?"),
+      )
+    )
+      return;
+
+    setReordering(true);
+
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const deliverAt = tomorrow.toISOString().slice(0, 10);
+    const orderDate = new Date().toISOString().slice(0, 10);
+
+    const noRes = await getNextOrderNo(dateCode(deliverAt));
+    if (noRes.error || !noRes.data) {
+      window.alert(`Failed to generate order number: ${noRes.error}`);
+      setReordering(false);
+      return;
+    }
+
+    const orderRes = await createOrder({
+      no: noRes.data,
+      customer_id: order.customer_id,
+      customer_name: order.customer_name ?? null,
+      customer_contact: order.customer_contact ?? null,
+      customer_address: order.customer_address ?? null,
+      customer_legal_name: order.customer_legal_name ?? null,
+      channel: order.channel ?? "horeca",
+      stage: "intake",
+      status: "Open",
+      sales: order.sales ?? null,
+      deliver_at: deliverAt,
+      order_date: orderDate,
+    });
+    if (orderRes.error || !orderRes.data) {
+      window.alert(`Failed to create order: ${orderRes.error}`);
+      setReordering(false);
+      return;
+    }
+    const newOrderId = orderRes.data.id;
+
+    const activeLines = lines.filter((l) => !l.removed);
+    const lineInputs: CreateOrderLineInput[] = activeLines.map((l, i) => {
+      const qty =
+        typeof l.qty === "string" ? parseFloat(l.qty) || 0 : (l.qty ?? 0);
+      return {
+        order_id: newOrderId,
+        product_id: l.product_id ?? null,
+        name: l.name,
+        qty,
+        unit: l.unit ?? "",
+        status: l.product_id ? "recognized" : "manual",
+        sort_order: i,
+      };
+    });
+    const linesRes = await createOrderLines(lineInputs);
+    if (linesRes.error) {
+      window.alert(
+        `Order created but lines failed: ${linesRes.error}. Order id ${newOrderId}.`,
+      );
+      setReordering(false);
+      navigate(`/orders/${newOrderId}`, { state: { from: backTo } });
+      return;
+    }
+
+    const cutInputs: { line_id: string; text: string; sort_order: number }[] =
+      [];
+    activeLines.forEach((l, i) => {
+      const savedLine = linesRes.data?.[i];
+      if (!savedLine) return;
+      (lineCutsByLine[l.id] ?? []).forEach((c, ci) => {
+        if (c.text.trim())
+          cutInputs.push({
+            line_id: savedLine.id,
+            text: c.text.trim(),
+            sort_order: ci,
+          });
+      });
+    });
+    if (cutInputs.length > 0) {
+      await Promise.allSettled(cutInputs.map((c) => createLineCut(c)));
+    }
+
+    await appendOrderHistory({
+      order_id: newOrderId,
+      what: `Reorder of #${order.no ?? id}`,
+      who: userId,
+      stage: "intake",
+    });
+
+    setReordering(false);
+    navigate(`/orders/${newOrderId}`, { state: { from: backTo } });
   }
 
   /* ────────────── Returns Sub-Flow ── */
@@ -1748,6 +1902,7 @@ export function OrderDetail() {
                   typeof line.price === "string"
                     ? parseFloat(line.price) || 0
                     : (line.price ?? 0);
+                const hasPrice = line.price != null && line.price !== "";
                 const isWeighedItem =
                   line.unit === "Loaf" ||
                   line.unit === "kg" ||
@@ -1797,8 +1952,8 @@ export function OrderDetail() {
                       </div>
                     </div>
 
-                    {/* Weighing Lines for Loaf/kg items */}
-                    {isWeighedItem && (
+                    {/* Weighing Lines for Loaf/kg items — cold storage's job only */}
+                    {isWeighedItem && canWeighHere && (
                       <div className={styles.weighingSection}>
                         {weighingLines.map((w) => (
                           <div key={w.id} className={styles.weighingRow}>
@@ -1931,33 +2086,35 @@ export function OrderDetail() {
                     )}
 
                     <div className={styles.linePhotos}>
-                      <label
-                        style={{
-                          display: "inline-flex",
-                          cursor: "pointer",
-                          marginLeft: 28,
-                        }}
-                      >
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          size="sm"
-                          icon="camera"
-                          iconOnly
-                          title={t("Upload item photo")}
-                          onClick={(e) => {
-                            const inputElem = (e.currentTarget as HTMLElement)
-                              .nextElementSibling as HTMLInputElement;
-                            inputElem?.click();
+                      {canWeighHere && (
+                        <label
+                          style={{
+                            display: "inline-flex",
+                            cursor: "pointer",
+                            marginLeft: 28,
                           }}
-                        />
-                        <input
-                          type="file"
-                          accept="image/*"
-                          style={{ display: "none" }}
-                          onChange={(e) => handleUploadItemPhoto(line.id, e)}
-                        />
-                      </label>
+                        >
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            icon="camera"
+                            iconOnly
+                            title={t("Upload item photo")}
+                            onClick={(e) => {
+                              const inputElem = (e.currentTarget as HTMLElement)
+                                .nextElementSibling as HTMLInputElement;
+                              inputElem?.click();
+                            }}
+                          />
+                          <input
+                            type="file"
+                            accept="image/*"
+                            style={{ display: "none" }}
+                            onChange={(e) => handleUploadItemPhoto(line.id, e)}
+                          />
+                        </label>
+                      )}
                       {stage === "cold" &&
                         requirePhoto &&
                         itemPhotos.length === 0 && (
@@ -2012,22 +2169,32 @@ export function OrderDetail() {
 
                     {/* Item Summary line */}
                     <div className={styles.itemTotalRow}>
-                      <span className={styles.totalWeight}>
-                        {t("Total:")}{" "}
-                        {isWeighedItem
-                          ? `${totalMeasuredWeight.toFixed(2)} kg`
-                          : ""}
-                      </span>
-                      {canSeePrices && (
-                        <div className={styles.priceCalc}>
-                          <span>
-                            {currency.format(price)} x {qty}
-                          </span>
-                          <span className={styles.lineTotalPrice}>
-                            {currency.format(price * qty)}
-                          </span>
-                        </div>
+                      {stage !== "intake" && (
+                        <span className={styles.totalWeight}>
+                          {t("Total:")}{" "}
+                          {isWeighedItem
+                            ? `${totalMeasuredWeight.toFixed(2)} kg`
+                            : ""}
+                        </span>
                       )}
+                      {canSeePrices &&
+                        (hasPrice ? (
+                          <div className={styles.priceCalc}>
+                            <span>{currency.format(price)}</span>
+                            <span>x {qty}</span>
+                            <span className={styles.lineTotalPrice}>
+                              {currency.format(price * qty)}
+                            </span>
+                          </div>
+                        ) : (
+                          <div className={styles.priceCalc}>
+                            <span className="tiny muted">
+                              {t(
+                                "No price on the order — invoiced in Accurate.",
+                              )}
+                            </span>
+                          </div>
+                        ))}
                     </div>
                   </div>
                 );
@@ -2228,20 +2395,6 @@ export function OrderDetail() {
                     {advancing ? t("Saving…") : t(flow.advanceLabel)}
                   </Button>
                 )}
-                {flow?.prev && canSendBack && (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="lg"
-                    onClick={handleSendBack}
-                    disabled={advancing}
-                    className={styles.actionBtn}
-                  >
-                    {flow.sendBackLabel
-                      ? t(flow.sendBackLabel)
-                      : t("Send Back")}
-                  </Button>
-                )}
                 {stage === "dispatch" && canAdvance && !showRefuseForm && (
                   <Button
                     type="button"
@@ -2265,6 +2418,7 @@ export function OrderDetail() {
                       type="button"
                       variant="primary"
                       icon="navigation"
+                      buttonStyle="fullWidth"
                       onClick={handleChooseOwnCourier}
                       disabled={choosingMode}
                     >
@@ -2273,6 +2427,7 @@ export function OrderDetail() {
                     <Button
                       type="button"
                       variant="secondary"
+                      buttonStyle="fullWidth"
                       onClick={handleChoosePickup}
                       disabled={choosingMode}
                     >
@@ -2281,6 +2436,8 @@ export function OrderDetail() {
                     <Button
                       type="button"
                       variant="secondary"
+                      buttonStyle="fullWidth"
+                      isActive={showThirdPartyForm}
                       onClick={() => setShowThirdPartyForm((v) => !v)}
                       disabled={choosingMode}
                     >
@@ -2288,15 +2445,7 @@ export function OrderDetail() {
                     </Button>
                   </div>
                   {showThirdPartyForm && (
-                    <div
-                      style={{
-                        display: "flex",
-                        gap: "0.75rem",
-                        flexWrap: "wrap",
-                        alignItems: "center",
-                        marginTop: "0.75rem",
-                      }}
-                    >
+                    <div className={styles.thirdPartyForm}>
                       <select
                         className={styles.editInput}
                         aria-label={t("Courier service")}
@@ -2434,7 +2583,7 @@ export function OrderDetail() {
                     style={{ width: "100%", marginBottom: "0.75rem" }}
                   />
                   {handoffMode !== "third" && (
-                    <label
+                    <div
                       style={{
                         display: "flex",
                         alignItems: "center",
@@ -2442,13 +2591,14 @@ export function OrderDetail() {
                         marginBottom: "0.75rem",
                       }}
                     >
-                      <input
-                        type="checkbox"
+                      <Checkbox
+                        size="sm"
                         checked={proofCod}
-                        onChange={(e) => setProofCod(e.target.checked)}
+                        onChange={setProofCod}
+                        label={t("COD collected")}
                       />
                       {t("COD collected")}
-                    </label>
+                    </div>
                   )}
                   <div
                     style={{
@@ -2775,37 +2925,82 @@ export function OrderDetail() {
             </Card>
           )}
 
-          {/* Order Actions (Hold / Cancel / Restore) */}
-          {(canCancel || canHold || canRestore) && (
+          {/*
+            Order Actions — every cross-stage override lives here, same place
+            at every stage (Reorder / Put on hold / Send back / Restore /
+            Cancel — "Reopen" is the delivered→dispatch case of Send back).
+            Computed independently of stage and hand-off state, mirroring the
+            prototype's consolidated anyOrderAction group (Dev-OrderDetail.jsx
+            lines 1665–1687) — these are flow overrides, not the work of the
+            current stage, so they stay in one predictable place instead of
+            moving around per stage.
+          */}
+          {(canReorder ||
+            canCancel ||
+            canHold ||
+            canSendBack ||
+            canRestore) && (
             <div className={styles.orderActions}>
-              {canRestore && (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="lg"
-                  icon="refresh"
-                  onClick={handleRestore}
-                >
-                  {t("Restore Order")}
-                </Button>
-              )}
-              {canHold && !isOutstanding && (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="lg"
-                  icon="pause"
-                  onClick={handleHold}
-                >
-                  {t("Put on Hold")}
-                </Button>
-              )}
+              <div className={styles.orderActionsRow}>
+                {canReorder && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    buttonStyle="fullWidth"
+                    size="lg"
+                    icon="reload"
+                    onClick={handleReorder}
+                    disabled={reordering}
+                  >
+                    {reordering ? t("Creating…") : t("Reorder")}
+                  </Button>
+                )}
+                {canHold && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    buttonStyle="fullWidth"
+                    size="lg"
+                    icon="pause"
+                    onClick={handleHold}
+                  >
+                    {t("Put on Hold")}
+                  </Button>
+                )}
+              </div>
+              <div className={styles.orderActionsRow}>
+                {canSendBack && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    buttonStyle="fullWidth"
+                    size="lg"
+                    icon="chevronLeft"
+                    onClick={handleSendBack}
+                    disabled={advancing}
+                  >
+                    {sendBackLabel()}
+                  </Button>
+                )}
+                {canRestore && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    buttonStyle="fullWidth"
+                    size="lg"
+                    icon="refresh"
+                    onClick={handleRestore}
+                  >
+                    {t("Restore Order")}
+                  </Button>
+                )}
+              </div>
               {canCancel && (
                 <Button
                   type="button"
                   variant="secondary"
                   size="lg"
-                  icon="cancel"
+                  icon="close"
                   onClick={handleCancel}
                   disabled={cancelling}
                 >

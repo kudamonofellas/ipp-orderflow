@@ -30,6 +30,15 @@ All components must use these CSS custom property tokens — no hardcoded hex va
 | Badge background     | `--bg-badge`            | `#EEF2FF`                           | Subtle badge/pill backgrounds               |
 | Badge text           | `--text-badge`          | `#4F46E5`                           | Text on badge backgrounds                   |
 | Notification dot     | `--notification-accent` | `#EF4444`                           | Red dot for unread notifications            |
+| Role: Admin          | `--role-admin`          | `#3B82F6`                           | StatusPill colour for Admin-owned stages    |
+| Role: Warehouse      | `--role-warehouse`      | `#10B981`                           | StatusPill colour for Warehouse-owned stages|
+| Role: Finance        | `--role-finance`        | `#8B5CF6`                           | StatusPill colour for Finance-owned stages  |
+| Role: Production     | `--role-production`     | `#F59E0B`                           | StatusPill colour for Production-owned stages|
+| Role: Courier        | `--role-courier`        | `#44E4EF`                           | StatusPill colour for dispatch (both sub-states)|
+| Role: Owner          | `--role-owner`          | `#6366F1`                           | Reserved — Owner rarely a stage actor       |
+| State: done           | `--state-done`         | `#16A34A`                           | Delivered (terminal, not a role)            |
+| State: returned       | `--state-returned`     | `#DC2626`                           | Returned                                    |
+| State: neutral        | `--state-neutral`      | `#9CA3AF`                           | Cancelled, awaiting stock                   |
 | Surface hover (alt)  | `--bg-surface-hover-dark` | `#E8F6F8`                         | Secondary hover tint (rarely used)          |
 | Muted surface        | `--bg-muted`            | `#E8EEEE`                           | Muted page/section backgrounds              |
 | Accent (light)       | `--accent-primary-light`| `#2291B9`                           | Lighter accent tint                         |
@@ -65,6 +74,15 @@ All components must use these CSS custom property tokens — no hardcoded hex va
 | Badge background     | `--bg-badge`            | `#1E1B4B` | Subtle badge/pill backgrounds               |
 | Badge text           | `--text-badge`          | `#A5B4FC` | Text on badge backgrounds                   |
 | Notification dot     | `--notification-accent` | `#F87171` | Red dot for unread notifications            |
+| Role: Admin          | `--role-admin`          | `#60A5FA` | StatusPill colour for Admin-owned stages    |
+| Role: Warehouse      | `--role-warehouse`      | `#34D399` | StatusPill colour for Warehouse-owned stages|
+| Role: Finance        | `--role-finance`        | `#A78BFA` | StatusPill colour for Finance-owned stages  |
+| Role: Production     | `--role-production`     | `#FBBF24` | StatusPill colour for Production-owned stages|
+| Role: Courier        | `--role-courier`        | `#F87171` | StatusPill colour for dispatch (both sub-states)|
+| Role: Owner          | `--role-owner`          | `#818CF8` | Reserved — Owner rarely a stage actor       |
+| State: done           | `--state-done`         | `#4ADE80` | Delivered (terminal, not a role)            |
+| State: returned       | `--state-returned`     | `#FCA5A5` | Returned                                    |
+| State: neutral        | `--state-neutral`      | `#D1D5DB` | Cancelled, awaiting stock                   |
 | Logo mark            | `--logo-mark`           | `#FFFFFF` | Black parts of the brand logo (inline SVG)  |
 | Shadow sm            | `--shadow-sm`           | `0 1px 2px 0 rgb(0 0 0 / 0.3)` | Subtle elevation                      |
 | Shadow md            | `--shadow-md`           | `0 4px 6px -1px rgb(0 0 0 / 0.4)` | Card elevation                    |
@@ -133,12 +151,11 @@ All components must use these CSS custom property tokens — no hardcoded hex va
 ## Layout Patterns
 
 - **Top Navigation Bar**: Fixed height (~72px), white background, horizontal padding 24px. Logo left, nav items center-left, search + notifications + settings + avatar right. Bottom border subtle (`--border-subtle`). Active nav item has teal background with white text in a rounded-md pill.
-- **Dashboard Grid**: 3-column metric cards at top (Total Orders, Delivered Orders, Returned Orders), each with icon, dropdown, large number, label. 2×4 grid of stage pills below (Intake, Cold Storage, Finance Gate, Production | Packing, Finalize, Dispatch, Delivered). Main content area below in 2-column layout: left = WhatsApp Intake + Need Approval + Open Orders table, right = Notifications panel.
+- **Dashboard Grid**: 3-column metric cards at top (Total Orders, Delivered Orders, Returned Orders), each with icon, dropdown, large number, label. 2×4 grid of stage pills below (Intake, Cold Storage, Finance Gate, Production | Packing, Finalize, Dispatch, Delivered). Main content area below is a 2-column panels grid: Return Workflows | Needs Attention.
 - **Cards / Panels**: White surface, 12px radius, 16px padding, subtle shadow (`--shadow-md`). Headings are 16px/600, content has 16px vertical spacing between sections.
 - **Sidebar (if needed later)**: Fixed left or right, white surface, border separator. Not present in the current dashboard design.
 - **Modals**: Centered overlay, 16px radius, backdrop blur or dark overlay (rgba(0,0,0,0.4)), max-width 600px, 24px padding, shadow-lg.
 - **Notifications Panel**: Right-side column, white card, scrollable, timestamp headers (light gray, uppercase, 12px), individual notification items with hover state.
-- **WhatsApp Intake Panel**: Card with heading, message preview cards (light gray background, 12px radius, 12px padding, sender name bold, preview text truncated).
 
 ## Icons
 

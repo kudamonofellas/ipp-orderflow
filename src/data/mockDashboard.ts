@@ -54,6 +54,9 @@ export const openOrders: OpenOrder[] = [
       { id: 'l2', name: 'Item name', amount: 2_100_000 },
       { id: 'l3', name: 'Item name', amount: 2_100_000 },
     ],
+    takenBy: null,
+    pickup: false,
+    thirdParty: false,
   },
   {
     id: 'o2',
@@ -64,6 +67,9 @@ export const openOrders: OpenOrder[] = [
     salesRep: 'Teza',
     customerName: 'Agora Dining',
     lines: [],
+    takenBy: null,
+    pickup: false,
+    thirdParty: false,
   },
 ];
 

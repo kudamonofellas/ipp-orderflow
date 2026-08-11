@@ -122,12 +122,6 @@
   color: var(--text-primary);
 }
 
-.doneLabel {
-  font: var(--text-caption);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-wide);
-}
-
 .doneItem {
   display: flex;
   align-items: center;
@@ -142,15 +136,7 @@
   gap: var(--space-md);
 }
 
-/* ===== 3-column panels grid ===== */
-.panelsGrid {
-  display: grid;
-  grid-template-columns: minmax(280px, 1fr) minmax(0, 1.5fr) minmax(0, 1.5fr);
-  gap: var(--space-lg);
-  align-items: stretch;
-  height: fit-content;
-}
-
+/* ===== 2-column panels grid (Return Workflows | Needs Attention) ===== */
 .panelsGridTwo {
   display: grid;
   grid-template-columns: minmax(280px, 1fr) minmax(0, 1.5fr);
@@ -159,13 +145,11 @@
 }
 
 /* First child (ReturnWorkflowsPanel) determines the row height */
-.panelsGrid > :first-child,
 .panelsGridTwo > :first-child {
   height: fit-content;
 }
 
 /* Other panels adjust to ReturnWorkflowsPanel height and scroll internally */
-.panelsGrid > :not(:first-child),
 .panelsGridTwo > :not(:first-child) {
   height: 0;
   min-height: 100%;
@@ -173,12 +157,6 @@
 }
 
 /* ===== Responsive ===== */
-@media (max-width: 1280px) {
-  .panelsGrid {
-    grid-template-columns: 240px minmax(0, 1fr) minmax(0, 1fr);
-  }
-}
-
 @media (max-width: 1024px) {
   .metricsRow {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -196,11 +174,9 @@
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
-  .panelsGrid,
   .panelsGridTwo {
     grid-template-columns: 1fr;
   }
-  .panelsGrid > :not(:first-child),
   .panelsGridTwo > :not(:first-child) {
     min-height: 320px;
     max-height: 100%;
@@ -231,7 +207,6 @@
     grid-template-columns: 1fr;
   }
 
-  .panelsGrid > :not(:first-child),
   .panelsGridTwo > :not(:first-child) {
     min-height: 320px;
     max-height: 100%;

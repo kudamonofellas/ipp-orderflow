@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Card } from "../../components/Card/Card";
+import { Checkbox } from "../../components/Checkbox/Checkbox";
 import { Icon } from "../../components/Icon/Icon";
 import { Button } from "../../components/Button/Button";
 import { useCan } from "../../hooks/useAuth";
@@ -34,21 +35,11 @@ function PickListRowCard({
     <Card className={styles.productCard}>
       <div className={styles.productHeaderRow}>
         <div className={styles.productLeft}>
-          <button
-            type="button"
-            role="checkbox"
-            aria-checked={pulled}
-            aria-label={`${row.name} — ${pulled ? t("Mark as not pulled") : t("Mark as pulled")}`}
-            className={[
-              styles.checkbox,
-              pulled ? styles.checkboxChecked : "",
-            ].join(" ")}
-            onClick={onToggle}
-          >
-            {pulled && (
-              <Icon name="tick" size={14} className={styles.checkboxIcon} />
-            )}
-          </button>
+          <Checkbox
+            checked={pulled}
+            onChange={onToggle}
+            label={`${row.name} — ${pulled ? t("Mark as not pulled") : t("Mark as pulled")}`}
+          />
           <div className={styles.productInfo}>
             <span className={styles.productName}>{row.name}</span>
             {row.cutCount > 0 && (

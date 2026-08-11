@@ -196,17 +196,19 @@
 .stageActions {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: var(--space-md);
 }
 
 .orderActions {
   display: flex;
-  flex-direction: row;
-  gap: 0.75rem;
+  flex-direction: column;
+  gap: var(--space-md);
 }
 
-.orderActions > * {
-  flex: 1;
+.orderActionsRow {
+  display: flex;
+  flex-direction: row;
+  gap: var(--space-md);
 }
 
 .actionBtn {
@@ -718,6 +720,7 @@
   flex-direction: column;
   gap: var(--space-sm);
   border-top: 1px solid var(--border-subtle);
+  margin-top: var(--space-md);
   padding-top: var(--space-md);
 }
 
@@ -837,6 +840,16 @@
   flex-direction: column;
   gap: var(--space-md);
   width: auto;
+}
+
+.thirdPartyForm {
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: var(--space-md);
 }
 
 /* Responsive collapse */

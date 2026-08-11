@@ -213,9 +213,11 @@ Permissions** → uncheck the restricted fields for that role. Two collections t
 - `orders` → uncheck `customer_contact`, `customer_email`, `customer_address`, `sales`, `sales_rep`,
   `sales_phone_number` for Warehouse, Production.
 
-Not covered by field-level ACLs: `viewIntakePanel` (a new capability added 2026-08-06) only gates
-whether the WhatsApp Intake *panel* renders on the Dashboard — it doesn't correspond to a restricted
-field or collection, so there's nothing to configure for it here.
+**Removed 2026-08-11:** `viewIntakePanel` no longer exists — the WhatsApp Intake panel it gated was
+fully removed from the Dashboard along with the rest of the in-app WhatsApp intake feature (see
+`progress-tracker.md`). The live Directus ACLs on the `messages`/`corrections` collections referenced
+elsewhere on this page were not changed by that removal — only the frontend capability and UI were
+deleted; those collections and their role permissions still exist as backend/n8n concerns.
 
 ---
 

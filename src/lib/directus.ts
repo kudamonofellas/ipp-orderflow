@@ -40,9 +40,6 @@ import {
 import {
   CustomersCollectionSchema,
   CustomersCollectionArraySchema,
-  CorrectionsCollectionSchema,
-  CorrectionsCollectionArraySchema,
-  MessagesCollectionArraySchema,
   OrderHistoryCollectionSchema,
   OrderHistoryCollectionArraySchema,
   OrderLinesCollectionSchema,
@@ -73,9 +70,7 @@ import {
   CourierLocationsCollectionArraySchema,
 } from "./schemas";
 import type {
-  CorrectionsCollection,
   CustomersCollection,
-  MessagesCollection,
   OrderHistoryCollection,
   OrderLinesCollection,
   OrdersCollection,
@@ -205,14 +200,21 @@ export async function login(
 ): Promise<DirectusResult<LoginResult>> {
   try {
     const result = await authClient.login({ email, password });
-    // Explicitly set the token on the client so subsequent rest() requests
-    // (readMe, readOrders, etc.) include the Authorization header. The SDK's
-    // authentication() composable should do this automatically, but in some
-    // browser environments the token isn't attached to the very next request
-    // without an explicit setToken() call.
-    if (result.access_token) {
-      authClient.setToken(result.access_token);
-    }
+    // Do NOT call authClient.setToken() here — this was the root cause of
+    // the "session expires after the app has been open a while" bug
+    // (found 2026-08-11). The SDK's own setToken() unconditionally
+    // overwrites the *entire* stored auth record with
+    // `{access_token, refresh_token: null, expires: null, expires_at: null}`
+    // (see @directus/sdk's auth composable) — wiping the refresh_token and
+    // expires_at that authClient.login() itself had just correctly written
+    // a moment earlier. From then on there was no refresh_token to refresh
+    // with, and no expires_at for the SDK's per-request lazy-refresh check
+    // (built into rest()'s getToken() call, independent of the
+    // `autoRefresh` setting below) to act on — so once the original access
+    // token actually expired, every request failed with no recovery path
+    // short of a full logout/login. `authClient.login()` already awaits its
+    // own token storage write before resolving, so the next request already
+    // sees the correct tokens without this call.
     return {
       data: {
         access_token: result.access_token ?? "",
@@ -370,25 +372,6 @@ export async function readOrder(
       return {
         data: null,
         error: `Invalid order response: ${parsed.error.message}`,
-      };
-    }
-    return { data: parsed.data, error: null };
-  } catch (err) {
-    return { data: null, error: errMsg(err) };
-  }
-}
-
-/** Read messages with a filter, validated through zod at the boundary. */
-export async function readMessages(
-  query: DirectusQuery,
-): Promise<DirectusResult<MessagesCollection[]>> {
-  try {
-    const raw = await getClient().request(readItems("messages", query));
-    const parsed = MessagesCollectionArraySchema.safeParse(raw);
-    if (!parsed.success) {
-      return {
-        data: null,
-        error: `Invalid messages response: ${parsed.error.message}`,
       };
     }
     return { data: parsed.data, error: null };
@@ -1577,42 +1560,6 @@ export async function readLatestCourierLocation(
   }
 }
 
-/** Read every learned correction (intake parser's token_key → product_id map), most-used first. */
-export async function readCorrections(): Promise<
-  DirectusResult<CorrectionsCollection[]>
-> {
-  try {
-    const raw = await getClient().request(
-      readItems("corrections", {
-        sort: ["-times_used"] as never,
-        limit: -1,
-      }),
-    );
-    const parsed = CorrectionsCollectionArraySchema.safeParse(raw);
-    if (!parsed.success) {
-      return {
-        data: null,
-        error: `Invalid corrections response: ${parsed.error.message}`,
-      };
-    }
-    return { data: parsed.data, error: null };
-  } catch (err) {
-    return { data: null, error: errMsg(err) };
-  }
-}
-
-/** Delete a learned correction (forgets a bad token→product mapping). */
-export async function deleteCorrection(
-  id: string,
-): Promise<DirectusResult<void>> {
-  try {
-    await getClient().request(deleteItem("corrections", id));
-    return { data: undefined, error: null };
-  } catch (err) {
-    return { data: null, error: errMsg(err) };
-  }
-}
-
 /**
  * Read the `settings` singleton. `settings` is a Directus singleton
  * collection — `GET /items/settings` always returns a single object, never
@@ -1662,202 +1609,6 @@ export async function updateSettings(
       return {
         data: null,
         error: `Invalid settings response: ${parsed.error.message}`,
-      };
-    }
-    return { data: parsed.data, error: null };
-  } catch (err) {
-    return { data: null, error: errMsg(err) };
-  }
-}
-
-/** Aggregate `corrections` row count (e.g. the Settings page's "N learned matches" stat). */
-export async function aggregateCorrections(
-  query: DirectusQuery,
-): Promise<DirectusResult<AggregateCountRow[]>> {
-  try {
-    const raw = await getClient().request(
-      aggregate("corrections", query as never),
-    );
-    const rows = Array.isArray(raw) ? (raw as AggregateCountRow[]) : [];
-    return { data: rows, error: null };
-  } catch (err) {
-    return { data: null, error: errMsg(err) };
-  }
-}
-
-/* ============================================================ Parse API === */
-
-/**
- * The structured draft returned by the shared parsing service.
- * Mirrors the output shape of the server-side port of recognize.js.
- */
-export interface ParsedOrderDraft {
-  customerTyped: string | null;
-  customerId: string | null;
-  customerMatch: "exact" | "phone" | "fuzzy" | "new" | "none" | null;
-  company: string | null;
-  deliver: string | null;
-  dateGuessed: boolean;
-  multiCustomer: boolean;
-  paymentMethod: string | null;
-  address: string | null;
-  phone: string | null;
-  ref: string | null;
-  sales: string | null;
-  lines: ParsedOrderLine[];
-}
-
-export interface ParsedOrderLine {
-  raw: string;
-  qty: number;
-  unit: string;
-  productId: string | null;
-  name: string;
-  status: "recognized" | "probable" | "unrecognized";
-  cuts: string[];
-  price: string | null;
-  learned: boolean;
-}
-
-/** Raw shape actually returned by order-api's /parse-order — nested customer/product
- *  objects, not the flat ids ParsedOrderDraft expects. Normalized below. */
-interface RawParsedOrderLine {
-  raw: string;
-  qty: number;
-  unit: string;
-  product: { id: string; name: string } | null;
-  status: "recognized" | "probable" | "unrecognized";
-  cuts: string[];
-  price: number | string | null;
-  learned: boolean;
-}
-
-interface RawParsedOrderDraft {
-  customer: { id: string | null; name: string } | null;
-  customerTyped: string | null;
-  customerMatch: "exact" | "phone" | "fuzzy" | "new" | "none" | null;
-  deliver: string | null;
-  dateGuessed: boolean;
-  multiCustomer: boolean;
-  paymentMethod: string | null;
-  address: string | null;
-  phone: string | null;
-  ref: string | null;
-  sales: string | null;
-  company: string | null;
-  lines: RawParsedOrderLine[];
-}
-
-export async function parseOrderText(
-  text: string,
-): Promise<DirectusResult<ParsedOrderDraft>> {
-  try {
-    const internalToken = import.meta.env.VITE_INTERNAL_TOKEN;
-    const isDev = import.meta.env.DEV;
-    const url = isDev
-      ? "/order-api/parse-order"
-      : `${import.meta.env.VITE_DIRECTUS_URL}/order-api/parse-order`;
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-internal-token": internalToken ?? "",
-      },
-      body: JSON.stringify({ text }),
-    });
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      return { data: null, error: `Parse API error ${res.status}: ${body}` };
-    }
-    const raw = (await res.json()) as RawParsedOrderDraft;
-
-    const data: ParsedOrderDraft = {
-      customerTyped: raw.customerTyped ?? raw.customer?.name ?? null,
-      customerId: raw.customer?.id ?? null,
-      customerMatch: raw.customerMatch,
-      deliver: raw.deliver,
-      dateGuessed: raw.dateGuessed,
-      multiCustomer: raw.multiCustomer ?? false,
-      paymentMethod: raw.paymentMethod,
-      address: raw.address,
-      phone: raw.phone,
-      ref: raw.ref,
-      sales: raw.sales,
-      company: raw.company ?? null,
-      lines: (raw.lines ?? []).map((l) => ({
-        raw: l.raw,
-        qty: l.qty,
-        unit: l.unit,
-        productId: l.product?.id ?? null,
-        name: l.product?.name ?? l.raw,
-        status: l.status,
-        cuts: l.cuts ?? [],
-        price: l.price != null ? String(l.price) : null,
-        learned: l.learned ?? false,
-      })),
-    };
-
-    return { data, error: null };
-  } catch (err) {
-    return { data: null, error: errMsg(err) };
-  }
-}
-
-/* =========================================================== Corrections === */
-
-/**
- * Upsert a learned correction into the Directus `corrections` table.
- * If a row with this token_key already exists, update product_id and increment
- * times_used. Otherwise create a new row.
- *
- * Called when Admin manually assigns a product to a parser-unrecognized line
- * so that future parses benefit from the correction globally.
- */
-export async function upsertCorrection(
-  tokenKey: string,
-  productId: string,
-): Promise<DirectusResult<CorrectionsCollection>> {
-  try {
-    // Check for existing correction with the same token_key
-    const existing = (await getClient().request(
-      readItems("corrections", {
-        filter: { token_key: { _eq: tokenKey } } as never,
-        limit: 1,
-        fields: ["id", "times_used"] as never,
-      }),
-    )) as Array<{ id: string; times_used: number | null }>;
-
-    if (existing && existing.length > 0) {
-      const row = existing[0];
-      const raw = await getClient().request(
-        updateItem("corrections", row.id, {
-          product_id: productId,
-          times_used: (row.times_used ?? 0) + 1,
-        } as never),
-      );
-      const parsed = CorrectionsCollectionSchema.safeParse(raw);
-      if (!parsed.success) {
-        return {
-          data: null,
-          error: `Invalid corrections response: ${parsed.error.message}`,
-        };
-      }
-      return { data: parsed.data, error: null };
-    }
-
-    // Create new correction
-    const raw = await getClient().request(
-      createItem("corrections", {
-        token_key: tokenKey,
-        product_id: productId,
-        times_used: 1,
-      } as never),
-    );
-    const parsed = CorrectionsCollectionSchema.safeParse(raw);
-    if (!parsed.success) {
-      return {
-        data: null,
-        error: `Invalid corrections response: ${parsed.error.message}`,
       };
     }
     return { data: parsed.data, error: null };

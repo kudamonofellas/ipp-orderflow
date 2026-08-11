@@ -241,73 +241,6 @@
   gap: var(--space-sm);
 }
 
-/* ===== Corrections review ===== */
-
-.correctionsCard {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  max-height: 420px;
-  overflow-y: auto;
-}
-
-.correctionRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-md);
-  padding: var(--space-md) var(--space-lg);
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.correctionRow:last-child {
-  border-bottom: none;
-}
-
-.correctionInfo {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
-  min-width: 0;
-}
-
-.correctionToken {
-  font: var(--text-body);
-  font-weight: 600;
-  color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.correctionArrow {
-  color: var(--text-muted);
-  font-weight: 400;
-  margin: 0 var(--space-xs);
-}
-
-.correctionMeta {
-  font: var(--text-caption);
-  color: var(--text-muted);
-}
-
-.correctionRight {
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
-  flex-shrink: 0;
-}
-
-.correctionCount {
-  font: var(--text-caption);
-  color: var(--text-secondary);
-  background: var(--bg-surface-hover);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-xl);
-  padding: 2px 10px;
-  white-space: nowrap;
-}
-
 .teamEditGrid input,
 .teamEditGrid select {
   padding: var(--space-sm) var(--space-md);
@@ -391,30 +324,6 @@
   text-align: center;
   padding: var(--space-sm);
   border-top: 1px solid var(--border-subtle);
-}
-
-.checkbox {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
-  background: var(--bg-surface);
-  color: var(--bg-surface);
-  cursor: pointer;
-  padding: 0;
-}
-
-.checkbox:hover {
-  border-color: var(--accent-primary);
-}
-
-.checkboxOn {
-  background: var(--accent-primary);
-  border-color: var(--accent-primary);
-  color: var(--text-on-accent, #fff);
 }
 
 .resetLink {

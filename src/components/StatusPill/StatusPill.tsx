@@ -1,29 +1,41 @@
+import { useLanguage } from '../../hooks/useLanguage';
+import { statusColor } from '../../lib/pipeline';
 import styles from './StatusPill.module.css';
 
 interface StatusPillProps {
     /** The status string from your database, e.g. "intake", "delivered" */
     status?: string | null;
+    /** A more specific label that replaces the generic stage label when
+     *  present (e.g. dispatch's "Out for delivery" / "Awaiting driver" from
+     *  `dispatchSubLabel()` in lib/pipeline.ts) — the pill always shows
+     *  exactly one label, never both. Colour still comes from `status`
+     *  (the role that owns it), regardless of which text is shown. */
+    subLabel?: string | null;
     /** Optional extra CSS class name */
     className?: string;
 }
 
-const STATUS_MAP: Record<string, { label: string; color: string }> = {
-    intake: { label: 'New Order', color: '#3B82F6' },
-    cold: { label: 'Cold Storage', color: '#06B6D4' },
-    finance: { label: 'Finance Review', color: '#8B5CF6' },
-    production: { label: 'Processing', color: '#F59E0B' },
-    packing: { label: 'Packing', color: '#10B981' },
-    finalise: { label: 'Print DO/SI', color: '#6366F1' },
-    dispatch: { label: 'Dispatch', color: '#3B82F6' },
-    delivered: { label: 'Delivered', color: '#10B981' },
-    awaiting_return: { label: 'Awaiting Return', color: '#EF4444' },
-    admin_action: { label: 'Admin Action', color: '#F59E0B' },
-    awaiting_signed_doc: { label: 'Signed DO/SI Out', color: '#6366F1' },
-    replacement_transit: { label: 'Replacement Transit', color: '#3B82F6' },
-    cancelled: { label: 'Cancelled', color: '#6B7280' },
-    returned: { label: 'Returned', color: '#EF4444' },
-    outstanding: { label: 'Outstanding', color: '#EAB308' },
-    awaiting: { label: 'Awaiting Stock', color: '#9CA3AF' },
+/** Status key → display label only — colour comes exclusively from
+ *  `statusColor()` (role-derived), never a per-entry value here. Keeps the
+ *  old collision risk (two unrelated stages accidentally sharing a hex)
+ *  structurally impossible: one function, one role, one colour. */
+const STATUS_LABELS: Record<string, string> = {
+    intake: 'New Order',
+    cold: 'Cold Storage',
+    finance: 'Finance Review',
+    production: 'Processing',
+    packing: 'Packing',
+    finalise: 'Print DO/SI',
+    dispatch: 'Dispatch',
+    delivered: 'Delivered',
+    awaiting_return: 'Awaiting Return',
+    admin_action: 'Admin Action',
+    awaiting_signed_doc: 'Signed DO/SI Out',
+    replacement_transit: 'Replacement Transit',
+    cancelled: 'Cancelled',
+    returned: 'Returned',
+    outstanding: 'Outstanding',
+    awaiting: 'Awaiting Stock',
 };
 
 /** Helper to format fallback status labels (e.g., "unknown_stage" -> "Unknown Stage") */
@@ -33,12 +45,14 @@ function formatFallback(rawStatus: string): string {
         .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
-export function StatusPill({ status, className }: StatusPillProps) {
+export function StatusPill({ status, subLabel, className }: StatusPillProps) {
+    const { t } = useLanguage();
     const key = status?.toLowerCase().trim() ?? '';
-    const config = STATUS_MAP[key] ?? {
-        label: key ? formatFallback(key) : 'Unknown',
-        color: '#6B7280',
-    };
+    const fallbackLabel = STATUS_LABELS[key] ?? (key ? formatFallback(key) : 'Unknown');
+    // Exactly one label, always — a more specific subLabel (when passed)
+    // replaces the generic stage label rather than stacking under it.
+    const displayLabel = subLabel ?? fallbackLabel;
+    const color = statusColor(key);
 
     const classes = [styles.statusPill, className].filter(Boolean).join(' ');
 
@@ -46,12 +60,13 @@ export function StatusPill({ status, className }: StatusPillProps) {
         <span
             className={classes}
             style={{
-                backgroundColor: `${config.color}22`, // ~13% transparency
-                color: config.color,
-                borderColor: `${config.color}55`, // ~33% transparency
+                backgroundColor: `color-mix(in srgb, ${color} 13%, transparent)`,
+                color,
+                borderColor: `color-mix(in srgb, ${color} 33%, transparent)`,
             }}
         >
-            {config.label}
+            <span className={styles.dot} style={{ backgroundColor: color }} />
+            <span className={styles.label}>{t(displayLabel)}</span>
         </span>
     );
 }

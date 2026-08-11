@@ -119,14 +119,6 @@
   user-select: none;
 }
 
-.checkbox {
-  width: 18px;
-  height: 18px;
-  border: 1.5px solid var(--border-default);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-}
-
 .error {
   font: var(--text-body);
   color: var(--state-error);

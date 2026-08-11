@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card } from '../../components/Card/Card';
 import { Button } from '../../components/Button/Button';
+import { Checkbox } from '../../components/Checkbox/Checkbox';
 import { Toggle } from '../../components/Toggle/Toggle';
 import { useAuth } from '../../hooks/useAuth';
 import { useLanguage } from '../../hooks/useLanguage';
@@ -334,11 +335,11 @@ export function ProductEdit() {
             </div>
 
             <label className={styles.checkboxLabel}>
-              <input
-                type="checkbox"
-                className={styles.checkbox}
+              <Checkbox
+                size="sm"
                 checked={catchWeight}
-                onChange={(e) => setCatchWeight(e.target.checked)}
+                onChange={setCatchWeight}
+                label={t('Catch-weight (sold by actual weight)')}
                 disabled={saving || !canEditOtherFields}
               />
               <span>{t('Catch-weight (sold by actual weight)')}</span>

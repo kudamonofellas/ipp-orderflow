@@ -37,15 +37,6 @@ export interface StageCount {
   count: number;
 }
 
-/** A parsed / triaged WhatsApp intake message preview. */
-export interface IntakeMessage {
-  id: string;
-  preview: string;
-  customer: string;
-  /** Full body shown on expanded cards (optional). */
-  body?: string;
-}
-
 /**
  * A "Need attention" action-item bucket — items the current role must
  * process (e.g. orders to print DO/SI for, drafts to review). Replaces the
@@ -77,6 +68,13 @@ export interface OpenOrder {
   salesRep: string;
   customerName: string;
   lines: OpenOrderLine[];
+  /** Hand-off fields — only meaningful when status === 'dispatch'. Carried
+   *  through so the shared row renderer can derive the dispatch sub-status
+   *  label ("Out for delivery" / "Awaiting driver") via `dispatchSubStatus()`
+   *  (lib/pipeline.ts) instead of the hook precomputing it. */
+  takenBy: string | null;
+  pickup: boolean;
+  thirdParty: boolean;
 }
 
 /** A notification entry, grouped by date. */

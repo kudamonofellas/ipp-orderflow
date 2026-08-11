@@ -4,6 +4,7 @@ import { Icon } from "../Icon/Icon";
 import { StatusPill } from "../StatusPill/StatusPill";
 import { useCan } from "../../hooks/useAuth";
 import { useLanguage } from "../../hooks/useLanguage";
+import { dispatchSubLabel } from "../../lib/pipeline";
 import type { OpenOrder } from "../../types/dashboard";
 import styles from "./OrderRows.module.css";
 
@@ -27,6 +28,12 @@ export function OrderRows({ order }: { order: OpenOrder }) {
   const lines = order.lines ?? [];
   const count = lines.length;
   const hasItems = count > 0;
+  const subLabel = dispatchSubLabel({
+    stage: order.status,
+    taken_by: order.takenBy,
+    pickup: order.pickup,
+    third_party: order.thirdParty,
+  });
 
   function toggle(e: React.MouseEvent) {
     e.stopPropagation();
@@ -57,7 +64,7 @@ export function OrderRows({ order }: { order: OpenOrder }) {
         </td>
         <td className={styles.orderId}>{order.no}</td>
         <td>
-          <StatusPill status={order.status} />
+          <StatusPill status={order.status} subLabel={subLabel} />
         </td>
         <td>{order.orderDate}</td>
         <td>{order.deliveryDate}</td>
