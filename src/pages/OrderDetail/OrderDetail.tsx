@@ -2259,7 +2259,7 @@ export function OrderDetail() {
               {/* Hand-off mode chooser — dispatch stage, no mode picked yet */}
               {stage === "dispatch" && canAdvance && !handoffMode && (
                 <Card>
-                  <div className={styles.heading}>{t("Delivery")} </div>
+                  <div className={styles.heading}>{t("Delivery")}</div>
                   <div className={styles.deliveryActions}>
                     <Button
                       type="button"

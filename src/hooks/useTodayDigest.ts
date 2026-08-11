@@ -168,7 +168,10 @@ export function useTodayDigest(enabled: boolean): TodayDigest {
       if (codOrderIds.length > 0) {
         const linesRes = await readOrderLines({
           filter: { _and: [{ order_id: { _in: codOrderIds } }, { removed: { _neq: true } }] },
-          fields: ['id', 'order_id', 'qty', 'price'],
+          // `id` and `name` are required (non-optional) in
+          // OrderLinesCollectionSchema — must be requested even though
+          // `name` is unused here, or zod parsing fails.
+          fields: ['id', 'order_id', 'name', 'qty', 'price'],
           limit: -1,
         });
         if (!cancelled && linesRes.data) {

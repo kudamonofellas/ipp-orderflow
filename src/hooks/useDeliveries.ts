@@ -117,9 +117,10 @@ export function useDeliveries(courierId: string | null): UseDeliveriesResult {
             }),
         readOrderLines({
           filter: { _and: [{ order_id: { _in: orderIds } }, { removed: { _neq: true } }] },
-          // `id` is required (non-optional) in OrderLinesCollectionSchema —
-          // must be requested even though it's unused here, or zod parsing fails.
-          fields: ['id', 'order_id', 'qty', 'price'],
+          // `id` and `name` are required (non-optional) in
+          // OrderLinesCollectionSchema — must be requested even though
+          // `name` is unused here, or zod parsing fails.
+          fields: ['id', 'order_id', 'name', 'qty', 'price'],
           limit: -1,
         }),
         readAllUsers(),

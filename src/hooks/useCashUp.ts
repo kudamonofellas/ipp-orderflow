@@ -118,9 +118,10 @@ export function useCashUp(): UseCashUpResult {
             }),
         readOrderLines({
           filter: { _and: [{ order_id: { _in: orderIds } }, { removed: { _neq: true } }] },
-          // `id` is required (non-optional) in OrderLinesCollectionSchema —
-          // must be requested even though it's unused here, or zod parsing fails.
-          fields: ['id', 'order_id', 'qty', 'price'],
+          // `id` and `name` are required (non-optional) in
+          // OrderLinesCollectionSchema — must be requested even though
+          // `name` is unused here, or zod parsing fails.
+          fields: ['id', 'order_id', 'name', 'qty', 'price'],
           limit: -1,
         }),
         // `orders.taken_by` is a UUID FK to directus_users.id, not a courier
