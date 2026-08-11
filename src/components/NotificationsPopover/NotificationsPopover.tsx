@@ -21,7 +21,14 @@ export function NotificationsPopover() {
   const containerRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const location = useLocation();
-  const { groups: notificationGroups, loading, error } = useNotifications();
+  const {
+    groups: notificationGroups,
+    loading,
+    loadingMore,
+    hasMore,
+    loadMore,
+    error,
+  } = useNotifications();
   const { isUnread, markAllRead, markRead } = useNotificationReadState();
 
   useEffect(() => {
@@ -58,6 +65,14 @@ export function NotificationsPopover() {
       ),
     "",
   );
+
+  /** Fetches the next batch once the list is scrolled within ~80px of the bottom. */
+  function handleScroll(event: React.UIEvent<HTMLDivElement>) {
+    const el = event.currentTarget;
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 80) {
+      loadMore();
+    }
+  }
 
   function handleEntryClick(entry: NotificationEntry) {
     if (!entry.orderUuid) return;
@@ -113,7 +128,7 @@ export function NotificationsPopover() {
             </Button>
           </header>
 
-          <div className={styles.scroll}>
+          <div className={styles.scroll} onScroll={handleScroll}>
             {loading ? (
               <p className={styles.empty}>Loading…</p>
             ) : error ? (
@@ -161,6 +176,15 @@ export function NotificationsPopover() {
                 </section>
               ))
             )}
+            {!loading && !error && loadingMore && (
+              <p className={styles.empty}>Loading more…</p>
+            )}
+            {!loading &&
+              !error &&
+              !hasMore &&
+              notificationGroups.length > 0 && (
+                <p className={styles.empty}>No more activity.</p>
+              )}
           </div>
         </div>
       )}

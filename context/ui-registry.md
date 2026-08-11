@@ -5,6 +5,20 @@
 > Token source of truth: `context/ui-context.md` + `context/ui-tokens.md`.
 > CSS implementation: `src/styles/tokens.css`.
 
+## Update — 2026-08-11 (5) Role-coloured highlighted pills + hover
+
+- **`StagePill`/`ReturnWorkflowsPanel`'s highlighted (role-owned) pills now render in `statusColor(stage)` instead of a flat `--accent-primary`** — same role→colour resolution `StatusPill.tsx` already used, applied via inline `style` (`color-mix()` tinted background, solid border/text) rather than a CSS class, since the colour is per-stage/dynamic. A `--stage-color` custom property set alongside it lets `.pillHighlight:hover` intensify toward that same colour in plain CSS (`color-mix(in srgb, var(--stage-color, var(--accent-primary)) 20%, var(--bg-surface))`) — this is the pattern to reach for whenever a `:hover`/`:focus` pseudo-class needs a per-item dynamic colour that can't be expressed as a static class. Non-highlighted pills are intentionally untouched (generic hover only applies to the currently-highlighted subset).
+
+## Update — 2026-08-11 (4) Batched/paginated scroll loading
+
+- **`NotificationsPopover`'s `.scroll` list now batch-loads on scroll** instead of fetching everything up front — `onScroll` on the scrollable container checks `scrollHeight - scrollTop - clientHeight < 80` and calls the owning hook's `loadMore()`. Reach for this exact threshold/shape for any other popover-with-a-long-list that should defer cost until the user actually scrolls (the pattern generalizes beyond notifications — any hook returning `{ items, loading, loadingMore, hasMore, loadMore }` backed by `offset`-paginated Directus reads fits the same `onScroll` wiring).
+- Footer states inside the scroll container follow the existing `.empty` paragraph convention (`--text-secondary`, already used for loading/error/empty) — "Loading more…" while a batch is in flight, "No more activity." once `hasMore` goes false, both reusing the same class rather than introducing new footer-specific styling.
+
+## Update — 2026-08-11 (3) `Modal` component + `useDialog()` alert/confirm replacement
+
+- **`Modal`** (`src/components/Modal/`) is now the actual implementation of the baseline documented above under "### Modal" (overlay `rgba(0,0,0,0.4)`, `--radius-xl`, `--space-xl` padding, `--shadow-lg`, 600px max-width) — before this it was tokens-only documentation with two divergent ad-hoc implementations (`AddItemModal`'s 0.6-opacity+blur backdrop, `ImageDetailsModal`'s dark photo-chrome). New modals should compose `<Modal open title footer>` rather than hand-rolling another backdrop+card pair.
+- **`useDialog()`** (`src/hooks/useDialog.ts`, provider in `DialogProvider.tsx`, mounted once in `App.tsx`) is the app-wide replacement for `window.alert`/`window.confirm` — `alert(message, opts?)` / `confirm(message, opts?)`, both promise-based, rendered through one shared `Modal`. Pass `{ danger: true }` for destructive confirms (delete/cancel/reset) to get a red confirm button. Never call `window.alert`/`window.confirm` directly anywhere in this app going forward — always `useDialog()`.
+
 ## Update — 2026-08-11 (2) Reusable `Checkbox` component
 
 - **New `Checkbox` component** (`src/components/Checkbox/`) — an icon-button checkbox (bordered square, tick icon when checked), sizes `sm` (18px) / `md` (22px). Same shape/API convention as `Toggle`: `checked`/`onChange(next: boolean)`/`label` (accessible name, visually hidden — pair with visible copy beside it, don't rely on wrapping it in a `<label>` since it's a `<button>` not an `<input>`, so native label-click-forwarding doesn't apply)/`disabled`/`size`.

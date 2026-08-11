@@ -357,6 +357,7 @@ const ID: Record<string, string> = {
   "Notifications": "Notifikasi",
   "Number": "Nomor",
   "of": "dari",
+  "OK": "OK",
   "On hold": "Ditahan",
   "on the road": "di jalan",
   "ONE document: the original DO/SI is revised to show what the customer finally keeps incl. the replacement. Best for a like-for-like swap.": "SATU dokumen: DO/SI asli direvisi menjadi apa yang akhirnya diterima pelanggan termasuk penggantinya. Cocok untuk tukar barang yang sama.",

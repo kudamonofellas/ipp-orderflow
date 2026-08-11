@@ -1,6 +1,6 @@
 import { Card } from '../../../components/Card/Card';
 import { useLanguage } from '../../../hooks/useLanguage';
-import type { Stage } from '../../../lib/pipeline';
+import { statusColor, type Stage } from '../../../lib/pipeline';
 import type { StageCount } from '../../../types/dashboard';
 import styles from './ReturnWorkflowsPanel.module.css';
 
@@ -20,17 +20,31 @@ export function ReturnWorkflowsPanel({ stages, focusStages = [], onStageClick }:
       <div className={styles.list}>
         {stages.map((stage) => {
           const highlight = focusStages.includes(stage.stage);
+          const color = highlight ? statusColor(stage.stage) : undefined;
+          const style = color
+            ? ({
+                '--stage-color': color,
+                backgroundColor: `color-mix(in srgb, ${color} 12%, var(--bg-surface))`,
+                borderColor: color,
+              } as React.CSSProperties)
+            : undefined;
           return (
             <button
               key={stage.stage}
               type="button"
               className={[styles.pill, highlight ? styles.pillHighlight : ''].filter(Boolean).join(' ')}
+              style={style}
               onClick={() => onStageClick?.(stage.stage)}
             >
-              <span className={stage.count > 0 ? styles.countActive : styles.count}>
+              <span
+                className={stage.count > 0 ? styles.countActive : styles.count}
+                style={color ? { color } : undefined}
+              >
                 {stage.count}
               </span>
-              <span className={styles.label}>{t(stage.label)}</span>
+              <span className={styles.label} style={color ? { color } : undefined}>
+                {t(stage.label)}
+              </span>
             </button>
           );
         })}

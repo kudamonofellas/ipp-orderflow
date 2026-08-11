@@ -30,7 +30,10 @@
   border-color: var(--accent-primary);
 }
 
-/* Role-owned return bucket: main blue accent, same treatment as StagePill's .pillHighlight. */
+/* Role-owned return bucket: rendered in the owning role's colour
+   (--stage-color, set inline per-pill — see ReturnWorkflowsPanel.tsx) via
+   `style`, not this class. Fallback here only covers a highlighted pill
+   with no colour passed. Same treatment as StagePill's .pillHighlight. */
 .pillHighlight {
   background-color: var(--bg-surface-hover-dark);
   border-color: var(--accent-primary);
@@ -40,6 +43,11 @@
 .pillHighlight .countActive,
 .pillHighlight .label {
   color: var(--accent-primary);
+}
+
+.pillHighlight:hover {
+  background-color: color-mix(in srgb, var(--stage-color, var(--accent-primary)) 20%, var(--bg-surface));
+  border-color: var(--stage-color, var(--accent-primary));
 }
 
 .count {

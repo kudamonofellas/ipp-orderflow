@@ -6,6 +6,7 @@ import { Avatar } from "../../components/Avatar/Avatar";
 import { StatCard } from "../../components/StatCard/StatCard";
 import { useCan } from "../../hooks/useAuth";
 import { useLanguage } from "../../hooks/useLanguage";
+import { useDialog } from "../../hooks/useDialog";
 import { useCashUp } from "../../hooks/useCashUp";
 import { getInitials } from "../../lib/initials";
 import styles from "./CashUp.module.css";
@@ -27,6 +28,7 @@ export function CashUp() {
   const backTo = (location.state as { from?: string } | null)?.from ?? "/";
   const canView = useCan()("reconcileCOD");
   const { t } = useLanguage();
+  const { alert, confirm: confirmDialog } = useDialog();
 
   // Defence-in-depth: the route is already wrapped in <Guarded cap="reconcileCOD">
   // (App.tsx), but this survives even if that wrapper is ever dropped in a
@@ -39,10 +41,10 @@ export function CashUp() {
     useCashUp();
 
   async function handleConfirm(orderId: string, customerName: string, amount: number) {
-    if (!window.confirm(`Confirm ${currency.format(amount)} received from ${customerName}?`)) return;
+    if (!(await confirmDialog(`Confirm ${currency.format(amount)} received from ${customerName}?`))) return;
     const res = await confirm(orderId);
     if (res.error) {
-      window.alert(`Failed to confirm: ${res.error}`);
+      alert(`Failed to confirm: ${res.error}`);
     }
   }
 

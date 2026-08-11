@@ -5,6 +5,7 @@ import { SidebarProvider } from './layouts/Sidebar/Sidebar';
 import { AuthProvider } from './hooks/RoleContext';
 import { ThemeProvider } from './hooks/ThemeProvider';
 import { LanguageProvider } from './hooks/LanguageProvider';
+import { DialogProvider } from './hooks/DialogProvider';
 import { useAuth, useCan } from './hooks/useAuth';
 import type { Capability } from './lib/domain';
 import { Customers } from './pages/Customers/Customers';
@@ -66,6 +67,7 @@ export default function App() {
   return (
     <ThemeProvider>
     <LanguageProvider>
+    <DialogProvider>
     <AuthProvider>
       <BrowserRouter>
         <Routes>
@@ -156,6 +158,7 @@ export default function App() {
         </Routes>
       </BrowserRouter>
     </AuthProvider>
+    </DialogProvider>
     </LanguageProvider>
     </ThemeProvider>
   );

@@ -6,6 +6,7 @@ import { Toggle } from '../../components/Toggle/Toggle';
 import { readProducts, updateProduct, aggregateProducts } from '../../lib/directus';
 import { useAuth } from '../../hooks/useAuth';
 import { useLanguage } from '../../hooks/useLanguage';
+import { useDialog } from '../../hooks/useDialog';
 import type { ProductsCollection } from '../../types/directus';
 import styles from './Products.module.css';
 
@@ -18,6 +19,7 @@ export function Products() {
   const navigate = useNavigate();
   const { can } = useAuth();
   const { t } = useLanguage();
+  const { alert } = useDialog();
   const canManageProducts = can('manage_products');
   const canToggleOOS = can('flag_out_of_stock');
   const canView = can('browseProducts');
@@ -140,7 +142,7 @@ export function Products() {
       setProducts((prev) =>
         prev.map((p) => (p.id === product.id ? { ...p, oos: product.oos } : p)),
       );
-      window.alert(res.error);
+      alert(res.error);
     }
     setTogglingId(null);
   };

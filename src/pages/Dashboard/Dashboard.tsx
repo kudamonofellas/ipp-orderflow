@@ -15,7 +15,7 @@ import {
   useRole,
 } from "../../hooks/useAuth";
 import { useLanguage } from "../../hooks/useLanguage";
-import { PIPELINE_STAGES, ROLE_FOCUS, RETURN_STAGES } from "../../lib/pipeline";
+import { PIPELINE_STAGES, ROLE_FOCUS, RETURN_STAGES, statusColor } from "../../lib/pipeline";
 import { useAttentionItems } from "../../hooks/useAttentionItems";
 import { useCashUp } from "../../hooks/useCashUp";
 import {
@@ -324,6 +324,7 @@ export function Dashboard() {
                     count={stage.count}
                     label={t(stage.label)}
                     highlight={focusStages.includes(stage.stage)}
+                    color={statusColor(stage.stage)}
                     onClick={() => navigate(`/orders?stage=${stage.stage}`)}
                   />
                 ))}

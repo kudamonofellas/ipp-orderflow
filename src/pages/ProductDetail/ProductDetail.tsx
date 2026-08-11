@@ -4,6 +4,7 @@ import { Card } from "../../components/Card/Card";
 import { Button } from "../../components/Button/Button";
 import { useAuth } from "../../hooks/useAuth";
 import { useLanguage } from "../../hooks/useLanguage";
+import { useDialog } from "../../hooks/useDialog";
 import {
   readProducts,
   deleteProduct,
@@ -17,6 +18,7 @@ export function ProductDetail() {
   const navigate = useNavigate();
   const auth = useAuth();
   const { t } = useLanguage();
+  const { alert, confirm } = useDialog();
 
   const isNew = id === "new";
   const canManage = auth.can("manage_products");
@@ -96,10 +98,10 @@ export function ProductDetail() {
 
   const handleDelete = async () => {
     if (usedBy > 0) {
-      window.alert(t("Product is used by active orders and cannot be deleted."));
+      alert(t("Product is used by active orders and cannot be deleted."));
       return;
     }
-    if (!window.confirm(t("Are you sure you want to delete this product?")))
+    if (!(await confirm(t("Are you sure you want to delete this product?"), { danger: true })))
       return;
     if (!id) return;
 
@@ -108,7 +110,7 @@ export function ProductDetail() {
     setDeleting(false);
 
     if (res.error) {
-      window.alert(`Failed to delete product: ${res.error}`);
+      alert(`Failed to delete product: ${res.error}`);
     } else {
       navigate("/products");
     }

@@ -7,6 +7,7 @@ import { Button } from "../../components/Button/Button";
 import { Toggle } from "../../components/Toggle/Toggle";
 import { useAuth, useCurrentUserName } from "../../hooks/useAuth";
 import { useLanguage } from "../../hooks/useLanguage";
+import { useDialog } from "../../hooks/useDialog";
 import { useSettings } from "../../hooks/useSettings";
 import { useTeamSettings } from "../../hooks/useTeamSettings";
 import {
@@ -37,6 +38,7 @@ export function Settings() {
   const name = useCurrentUserName();
   const { settings, loading, error, update } = useSettings();
   const { lang, setLang, t } = useLanguage();
+  const { alert, confirm } = useDialog();
   const {
     members,
     roles,
@@ -76,7 +78,7 @@ export function Settings() {
    */
   async function handleSettingUpdate(patch: Record<string, unknown>) {
     const res = await update(patch);
-    if (res.error) window.alert(res.error);
+    if (res.error) alert(res.error);
   }
 
   async function handleLogout() {
@@ -105,7 +107,7 @@ export function Settings() {
     });
     setSavingMember(false);
     if (res.error) {
-      window.alert(res.error);
+      alert(res.error);
       return;
     }
     setEditingId(null);
@@ -116,15 +118,16 @@ export function Settings() {
     const fullName =
       `${m.first_name ?? ""} ${m.last_name ?? ""}`.trim() || m.email;
     if (
-      !window.confirm(
+      !(await confirm(
         `${t("Remove")} ${fullName} — ${t("This cannot be undone.")}`,
-      )
+        { danger: true, confirmLabel: t("Remove") },
+      ))
     ) {
       return;
     }
     const res = await deleteTeamMember(m.id);
     if (res.error) {
-      window.alert(res.error);
+      alert(res.error);
       return;
     }
     setEditingId(null);
@@ -146,7 +149,7 @@ export function Settings() {
       setMembers((prev) =>
         prev.map((x) => (x.id === m.id ? { ...x, status: prevStatus } : x)),
       );
-      window.alert(res.error);
+      alert(res.error);
     }
   }
 
@@ -210,7 +213,7 @@ export function Settings() {
           prev.filter((r) => r.id !== `pending-${gridRole}-${cap}`),
         );
       }
-      window.alert(res.error);
+      alert(res.error);
       return;
     }
     // A newly created row's real id comes back from the write — swap it in
@@ -229,9 +232,10 @@ export function Settings() {
 
   async function handleResetPermissions() {
     if (
-      !window.confirm(
+      !(await confirm(
         `${t("Reset all role permissions to defaults?")} ${t("This clears every override.")}`,
-      )
+        { danger: true },
+      ))
     ) {
       return;
     }
@@ -245,7 +249,7 @@ export function Settings() {
     const res = await deleteRolePermissionRows(idsToDelete);
     if (res.error) {
       setPermRows(previousRows);
-      window.alert(res.error);
+      alert(res.error);
       return;
     }
     await refreshPermissions();
@@ -595,7 +599,7 @@ export function Settings() {
               buttonStyle="fullWidth"
               size="lg"
               icon="download"
-              onClick={() => window.alert(t(NOT_AVAILABLE))}
+              onClick={() => alert(t(NOT_AVAILABLE))}
             >
               {t("Backup everything (Download)")}
             </Button>
@@ -608,7 +612,7 @@ export function Settings() {
                 buttonStyle="fullWidth"
                 size="lg"
                 icon="restore"
-                onClick={() => window.alert(t(NOT_AVAILABLE))}
+                onClick={() => alert(t(NOT_AVAILABLE))}
               >
                 {t("Restore from Backup")}
               </Button>
@@ -620,7 +624,7 @@ export function Settings() {
                 buttonStyle="fullWidth"
                 size="lg"
                 icon="export"
-                onClick={() => window.alert(t(NOT_AVAILABLE))}
+                onClick={() => alert(t(NOT_AVAILABLE))}
               >
                 {t("Export all orders (CSV)")}
               </Button>

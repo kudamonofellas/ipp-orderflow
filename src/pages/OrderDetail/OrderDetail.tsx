@@ -9,6 +9,7 @@ import { CourierLiveLocation } from "../../components/CourierLiveLocation/Courie
 import { useDriverLive } from "../../components/CourierLiveLocation/useDriverLive";
 import { useAuth, useCurrentUserId } from "../../hooks/useAuth";
 import { useLanguage } from "../../hooks/useLanguage";
+import { useDialog } from "../../hooks/useDialog";
 import { useSettings } from "../../hooks/useSettings";
 import { getInitials } from "../../lib/initials";
 import {
@@ -231,6 +232,7 @@ export function OrderDetail() {
   const auth = useAuth();
   const userId = useCurrentUserId();
   const { t } = useLanguage();
+  const { alert, confirm } = useDialog();
   const { settings: opsSettings } = useSettings();
   const proofRequired = opsSettings?.dispatch_proof_required === true;
   const requirePhoto = opsSettings?.require_photo === true;
@@ -624,7 +626,7 @@ export function OrderDetail() {
     if (!wId.startsWith("new_")) {
       const res = await deleteLineWeighing(wId);
       if (res.error) {
-        window.alert(`Failed to delete weighing: ${res.error}`);
+        alert(`Failed to delete weighing: ${res.error}`);
         return;
       }
     }
@@ -659,7 +661,7 @@ export function OrderDetail() {
         weight: parsedWeight,
       });
       if (res.error || !res.data) {
-        window.alert(`Failed to save weighing: ${res.error}`);
+        alert(`Failed to save weighing: ${res.error}`);
         return;
       }
       setWeighingsMap((prev) => ({
@@ -670,7 +672,7 @@ export function OrderDetail() {
       }));
     } else {
       const res = await updateLineWeighing(w.id, { weight: parsedWeight });
-      if (res.error) window.alert(`Failed to update weighing: ${res.error}`);
+      if (res.error) alert(`Failed to update weighing: ${res.error}`);
     }
   }
 
@@ -683,7 +685,7 @@ export function OrderDetail() {
     if (!file) return;
     const uploadRes = await uploadFile(file);
     if (uploadRes.error || !uploadRes.data) {
-      window.alert(`Photo upload failed: ${uploadRes.error}`);
+      alert(`Photo upload failed: ${uploadRes.error}`);
       e.target.value = "";
       return;
     }
@@ -705,7 +707,7 @@ export function OrderDetail() {
         weight: parsedWeight,
       });
       if (res.error || !res.data) {
-        window.alert(`Failed to save weighing: ${res.error}`);
+        alert(`Failed to save weighing: ${res.error}`);
         e.target.value = "";
         return;
       }
@@ -718,7 +720,7 @@ export function OrderDetail() {
       sort_order: w.photos.length,
     });
     if (photoRes.error || !photoRes.data) {
-      window.alert(`Failed to save photo: ${photoRes.error}`);
+      alert(`Failed to save photo: ${photoRes.error}`);
       e.target.value = "";
       return;
     }
@@ -748,7 +750,7 @@ export function OrderDetail() {
   ) {
     const res = await deleteLineWeighingPhoto(photoRowId);
     if (res.error) {
-      window.alert(`Failed to remove photo: ${res.error}`);
+      alert(`Failed to remove photo: ${res.error}`);
       return;
     }
     setWeighingsMap((prev) => ({
@@ -771,7 +773,7 @@ export function OrderDetail() {
     if (!file) return;
     const uploadRes = await uploadFile(file);
     if (uploadRes.error || !uploadRes.data) {
-      window.alert(`Photo upload failed: ${uploadRes.error}`);
+      alert(`Photo upload failed: ${uploadRes.error}`);
       e.target.value = "";
       return;
     }
@@ -783,7 +785,7 @@ export function OrderDetail() {
       sort_order: current.length,
     });
     if (createRes.error || !createRes.data) {
-      window.alert(`Failed to save photo: ${createRes.error}`);
+      alert(`Failed to save photo: ${createRes.error}`);
       e.target.value = "";
       return;
     }
@@ -800,7 +802,7 @@ export function OrderDetail() {
   async function handleRemoveItemPhoto(lineId: string, photoRowId: string) {
     const res = await deleteLinePhoto(photoRowId);
     if (res.error) {
-      window.alert(`Failed to remove photo: ${res.error}`);
+      alert(`Failed to remove photo: ${res.error}`);
       return;
     }
     setItemPhotosMap((prev) => ({
@@ -819,7 +821,7 @@ export function OrderDetail() {
       setDocFileId(uploadRes.data.id);
       setDocFileName(file.name);
     } else {
-      window.alert(`Upload failed: ${uploadRes.error}`);
+      alert(`Upload failed: ${uploadRes.error}`);
     }
     if (docFileInputRef.current) docFileInputRef.current.value = "";
   }
@@ -850,18 +852,18 @@ export function OrderDetail() {
         stage,
       });
     } else {
-      window.alert(`Failed to log document: ${res.error}`);
+      alert(`Failed to log document: ${res.error}`);
     }
     setSavingDoc(false);
   }
 
   async function handleDeleteDocument(docId: number | string) {
-    if (!window.confirm(t("Delete this document?"))) return;
+    if (!(await confirm(t("Delete this document?"), { danger: true }))) return;
     const res = await deleteAttachment(docId);
     if (!res.error) {
       setAttachments((prev) => prev.filter((a) => a.id !== docId));
     } else {
-      window.alert(`Failed to delete document: ${res.error}`);
+      alert(`Failed to delete document: ${res.error}`);
     }
   }
 
@@ -873,7 +875,7 @@ export function OrderDetail() {
         (line) => line.id && (itemPhotosMap[line.id]?.length ?? 0) > 0,
       );
       if (!hasAnyItemPhoto) {
-        window.alert(
+        alert(
           t(
             "Attach at least one item photo before releasing from Cold Storage.",
           ),
@@ -894,7 +896,7 @@ export function OrderDetail() {
       const hRes = await readOrderHistory(id);
       if (!hRes.error) setHistory(hRes.data ?? []);
     } else {
-      window.alert(`Failed to advance stage: ${res.error}`);
+      alert(`Failed to advance stage: ${res.error}`);
     }
     setAdvancing(false);
   }
@@ -928,7 +930,7 @@ export function OrderDetail() {
       const hRes = await readOrderHistory(id);
       if (!hRes.error) setHistory(hRes.data ?? []);
     } else {
-      window.alert(`Failed to send back: ${res.error}`);
+      alert(`Failed to send back: ${res.error}`);
     }
     setAdvancing(false);
   }
@@ -980,7 +982,7 @@ export function OrderDetail() {
       resetProofState();
       setShowThirdPartyForm(false);
     } else {
-      window.alert(`Failed to record hand-off: ${res.error}`);
+      alert(`Failed to record hand-off: ${res.error}`);
     }
     setChoosingMode(false);
   }
@@ -1028,7 +1030,7 @@ export function OrderDetail() {
       const hRes = await readOrderHistory(id);
       if (!hRes.error) setHistory(hRes.data ?? []);
     } else {
-      window.alert(`Failed to confirm documents returned: ${res.error}`);
+      alert(`Failed to confirm documents returned: ${res.error}`);
     }
   }
 
@@ -1042,7 +1044,7 @@ export function OrderDetail() {
     const uploadRes = await uploadFile(file);
     setUploadingProofSlot(null);
     if (uploadRes.error || !uploadRes.data) {
-      window.alert(`Photo upload failed: ${uploadRes.error}`);
+      alert(`Photo upload failed: ${uploadRes.error}`);
       e.target.value = "";
       return;
     }
@@ -1070,7 +1072,7 @@ export function OrderDetail() {
         ? !!condPhoto
         : !proofRequired || (!!condPhoto && !!recvPhoto && !!signedProofPhoto);
     if (!photosOk) {
-      window.alert(
+      alert(
         handoffMode === "third"
           ? t("A handover photo is required before marking handed over.")
           : t(
@@ -1080,7 +1082,7 @@ export function OrderDetail() {
       return;
     }
     if (!receiverName.trim()) {
-      window.alert(t("Enter the receiver's name."));
+      alert(t("Enter the receiver's name."));
       return;
     }
     setSubmittingProof(true);
@@ -1093,7 +1095,7 @@ export function OrderDetail() {
       name: receiverName.trim(),
     });
     if (proofRes.error) {
-      window.alert(`Failed to save delivery proof: ${proofRes.error}`);
+      alert(`Failed to save delivery proof: ${proofRes.error}`);
       setSubmittingProof(false);
       return;
     }
@@ -1109,7 +1111,7 @@ export function OrderDetail() {
       const hRes = await readOrderHistory(id);
       if (!hRes.error) setHistory(hRes.data ?? []);
     } else {
-      window.alert(`Failed to advance stage: ${res.error}`);
+      alert(`Failed to advance stage: ${res.error}`);
     }
     setSubmittingProof(false);
   }
@@ -1117,7 +1119,7 @@ export function OrderDetail() {
   async function handleCancel() {
     if (
       !id ||
-      !window.confirm(t("Cancel this order? This can be undone via Restore."))
+      !(await confirm(t("Cancel this order? This can be undone via Restore."), { danger: true }))
     )
       return;
     setCancelling(true);
@@ -1137,7 +1139,7 @@ export function OrderDetail() {
       const hRes = await readOrderHistory(id);
       if (!hRes.error) setHistory(hRes.data ?? []);
     } else {
-      window.alert(`Failed to cancel order: ${res.error}`);
+      alert(`Failed to cancel order: ${res.error}`);
     }
     setCancelling(false);
   }
@@ -1156,7 +1158,7 @@ export function OrderDetail() {
       const hRes = await readOrderHistory(id);
       if (!hRes.error) setHistory(hRes.data ?? []);
     } else {
-      window.alert(`Failed to hold order: ${res.error}`);
+      alert(`Failed to hold order: ${res.error}`);
     }
   }
 
@@ -1179,7 +1181,7 @@ export function OrderDetail() {
       const hRes = await readOrderHistory(id);
       if (!hRes.error) setHistory(hRes.data ?? []);
     } else {
-      window.alert(`Failed to restore order: ${res.error}`);
+      alert(`Failed to restore order: ${res.error}`);
     }
   }
 
@@ -1194,13 +1196,13 @@ export function OrderDetail() {
   async function handleReorder() {
     if (!id || !order || reordering) return;
     if (!order.customer_id) {
-      window.alert(t("This order has no customer on file — can't reorder."));
+      alert(t("This order has no customer on file — can't reorder."));
       return;
     }
     if (
-      !window.confirm(
+      !(await confirm(
         t("Create a new order with the same items for this customer?"),
-      )
+      ))
     )
       return;
 
@@ -1213,7 +1215,7 @@ export function OrderDetail() {
 
     const noRes = await getNextOrderNo(dateCode(deliverAt));
     if (noRes.error || !noRes.data) {
-      window.alert(`Failed to generate order number: ${noRes.error}`);
+      alert(`Failed to generate order number: ${noRes.error}`);
       setReordering(false);
       return;
     }
@@ -1233,7 +1235,7 @@ export function OrderDetail() {
       order_date: orderDate,
     });
     if (orderRes.error || !orderRes.data) {
-      window.alert(`Failed to create order: ${orderRes.error}`);
+      alert(`Failed to create order: ${orderRes.error}`);
       setReordering(false);
       return;
     }
@@ -1255,7 +1257,7 @@ export function OrderDetail() {
     });
     const linesRes = await createOrderLines(lineInputs);
     if (linesRes.error) {
-      window.alert(
+      alert(
         `Order created but lines failed: ${linesRes.error}. Order id ${newOrderId}.`,
       );
       setReordering(false);
@@ -1316,7 +1318,7 @@ export function OrderDetail() {
     if (!file) return;
     const uploadRes = await uploadFile(file);
     if (uploadRes.error || !uploadRes.data) {
-      window.alert(`Photo upload failed: ${uploadRes.error}`);
+      alert(`Photo upload failed: ${uploadRes.error}`);
       e.target.value = "";
       return;
     }
@@ -1328,7 +1330,7 @@ export function OrderDetail() {
       sort_order: current.length,
     });
     if (createRes.error || !createRes.data) {
-      window.alert(`Failed to save photo: ${createRes.error}`);
+      alert(`Failed to save photo: ${createRes.error}`);
       e.target.value = "";
       return;
     }
@@ -1349,7 +1351,7 @@ export function OrderDetail() {
       (l) => (parseFloat(refuseQtyMap[l.id] ?? "0") || 0) > 0,
     );
     if (refusedLines.length === 0) {
-      window.alert(t("Enter a returned quantity for at least one item."));
+      alert(t("Enter a returned quantity for at least one item."));
       return;
     }
     setSubmittingRefusal(true);
@@ -1357,7 +1359,7 @@ export function OrderDetail() {
       const qty = parseFloat(refuseQtyMap[l.id] ?? "0") || 0;
       const res = await updateOrderLine(l.id, { returned: qty });
       if (res.error) {
-        window.alert(`Failed to record return on "${l.name}": ${res.error}`);
+        alert(`Failed to record return on "${l.name}": ${res.error}`);
         setSubmittingRefusal(false);
         return;
       }
@@ -1385,7 +1387,7 @@ export function OrderDetail() {
       if (!hRes.error) setHistory(hRes.data ?? []);
       setShowRefuseForm(false);
     } else {
-      window.alert(`Failed to record the return: ${res.error}`);
+      alert(`Failed to record the return: ${res.error}`);
     }
     setSubmittingRefusal(false);
   }
@@ -1399,7 +1401,7 @@ export function OrderDetail() {
     if (!file) return;
     const uploadRes = await uploadFile(file);
     if (uploadRes.error || !uploadRes.data) {
-      window.alert(`Photo upload failed: ${uploadRes.error}`);
+      alert(`Photo upload failed: ${uploadRes.error}`);
       e.target.value = "";
       return;
     }
@@ -1407,7 +1409,7 @@ export function OrderDetail() {
       returned_weigh_photo: uploadRes.data.id,
     });
     if (res.error || !res.data) {
-      window.alert(`Failed to save weigh-back photo: ${res.error}`);
+      alert(`Failed to save weigh-back photo: ${res.error}`);
       e.target.value = "";
       return;
     }
@@ -1426,7 +1428,7 @@ export function OrderDetail() {
       if (verified === Number(l.returned)) continue;
       const res = await updateOrderLine(l.id, { returned: verified });
       if (res.error) {
-        window.alert(`Failed to update "${l.name}": ${res.error}`);
+        alert(`Failed to update "${l.name}": ${res.error}`);
         setConfirmingReceive(false);
         return;
       }
@@ -1450,7 +1452,7 @@ export function OrderDetail() {
       const hRes = await readOrderHistory(id);
       if (!hRes.error) setHistory(hRes.data ?? []);
     } else {
-      window.alert(`Failed to confirm receipt: ${res.error}`);
+      alert(`Failed to confirm receipt: ${res.error}`);
     }
     setConfirmingReceive(false);
   }
@@ -1467,7 +1469,7 @@ export function OrderDetail() {
       for (const l of returnedLines) {
         const res = await updateOrderLine(l.id, { returned: 0, delivered: 0 });
         if (res.error) {
-          window.alert(`Failed to reset "${l.name}": ${res.error}`);
+          alert(`Failed to reset "${l.name}": ${res.error}`);
           setConfirmingSettle(false);
           return;
         }
@@ -1493,7 +1495,7 @@ export function OrderDetail() {
         const hRes = await readOrderHistory(id);
         if (!hRes.error) setHistory(hRes.data ?? []);
       } else {
-        window.alert(`Failed to process the replacement: ${res.error}`);
+        alert(`Failed to process the replacement: ${res.error}`);
       }
     } else if (doc.key === "revise-return") {
       const res = await updateOrder(id, {
@@ -1511,7 +1513,7 @@ export function OrderDetail() {
         const hRes = await readOrderHistory(id);
         if (!hRes.error) setHistory(hRes.data ?? []);
       } else {
-        window.alert(`Failed to issue the revised DO/SI: ${res.error}`);
+        alert(`Failed to issue the revised DO/SI: ${res.error}`);
       }
     } else {
       // return-note: nothing physical goes out — closes immediately.
@@ -1530,7 +1532,7 @@ export function OrderDetail() {
         const hRes = await readOrderHistory(id);
         if (!hRes.error) setHistory(hRes.data ?? []);
       } else {
-        window.alert(`Failed to close the return: ${res.error}`);
+        alert(`Failed to close the return: ${res.error}`);
       }
     }
     setConfirmingSettle(false);
@@ -1542,7 +1544,7 @@ export function OrderDetail() {
     if (!file) return;
     const uploadRes = await uploadFile(file);
     if (uploadRes.error || !uploadRes.data) {
-      window.alert(`Upload failed: ${uploadRes.error}`);
+      alert(`Upload failed: ${uploadRes.error}`);
       e.target.value = "";
       return;
     }
@@ -1559,7 +1561,7 @@ export function OrderDetail() {
       photo_id: signedDocFileId,
     });
     if (docRes.error) {
-      window.alert(`Failed to save the signed document: ${docRes.error}`);
+      alert(`Failed to save the signed document: ${docRes.error}`);
       setClosingSigned(false);
       return;
     }
@@ -1577,7 +1579,7 @@ export function OrderDetail() {
       if (!hRes.error) setHistory(hRes.data ?? []);
       setSignedDocFileId(null);
     } else {
-      window.alert(`Failed to close the return: ${res.error}`);
+      alert(`Failed to close the return: ${res.error}`);
     }
     setClosingSigned(false);
   }
@@ -1595,7 +1597,7 @@ export function OrderDetail() {
       setHistory((prev) => [...prev, res.data!]);
       setNoteText("");
     } else {
-      window.alert(`Failed to add note: ${res.error}`);
+      alert(`Failed to add note: ${res.error}`);
     }
     setSavingNote(false);
   }
@@ -1656,7 +1658,7 @@ export function OrderDetail() {
       document.execCommand("copy");
       ta.remove();
     }
-    window.alert(t("WhatsApp order confirmation copied to clipboard."));
+    alert(t("WhatsApp order confirmation copied to clipboard."));
   }
 
   /* ────────────── render ── */

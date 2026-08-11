@@ -9,6 +9,7 @@ import {
 } from "../../components/AddItemModal/AddItemModal";
 import { useAuth, useCurrentUserName } from "../../hooks/useAuth";
 import { useLanguage } from "../../hooks/useLanguage";
+import { useDialog } from "../../hooks/useDialog";
 import {
   appendOrderHistory,
   createLineCut,
@@ -91,6 +92,7 @@ export function OrderNew() {
 
   const can = useAuth().can;
   const { t } = useLanguage();
+  const { alert } = useDialog();
   const currentUserName = useCurrentUserName();
   const allowed = can("createOrders");
 
@@ -401,7 +403,7 @@ export function OrderNew() {
           (r.status === "fulfilled" && r.value.error !== null),
       ).length;
       if (failedCuts > 0) {
-        window.alert(
+        alert(
           `Order created, but ${failedCuts} cutting instruction(s) failed to save. You can add them from the order page.`,
         );
       }
