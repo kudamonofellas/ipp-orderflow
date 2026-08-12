@@ -106,6 +106,7 @@ function toOpenOrder(
     taken_by?: string | null;
     pickup?: boolean | null;
     third_party?: boolean | null;
+    is_replacement?: boolean | null;
   },
   linesByOrderId: Map<string, OpenOrderLine[]>,
 ): OpenOrder {
@@ -121,6 +122,7 @@ function toOpenOrder(
     takenBy: row.taken_by ?? null,
     pickup: row.pickup === true,
     thirdParty: row.third_party === true,
+    isReplacement: row.is_replacement === true,
   };
 }
 
@@ -277,6 +279,7 @@ export function useOrders(
         "taken_by",
         "pickup",
         "third_party",
+        "is_replacement",
         ...(seeCustomerContact ? ["sales_rep"] : []),
       ];
       const lineFields = [

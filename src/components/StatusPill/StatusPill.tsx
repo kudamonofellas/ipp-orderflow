@@ -1,3 +1,4 @@
+import { Icon } from '../Icon/Icon';
 import { useLanguage } from '../../hooks/useLanguage';
 import { statusColor } from '../../lib/pipeline';
 import styles from './StatusPill.module.css';
@@ -11,6 +12,13 @@ interface StatusPillProps {
      *  exactly one label, never both. Colour still comes from `status`
      *  (the role that owns it), regardless of which text is shown. */
     subLabel?: string | null;
+    /** When true, renders a small "Replacement" badge next to the pill
+     *  (`order.is_replacement`) — a separate chip, not merged into the
+     *  pill's own label, since a replacement order's stage/colour is still
+     *  whichever role currently holds it (see the note on
+     *  `RETURN_BUCKET_ACTOR` in lib/pipeline.ts for why this isn't a colour
+     *  by itself). */
+    isReplacement?: boolean;
     /** Optional extra CSS class name */
     className?: string;
 }
@@ -45,7 +53,7 @@ function formatFallback(rawStatus: string): string {
         .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
-export function StatusPill({ status, subLabel, className }: StatusPillProps) {
+export function StatusPill({ status, subLabel, isReplacement, className }: StatusPillProps) {
     const { t } = useLanguage();
     const key = status?.toLowerCase().trim() ?? '';
     const fallbackLabel = STATUS_LABELS[key] ?? (key ? formatFallback(key) : 'Unknown');
@@ -57,16 +65,24 @@ export function StatusPill({ status, subLabel, className }: StatusPillProps) {
     const classes = [styles.statusPill, className].filter(Boolean).join(' ');
 
     return (
-        <span
-            className={classes}
-            style={{
-                backgroundColor: `color-mix(in srgb, ${color} 13%, transparent)`,
-                color,
-                borderColor: `color-mix(in srgb, ${color} 33%, transparent)`,
-            }}
-        >
-            <span className={styles.dot} style={{ backgroundColor: color }} />
-            <span className={styles.label}>{t(displayLabel)}</span>
+        <span className={styles.wrap}>
+            <span
+                className={classes}
+                style={{
+                    backgroundColor: `color-mix(in srgb, ${color} 13%, transparent)`,
+                    color,
+                    borderColor: `color-mix(in srgb, ${color} 33%, transparent)`,
+                }}
+            >
+                <span className={styles.dot} style={{ backgroundColor: color }} />
+                <span className={styles.label}>{t(displayLabel)}</span>
+            </span>
+            {isReplacement && (
+                <span className={styles.replacementBadge} title={t('Replacement')}>
+                    <Icon name="reload" size={11} />
+                    {t('Replacement')}
+                </span>
+            )}
         </span>
     );
 }

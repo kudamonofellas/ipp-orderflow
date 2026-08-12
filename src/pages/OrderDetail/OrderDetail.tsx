@@ -41,6 +41,8 @@ import {
   readReturnDocuments,
   createReturnDocument,
   createDeliveryProof,
+  readDeliveryProofs,
+  updateDeliveryProof,
   getNextOrderNo,
   createOrder,
   createOrderLines,
@@ -56,6 +58,7 @@ import type {
   UserBrief,
   LineCutsCollection,
   ReturnDocumentsCollection,
+  DeliveryProofsCollection,
 } from "../../types/directus";
 import {
   ACTOR,
@@ -213,6 +216,21 @@ function formatDate(iso: string | null | undefined, withTime = false): string {
   });
 }
 
+/** "Tuesday 11 August 2026  13:52" — the delivery-proof "taken by" timestamp format. */
+function formatTakenAt(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  const weekday = d.toLocaleDateString("en-US", { weekday: "long" });
+  const month = d.toLocaleDateString("en-US", { month: "long" });
+  const time = d.toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+  return `${weekday} ${d.getDate()} ${month} ${d.getFullYear()}  ${time}`;
+}
+
 interface WeighingLine {
   id: string;
   weight: string;
@@ -261,6 +279,9 @@ export function OrderDetail() {
     weighingLineId?: string;
     weighingId?: string;
     weighingPhotoId?: string;
+    /** A staged (not-yet-confirmed) delivery-proof photo — see handleRemoveStagedProofPhoto. */
+    stagedProofSlot?: "cond" | "recv" | "signed";
+    stagedProofIndex?: number;
   } | null>(null);
 
   /* ── action state ── */
@@ -296,25 +317,35 @@ export function OrderDetail() {
   );
   const [thirdPartyRef, setThirdPartyRef] = useState("");
 
-  /* ── delivery proof (Mark as Delivered / picked up / handed over) state ── */
-  const [condPhoto, setCondPhoto] = useState<{
-    fileId: string;
-    url: string;
-  } | null>(null);
-  const [recvPhoto, setRecvPhoto] = useState<{
-    fileId: string;
-    url: string;
-  } | null>(null);
-  const [signedProofPhoto, setSignedProofPhoto] = useState<{
-    fileId: string;
-    url: string;
-  } | null>(null);
+  /* ── delivery proof (Mark as Delivered / picked up / handed over) state ──
+   * Multiple photos per slot, staged locally (uploaded to Directus Files but
+   * not yet attached to any order/proof record) until the attempt either
+   * confirms or is abandoned — see handleConfirmDelivery/archiveDraftAttempt. */
+  const [condPhotos, setCondPhotos] = useState<
+    { fileId: string; url: string }[]
+  >([]);
+  const [recvPhotos, setRecvPhotos] = useState<
+    { fileId: string; url: string }[]
+  >([]);
+  const [signedPhotos, setSignedPhotos] = useState<
+    { fileId: string; url: string }[]
+  >([]);
+  // A real <button> nested inside a <label> breaks the browser's native
+  // label-click-to-input delegation (the button intercepts the click as its
+  // own interactive element) — trigger the hidden file inputs via ref instead.
+  const condFileInputRef = useRef<HTMLInputElement>(null);
+  const recvFileInputRef = useRef<HTMLInputElement>(null);
+  const signedFileInputRef = useRef<HTMLInputElement>(null);
   const [receiverName, setReceiverName] = useState("");
   const [proofCod, setProofCod] = useState(false);
   const [uploadingProofSlot, setUploadingProofSlot] = useState<
     "cond" | "recv" | "signed" | null
   >(null);
   const [submittingProof, setSubmittingProof] = useState(false);
+  /** The current (non-archived) delivery_proofs row for this order, if any —
+   *  drives the read-only post-confirm view. */
+  const [activeProof, setActiveProof] =
+    useState<DeliveryProofsCollection | null>(null);
 
   /* ── document form ── */
   const [docType, setDocType] = useState<string>("DO");
@@ -357,6 +388,7 @@ export function OrderDetail() {
         customersRes,
         usersRes,
         returnDocsRes,
+        deliveryProofsRes,
       ] = await Promise.all([
         readOrder(orderId),
         readOrderLines({ filter: { order_id: { _eq: orderId } } }),
@@ -365,6 +397,7 @@ export function OrderDetail() {
         readCustomers(),
         readAllUsers(),
         readReturnDocuments(orderId),
+        readDeliveryProofs([orderId]),
       ]);
 
       if (cancelled) return;
@@ -388,6 +421,7 @@ export function OrderDetail() {
       setCustomers(customersRes.data ?? []);
       setUsers(usersRes.data ?? []);
       setReturnDocs(returnDocsRes.data ?? []);
+      setActiveProof(deliveryProofsRes.data?.[0] ?? null);
       setLines(loadedLines);
 
       // initialize sending qty state for lines
@@ -954,11 +988,55 @@ export function OrderDetail() {
 
   /** Opens the delivery-proof capture form, defaulting COD from the customer's pay_timing. */
   function resetProofState() {
-    setCondPhoto(null);
-    setRecvPhoto(null);
-    setSignedProofPhoto(null);
+    setCondPhotos([]);
+    setRecvPhotos([]);
+    setSignedPhotos([]);
     setReceiverName("");
     setProofCod(matchedCustomer?.pay_timing === "cod");
+  }
+
+  /**
+   * Archives whatever was staged in an abandoned attempt (Change method /
+   * Delivery failed, before ever confirming) instead of silently discarding
+   * it — creates a delivery_proofs row for the partial attempt, immediately
+   * marks it `archived: true`, and links every staged photo to it via
+   * `proof_id`. No-op when nothing was captured yet. Best-effort: a failure
+   * here shouldn't block the hand-off reset itself.
+   */
+  async function archiveDraftAttempt() {
+    const hasDraft =
+      condPhotos.length > 0 ||
+      recvPhotos.length > 0 ||
+      signedPhotos.length > 0 ||
+      receiverName.trim() !== "";
+    if (!hasDraft || !id) return;
+    const proofRes = await createDeliveryProof({
+      order_id: id,
+      cond_photo: condPhotos[0]?.fileId ?? null,
+      recv_photo: recvPhotos[0]?.fileId ?? null,
+      signed_photo: signedPhotos[0]?.fileId ?? null,
+      cod: proofCod,
+      name: receiverName.trim() || null,
+    });
+    if (proofRes.error || !proofRes.data) return;
+    const proofId = proofRes.data.id;
+    await updateDeliveryProof(proofId, { archived: true });
+    const allStaged = [
+      ...condPhotos.map((p) => ({ ...p, slot: "cond" as const })),
+      ...recvPhotos.map((p) => ({ ...p, slot: "recv" as const })),
+      ...signedPhotos.map((p) => ({ ...p, slot: "signed" as const })),
+    ];
+    await Promise.all(
+      allStaged.map((p) =>
+        createAttachment({
+          order_uuid: id,
+          doc_type: p.slot,
+          document_file: p.fileId,
+          proof_id: proofId,
+          created_by: userId ?? undefined,
+        }),
+      ),
+    );
   }
 
   /** Writes a hand-off field patch + history entry, then resets the proof form for the new mode. */
@@ -1003,9 +1081,10 @@ export function OrderDetail() {
     );
   }
 
-  /** Resets the hand-off choice back to the 3-way chooser — proof photos already taken are kept. */
-  function handleChangeMethod() {
-    commitHandoff(
+  /** Resets the hand-off choice back to the 3-way chooser — whatever was staged is archived, not lost (see archiveDraftAttempt). */
+  async function handleChangeMethod() {
+    await archiveDraftAttempt();
+    await commitHandoff(
       {
         taken_by: null,
         pickup: false,
@@ -1013,6 +1092,20 @@ export function OrderDetail() {
         courier_service: null,
       },
       "Handover method reset",
+    );
+  }
+
+  /** The attempt failed before ever confirming (e.g. no one home) — archive whatever was staged and return to the hand-off chooser for a retry. */
+  async function handleDeliveryFailed() {
+    await archiveDraftAttempt();
+    await commitHandoff(
+      {
+        taken_by: null,
+        pickup: false,
+        third_party: false,
+        courier_service: null,
+      },
+      "Delivery attempt failed — retrying",
     );
   }
 
@@ -1052,10 +1145,24 @@ export function OrderDetail() {
       fileId: uploadRes.data.id,
       url: getAssetUrl(uploadRes.data.id),
     };
-    if (slot === "cond") setCondPhoto(photo);
-    else if (slot === "recv") setRecvPhoto(photo);
-    else setSignedProofPhoto(photo);
+    if (slot === "cond") setCondPhotos((prev) => [...prev, photo]);
+    else if (slot === "recv") setRecvPhotos((prev) => [...prev, photo]);
+    else setSignedPhotos((prev) => [...prev, photo]);
     e.target.value = "";
+  }
+
+  /** Removes a staged (not-yet-confirmed) proof photo — pure local-state edit, nothing to delete server-side since it was never attached to a record. */
+  function handleRemoveStagedProofPhoto(
+    slot: "cond" | "recv" | "signed",
+    index: number,
+  ) {
+    const setter =
+      slot === "cond"
+        ? setCondPhotos
+        : slot === "recv"
+          ? setRecvPhotos
+          : setSignedPhotos;
+    setter((prev) => prev.filter((_, i) => i !== index));
   }
 
   /**
@@ -1067,10 +1174,16 @@ export function OrderDetail() {
    */
   async function handleConfirmDelivery() {
     if (!id || submittingProof) return;
+    // Condition photo is always required (it's what unlocks the rest of the
+    // form in the first place); receiver + signed-doc photos only become
+    // mandatory when dispatch_proof_required is on, and never for 3rd-party
+    // (the courier service — not this app — owns the rest of that hand-off).
     const photosOk =
       handoffMode === "third"
-        ? !!condPhoto
-        : !proofRequired || (!!condPhoto && !!recvPhoto && !!signedProofPhoto);
+        ? condPhotos.length > 0
+        : condPhotos.length > 0 &&
+          (!proofRequired ||
+            (recvPhotos.length > 0 && signedPhotos.length > 0));
     if (!photosOk) {
       alert(
         handoffMode === "third"
@@ -1088,18 +1201,49 @@ export function OrderDetail() {
     setSubmittingProof(true);
     const proofRes = await createDeliveryProof({
       order_id: id,
-      cond_photo: condPhoto?.fileId ?? null,
-      recv_photo: recvPhoto?.fileId ?? null,
-      signed_photo: signedProofPhoto?.fileId ?? null,
+      cond_photo: condPhotos[0]?.fileId ?? null,
+      recv_photo: recvPhotos[0]?.fileId ?? null,
+      signed_photo: signedPhotos[0]?.fileId ?? null,
       cod: handoffMode === "third" ? false : proofCod,
       name: receiverName.trim(),
     });
-    if (proofRes.error) {
+    if (proofRes.error || !proofRes.data) {
       alert(`Failed to save delivery proof: ${proofRes.error}`);
       setSubmittingProof(false);
       return;
     }
-    const res = await updateOrder(id, { stage: "delivered" });
+    const proofId = proofRes.data.id;
+    const allStaged = [
+      ...condPhotos.map((p) => ({ ...p, slot: "cond" as const })),
+      ...recvPhotos.map((p) => ({ ...p, slot: "recv" as const })),
+      ...signedPhotos.map((p) => ({ ...p, slot: "signed" as const })),
+    ];
+    const attachRes = await Promise.all(
+      allStaged.map((p) =>
+        createAttachment({
+          order_uuid: id,
+          doc_type: p.slot,
+          document_file: p.fileId,
+          proof_id: proofId,
+          created_by: userId ?? undefined,
+        }),
+      ),
+    );
+    const failedAttach = attachRes.filter((r) => r.error).length;
+    if (failedAttach > 0) {
+      alert(
+        `Delivery confirmed, but ${failedAttach} proof photo(s) failed to save. The primary photo per field is still recorded.`,
+      );
+    }
+    setAttachments((prev) => [
+      ...prev,
+      ...attachRes.flatMap((r) => (r.data ? [r.data] : [])),
+    ]);
+    setActiveProof(proofRes.data);
+    const res = await updateOrder(id, {
+      stage: "delivered",
+      delivered_at: new Date().toISOString(),
+    });
     if (!res.error && res.data) {
       setOrder(res.data);
       await appendOrderHistory({
@@ -1119,7 +1263,9 @@ export function OrderDetail() {
   async function handleCancel() {
     if (
       !id ||
-      !(await confirm(t("Cancel this order? This can be undone via Restore."), { danger: true }))
+      !(await confirm(t("Cancel this order? This can be undone via Restore."), {
+        danger: true,
+      }))
     )
       return;
     setCancelling(true);
@@ -2190,11 +2336,7 @@ export function OrderDetail() {
                           </div>
                         ) : (
                           <div className={styles.priceCalc}>
-                            <span className="tiny muted">
-                              {t(
-                                "No price on the order — invoiced in Accurate.",
-                              )}
-                            </span>
+                            {t("No price on the order — invoiced in Accurate.")}
                           </div>
                         ))}
                     </div>
@@ -2352,7 +2494,7 @@ export function OrderDetail() {
               <div className={styles.heading}>
                 <span>{t("Signed DO & SI returned?")}</span>
               </div>
-              <p className="tiny muted">
+              <p>
                 {t(
                   "Make sure the signed Delivery Order & Sales Invoice come back to the office and are filed.",
                 )}
@@ -2367,7 +2509,7 @@ export function OrderDetail() {
             </Card>
           )}
           {isDelivered && order.docs_returned && (
-            <p className="tiny muted" style={{ margin: "0.5rem 0" }}>
+            <p style={{ margin: "0.5rem 0" }}>
               ✓ {t("Signed DO & SI returned")}
             </p>
           )}
@@ -2395,18 +2537,6 @@ export function OrderDetail() {
                     className={styles.actionBtn}
                   >
                     {advancing ? t("Saving…") : t(flow.advanceLabel)}
-                  </Button>
-                )}
-                {stage === "dispatch" && canAdvance && !showRefuseForm && (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="lg"
-                    onClick={openRefuseForm}
-                    className={styles.actionBtn}
-                    style={{ color: "var(--state-error)" }}
-                  >
-                    {t("Customer refused / returned")}
                   </Button>
                 )}
               </div>
@@ -2484,115 +2614,303 @@ export function OrderDetail() {
               {/* Proof capture — mode chosen, relabeled per mode */}
               {stage === "dispatch" && canAdvance && handoffMode && (
                 <Card style={{ marginTop: "0.75rem" }}>
-                  <div className={styles.heading}>
-                    <span>
+                  <div className={styles.proofHeaderRow}>
+                    <span className={styles.heading}>
                       {handoffMode === "pickup"
                         ? t("Proof of pickup")
                         : handoffMode === "third"
                           ? `${t("Handed to")} ${order.courier_service ?? ""}`
                           : t("Delivery proof")}
                     </span>
-                  </div>
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: "0.75rem",
-                      flexWrap: "wrap",
-                      marginBottom: "0.75rem",
-                    }}
-                  >
-                    {(handoffMode === "third"
-                      ? [
-                          {
-                            slot: "cond" as const,
-                            label: t("Condition photo"),
-                            photo: condPhoto,
-                          },
-                        ]
-                      : [
-                          {
-                            slot: "cond" as const,
-                            label: t("Condition photo"),
-                            photo: condPhoto,
-                          },
-                          {
-                            slot: "recv" as const,
-                            label:
-                              handoffMode === "pickup"
-                                ? t("Photo of who collected")
-                                : t("Receiver photo"),
-                            photo: recvPhoto,
-                          },
-                          {
-                            slot: "signed" as const,
-                            label: proofRequired
-                              ? t("Signed doc")
-                              : t("Signed doc (optional)"),
-                            photo: signedProofPhoto,
-                          },
-                        ]
-                    ).map(({ slot, label, photo }) => (
-                      <div
-                        key={slot}
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: "0.375rem",
-                        }}
+                    {condPhotos.length > 0 && (
+                      <Button
+                        type="button"
+                        variant="tertiary"
+                        size="md"
+                        icon="reload"
+                        onClick={handleChangeMethod}
+                        disabled={submittingProof || choosingMode}
                       >
-                        <span className="tiny muted">{label}</span>
-                        <label
-                          className={styles.actionBtn}
-                          style={{
-                            cursor: "pointer",
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "0.5rem",
-                          }}
-                        >
-                          <input
-                            type="file"
-                            accept="image/*"
-                            style={{ display: "none" }}
-                            onChange={(e) => handleUploadProofPhoto(slot, e)}
-                          />
-                          <Icon name="camera" size={16} />
-                          {uploadingProofSlot === slot
-                            ? t("Uploading…")
-                            : t("Upload")}
-                        </label>
-                        {photo && (
-                          <img
-                            src={photo.url}
-                            alt=""
-                            className={styles.thumbnailImg}
-                            style={{ width: 64, height: 64 }}
-                          />
-                        )}
-                      </div>
-                    ))}
+                        {t("Change method")}
+                      </Button>
+                    )}
                   </div>
-                  <input
-                    type="text"
-                    className={styles.editInput}
-                    placeholder={
-                      handoffMode === "pickup"
-                        ? t("Collected by")
-                        : t("Receiver's name")
-                    }
-                    value={receiverName}
-                    onChange={(e) => setReceiverName(e.target.value)}
-                    style={{ width: "100%", marginBottom: "0.75rem" }}
-                  />
-                  {handoffMode !== "third" && (
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "0.5rem",
-                        marginBottom: "0.75rem",
-                      }}
-                    >
+                  {handoffMode === "delivery" && (
+                    <div className={styles.secondary}>
+                      {t("Taken by")}{" "}
+                      <strong>{displayName(order.taken_by)}</strong> {t("on")}{" "}
+                      {formatTakenAt(
+                        [...history]
+                          .reverse()
+                          .find((h) => h.what === "Handover: own courier")?.at,
+                      )}
+                    </div>
+                  )}
+                  <div className={styles.proofsContainer}>
+                    <div className={styles.proofFieldRow}>
+                      <div className={styles.proofFieldMain}>
+                        <div className={styles.left}>
+                          <Icon
+                            name="check"
+                            size={18}
+                            className={
+                              condPhotos.length > 0
+                                ? styles.proofCheckFilled
+                                : styles.proofCheckEmpty
+                            }
+                          />
+                          <span className={styles.proofFieldLabel}>
+                            {t("Condition photo")}
+                          </span>
+                        </div>
+                        {condPhotos.length > 0 && (
+                          <div className={styles.thumbnailsContainer}>
+                            {condPhotos.map((p, i) => (
+                              <div
+                                key={p.fileId + i}
+                                className={styles.thumbnailItem}
+                                onClick={() =>
+                                  setActiveImageModal({
+                                    url: p.url,
+                                    title: t("Condition photo"),
+                                    stagedProofSlot: "cond",
+                                    stagedProofIndex: i,
+                                  })
+                                }
+                              >
+                                <img
+                                  src={p.url}
+                                  alt=""
+                                  className={styles.thumbnailImg}
+                                />
+                                <div
+                                  className={styles.thumbnailHoverTrash}
+                                  title={t("Delete image")}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleRemoveStagedProofPhoto("cond", i);
+                                  }}
+                                >
+                                  <Icon name="trash" size={14} />
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <input
+                          ref={condFileInputRef}
+                          type="file"
+                          accept="image/*"
+                          style={{ display: "none" }}
+                          onChange={(e) => handleUploadProofPhoto("cond", e)}
+                        />
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          icon="camera"
+                          iconOnly
+                          isActive={condPhotos.length > 0}
+                          disabled={uploadingProofSlot === "cond"}
+                          title={t("Upload")}
+                          onClick={() => condFileInputRef.current?.click()}
+                        />
+                      </div>
+                    </div>
+
+                    {condPhotos.length > 0 && handoffMode !== "third" && (
+                      <>
+                        <div className={styles.proofFieldRow}>
+                          <div className={styles.proofFieldMain}>
+                            <div className={styles.left}>
+                              <Icon
+                                name="check"
+                                size={18}
+                                className={
+                                  recvPhotos.length > 0 &&
+                                  receiverName.trim() !== ""
+                                    ? styles.proofCheckFilled
+                                    : styles.proofCheckEmpty
+                                }
+                              />
+                              <span className={styles.proofFieldLabel}>
+                                {handoffMode === "pickup"
+                                  ? t("Photo of who collected")
+                                  : t("Receiver photo")}
+                              </span>
+                            </div>
+                            {recvPhotos.length > 0 && (
+                              <div className={styles.thumbnailsContainer}>
+                                {recvPhotos.map((p, i) => (
+                                  <div
+                                    key={p.fileId + i}
+                                    className={styles.thumbnailItem}
+                                    onClick={() =>
+                                      setActiveImageModal({
+                                        url: p.url,
+                                        title:
+                                          handoffMode === "pickup"
+                                            ? t("Photo of who collected")
+                                            : t("Receiver photo"),
+                                        stagedProofSlot: "recv",
+                                        stagedProofIndex: i,
+                                      })
+                                    }
+                                  >
+                                    <img
+                                      src={p.url}
+                                      alt=""
+                                      className={styles.thumbnailImg}
+                                    />
+                                    <div
+                                      className={styles.thumbnailHoverTrash}
+                                      title={t("Delete image")}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleRemoveStagedProofPhoto("recv", i);
+                                      }}
+                                    >
+                                      <Icon name="trash" size={14} />
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            <input
+                              ref={recvFileInputRef}
+                              type="file"
+                              accept="image/*"
+                              style={{ display: "none" }}
+                              onChange={(e) =>
+                                handleUploadProofPhoto("recv", e)
+                              }
+                            />
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              icon="camera"
+                              iconOnly
+                              isActive={recvPhotos.length > 0}
+                              disabled={uploadingProofSlot === "recv"}
+                              title={t("Upload")}
+                              onClick={() => recvFileInputRef.current?.click()}
+                            />
+                          </div>
+                          <div
+                            style={{
+                              paddingLeft: "28px",
+                            }}
+                          >
+                            <input
+                              type="text"
+                              className={styles.editInput}
+                              placeholder={
+                                handoffMode === "pickup"
+                                  ? t("Collected by")
+                                  : t("Receiver's name")
+                              }
+                              value={receiverName}
+                              onChange={(e) => setReceiverName(e.target.value)}
+                            />
+                          </div>
+                        </div>
+
+                        <div className={styles.proofFieldRow}>
+                          <div className={styles.proofFieldMain}>
+                            <div className={styles.left}>
+                              <Icon
+                                name="check"
+                                size={18}
+                                className={
+                                  signedPhotos.length > 0
+                                    ? styles.proofCheckFilled
+                                    : styles.proofCheckEmpty
+                                }
+                              />
+                              <span className={styles.proofFieldLabel}>
+                                {proofRequired
+                                  ? t("Signed doc")
+                                  : t("Signed doc (optional)")}
+                              </span>
+                            </div>
+                            {signedPhotos.length > 0 && (
+                              <div className={styles.thumbnailsContainer}>
+                                {signedPhotos.map((p, i) => (
+                                  <div
+                                    key={p.fileId + i}
+                                    className={styles.thumbnailItem}
+                                    onClick={() =>
+                                      setActiveImageModal({
+                                        url: p.url,
+                                        title: proofRequired
+                                          ? t("Signed doc")
+                                          : t("Signed doc (optional)"),
+                                        stagedProofSlot: "signed",
+                                        stagedProofIndex: i,
+                                      })
+                                    }
+                                  >
+                                    <img
+                                      src={p.url}
+                                      alt=""
+                                      className={styles.thumbnailImg}
+                                    />
+                                    <div
+                                      className={styles.thumbnailHoverTrash}
+                                      title={t("Delete image")}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleRemoveStagedProofPhoto(
+                                          "signed",
+                                          i,
+                                        );
+                                      }}
+                                    >
+                                      <Icon name="trash" size={14} />
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            <input
+                              ref={signedFileInputRef}
+                              type="file"
+                              accept="image/*"
+                              style={{ display: "none" }}
+                              onChange={(e) =>
+                                handleUploadProofPhoto("signed", e)
+                              }
+                            />
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              icon="camera"
+                              iconOnly
+                              isActive={signedPhotos.length > 0}
+                              disabled={uploadingProofSlot === "signed"}
+                              title={t("Upload")}
+                              onClick={() =>
+                                signedFileInputRef.current?.click()
+                              }
+                            />
+                          </div>
+                        </div>
+                      </>
+                    )}
+
+                    {condPhotos.length > 0 && handoffMode === "third" && (
+                      <input
+                        type="text"
+                        className={styles.editInput}
+                        placeholder={t("Receiver's name")}
+                        value={receiverName}
+                        onChange={(e) => setReceiverName(e.target.value)}
+                        style={{ width: "100%", marginTop: "0.75rem" }}
+                      />
+                    )}
+                  </div>
+
+                  {condPhotos.length > 0 && handoffMode !== "third" && (
+                    <div className={styles.proofCod}>
                       <Checkbox
                         size="sm"
                         checked={proofCod}
@@ -2602,36 +2920,137 @@ export function OrderDetail() {
                       {t("COD collected")}
                     </div>
                   )}
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: "0.75rem",
-                      flexWrap: "wrap",
-                    }}
-                  >
-                    <Button
-                      type="button"
-                      variant="primary"
-                      onClick={handleConfirmDelivery}
-                      disabled={submittingProof}
-                    >
-                      {submittingProof
-                        ? t("Saving…")
-                        : handoffMode === "pickup"
-                          ? t("Mark picked up")
-                          : handoffMode === "third"
-                            ? t("Mark handed over")
-                            : t("Confirm delivery")}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      onClick={handleChangeMethod}
-                      disabled={submittingProof || choosingMode}
-                    >
-                      {t("Change method")}
-                    </Button>
+
+                  {condPhotos.length > 0 && (
+                    <div className={styles.proofActions}>
+                      <Button
+                        type="button"
+                        variant="primary"
+                        size="md"
+                        buttonStyle="fullWidth"
+                        icon="tick"
+                        onClick={handleConfirmDelivery}
+                        disabled={
+                          submittingProof ||
+                          !receiverName.trim() ||
+                          (handoffMode !== "third" &&
+                            proofRequired &&
+                            (recvPhotos.length === 0 ||
+                              signedPhotos.length === 0))
+                        }
+                      >
+                        {submittingProof
+                          ? t("Saving…")
+                          : handoffMode === "pickup"
+                            ? t("Mark picked up")
+                            : handoffMode === "third"
+                              ? t("Mark handed over")
+                              : t("Confirm delivery")}
+                      </Button>
+                      <div className={styles.proofActionsRow}>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="md"
+                          buttonStyle="fullWidth"
+                          icon="returned"
+                          onClick={openRefuseForm}
+                          disabled={submittingProof}
+                        >
+                          {t("Customer refused / returned")}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="md"
+                          buttonStyle="fullWidth"
+                          icon="cancelled"
+                          onClick={handleDeliveryFailed}
+                          disabled={submittingProof || choosingMode}
+                        >
+                          {t("Delivery failed — bring back & retry")}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </Card>
+              )}
+
+              {/* Confirmed delivery proof — read-only record, persists past the dispatch stage */}
+              {activeProof && (
+                <Card style={{ marginTop: "0.75rem" }}>
+                  <div className={styles.heading}>{t("Delivery proof")}</div>
+                  <div className={styles.secondary}>
+                    {t("Taken by")}{" "}
+                    <strong>{displayName(order.taken_by)}</strong> {t("on")}{" "}
+                    {formatTakenAt(activeProof.created_at)}
                   </div>
+                  {(
+                    [
+                      { key: "cond", label: t("Condition photo") },
+                      {
+                        key: "recv",
+                        label:
+                          handoffMode === "pickup"
+                            ? t("Photo of who collected")
+                            : t("Receiver photo"),
+                      },
+                      { key: "signed", label: t("Signed doc") },
+                    ] as const
+                  ).map(({ key, label }) => {
+                    const photosForSlot = attachments.filter(
+                      (a) =>
+                        a.proof_id === activeProof.id && a.doc_type === key,
+                    );
+                    if (photosForSlot.length === 0) return null;
+                    return (
+                      <div key={key} className={styles.proofsContainer}>
+                        <div className={styles.proofFieldRow}>
+                          <div className={styles.proofFieldMain}>
+                            <div className={styles.left}>
+                              <span className={styles.proofFieldLabel}>
+                                {label}
+                                {key === "recv" && activeProof.name
+                                  ? `  ${activeProof.name}`
+                                  : ""}
+                              </span>
+                            </div>
+                            <div className={styles.thumbnailsContainer}>
+                              {photosForSlot.map((a) => (
+                                <div
+                                  key={a.id}
+                                  className={styles.thumbnailItem}
+                                  onClick={() =>
+                                    setActiveImageModal({
+                                      url: getAssetUrl(a.document_file ?? ""),
+                                      title: label,
+                                      attachmentId: a.id ?? undefined,
+                                    })
+                                  }
+                                >
+                                  <img
+                                    src={getAssetUrl(a.document_file ?? "")}
+                                    alt=""
+                                    className={styles.thumbnailImg}
+                                  />
+                                  <div
+                                    className={styles.thumbnailHoverTrash}
+                                    title={t("Delete image")}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (a.id) handleDeleteDocument(a.id);
+                                    }}
+                                  >
+                                    <Icon name="trash" size={14} />
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </Card>
               )}
 
@@ -3148,7 +3567,16 @@ export function OrderDetail() {
                     handleDeleteDocument(activeImageModal.attachmentId!);
                     setActiveImageModal(null);
                   }
-                : undefined
+                : activeImageModal?.stagedProofSlot &&
+                    activeImageModal?.stagedProofIndex !== undefined
+                  ? () => {
+                      handleRemoveStagedProofPhoto(
+                        activeImageModal.stagedProofSlot!,
+                        activeImageModal.stagedProofIndex!,
+                      );
+                      setActiveImageModal(null);
+                    }
+                  : undefined
         }
       />
     </div>

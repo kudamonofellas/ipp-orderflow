@@ -102,7 +102,7 @@ Directus-adapted version.
 
 - **`orders`** — extended with the pipeline fields below (done). `status` (legacy) coexists with `stage` (current); `stage`'s default maps to `intake`.
 - **`messages`** — WhatsApp intake log, still written by the n8n automation. **No longer read anywhere in the frontend** (2026-08-11 — the dashboard triage panel that read this collection was removed along with the rest of the in-app WhatsApp intake UI). `order_uuid` still links to `orders`.
-- **`attachments`** — kept, and still actively used — this collection is shared: some rows are WhatsApp-sourced (`message_id` set, from the n8n OCR pipeline), others are manually-logged documents added in-app (`message_id` null). `order_uuid` + `message_id` link out.
+- **`attachments`** — kept, and still actively used — this collection is shared: some rows are WhatsApp-sourced (`message_id` set, from the n8n OCR pipeline), others are manually-logged documents added in-app (`message_id` null), and (2026-08-11) delivery-proof photos (`doc_type` `cond`/`recv`/`signed`, `proof_id` → `delivery_proofs.id`). `order_uuid` + `message_id` + `proof_id` link out.
 
 #### Pipeline collections (built — see the 2026-08-07 note above for what's confirmed live)
 
@@ -114,7 +114,7 @@ Directus-adapted version.
 - **`line_photos`** — per-item proof/condition photos. Fields: `line_id` → `order_lines`, `photo_id` → `directus_files`, `sort_order` INT.
 - **`line_return_photos`** — return-evidence photos per line. Fields: `line_id` → `order_lines`, `photo_id` → `directus_files`, `sort_order` INT.
 - **`order_history`** — append-only audit trail (replaces `order.history[]`). Fields: `order_id` → `orders`, `at` TIMESTAMPTZ, `who` (→ `directus_users`), `what` TEXT, `stage` TEXT.
-- **`delivery_proofs`** — courier's 3-photo proof set + COD flag (replaces `order.proof` + `order.proofLog[]`). Fields: `order_id` → `orders`, `cond_photo` / `recv_photo` / `signed_photo` → `directus_files`, `cod` BOOL, `name` TEXT, `archived` BOOL.
+- **`delivery_proofs`** — one row per delivery *attempt* (replaces `order.proof` + `order.proofLog[]` — the relational form of the prototype's append-only `proofLog`). Fields: `order_id` → `orders`, `cond_photo` / `recv_photo` / `signed_photo` → `directus_files` (first photo per slot only — full multi-photo lives on `attachments`, see above), `cod` BOOL, `name` TEXT, `archived` BOOL, `created_at`. Superseded attempts (hand-off reset, failed-delivery retry) get `archived: true` instead of being deleted — `readDeliveryProofs()` excludes archived rows by default, so exactly one non-archived row represents "the current/confirmed attempt" for an order at any time.
 - **`draft_weighings`** — in-progress warehouse weighings that survive leaving + reopening an order (replaces `order.draftCaps`). Fields: `order_id` → `orders`, `line_id` (no FK — drafts may outlive a line briefly), `weight` NUMERIC(10,3), `photo_id` → `directus_files`, `created_at`.
 - **`purchase_orders`** — customer PO attached to an order (photo + ref). One-to-one with `orders`. Fields: `order_id` → `orders`, `photo_id` → `directus_files`, `ref` TEXT.
 - **`return_documents`** — signed return DO/SI artifacts. Fields: `order_id` → `orders`, `kind` (signed_doc/signed_draft/note), `photo_id` → `directus_files`.
@@ -135,6 +135,7 @@ The snapshot's `relations` array is empty even though FK columns exist at the DB
 - `attachments.message_id` → `messages.message_id`
 - `attachments.order_uuid` → `orders.id`
 - `attachments.document_file` → `directus_files.id`
+- `attachments.proof_id` → `delivery_proofs.id` (registered live 2026-08-11, unlike the others in this list — confirmed as an actual M2O relation in Directus, not just an FK column)
 - `messages.document_file` → `directus_files.id`
 - `orders.customer_id` → `customers.id`
 - `order_lines.order_id` → `orders.id`, `order_lines.product_id` → `products.id`, `order_lines.weigh_photo` / `returned_weigh_photo` → `directus_files.id`

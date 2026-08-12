@@ -282,12 +282,19 @@ export const ACTOR: Record<string, Role> = {
  *  `ACTOR` above (return buckets aren't `order.stage` values; `stage` stays
  *  `'returned'` throughout, see `returnBucketsForOrder`). Used by
  *  `statusColor()` only — not merged into `ACTOR` itself, to keep `ACTOR`'s
- *  scope (pipeline `stage` field) unambiguous. */
-const RETURN_BUCKET_ACTOR: Record<ReturnStage, Role> = {
+ *  scope (pipeline `stage` field) unambiguous.
+ *
+ *  `replacement_transit` is deliberately absent: unlike the other 3 buckets,
+ *  it isn't a fixed-role gate — it counts `is_replacement` orders at ANY
+ *  stage except delivered/cancelled, so the replacement could currently be
+ *  sitting with Warehouse, Finance, Production, or Courier. A per-order pill
+ *  should colour by that order's actual current stage (`statusColor(order.stage)`)
+ *  with a separate `isReplacement` badge layered on top (see `StatusPill`),
+ *  not claim one fixed role's colour for the whole bucket. */
+const RETURN_BUCKET_ACTOR: Partial<Record<ReturnStage, Role>> = {
   awaiting_return: 'Warehouse',
   admin_action: 'Admin',
   awaiting_signed_doc: 'Admin',
-  replacement_transit: 'Warehouse',
 };
 
 /** Role → `StatusPill` dot/text colour (CSS custom property). One colour per

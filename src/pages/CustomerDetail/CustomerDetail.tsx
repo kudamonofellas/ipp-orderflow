@@ -355,7 +355,10 @@ export function CustomerDetail() {
                       >
                         <td>{o.no}</td>
                         <td>
-                          <StatusPill status={o.stage || o.status} />
+                          <StatusPill
+                            status={o.stage || o.status}
+                            isReplacement={o.is_replacement === true}
+                          />
                         </td>
                         <td>
                           {o.order_date

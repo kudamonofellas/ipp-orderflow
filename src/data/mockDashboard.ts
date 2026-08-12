@@ -57,6 +57,7 @@ export const openOrders: OpenOrder[] = [
     takenBy: null,
     pickup: false,
     thirdParty: false,
+    isReplacement: false,
   },
   {
     id: 'o2',
@@ -70,6 +71,7 @@ export const openOrders: OpenOrder[] = [
     takenBy: null,
     pickup: false,
     thirdParty: false,
+    isReplacement: false,
   },
 ];
 

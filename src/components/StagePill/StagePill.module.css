@@ -42,8 +42,12 @@
    set inline per-pill — see StagePill.tsx) via `style`, not this class.
    Fallback here only covers a highlighted pill with no colour passed. */
 .pillHighlight {
-  background-color: var(--bg-surface-hover-dark);
-  border-color: var(--accent-primary);
+  background-color: color-mix(
+    in srgb,
+    var(--stage-color, var(--accent-primary)) 10%,
+    var(--bg-surface)
+  );
+  border-color: var(--stage-color);
 }
 
 .pillHighlight .count,
@@ -52,6 +56,10 @@
 }
 
 .pillHighlight:hover {
-  background-color: color-mix(in srgb, var(--stage-color, var(--accent-primary)) 20%, var(--bg-surface));
+  background-color: color-mix(
+    in srgb,
+    var(--stage-color, var(--accent-primary)) 20%,
+    var(--bg-surface)
+  );
   border-color: var(--stage-color, var(--accent-primary));
 }

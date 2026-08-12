@@ -52,7 +52,7 @@
 .right {
   display: flex;
   align-items: baseline;
-  gap: var(--space-xs);
+  gap: var(--space-md);
   flex-shrink: 0;
   white-space: nowrap;
 }
@@ -64,6 +64,6 @@
 }
 
 .suffix {
-  font: var(--text-caption);
-  color: var(--text-secondary);
+  font: var(--text-body);
+  color: var(--text-primary);
 }

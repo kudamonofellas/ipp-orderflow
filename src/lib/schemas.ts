@@ -130,6 +130,9 @@ export const AttachmentsCollectionSchema = z.object({
   note: z.string().nullable().optional(),
   created_by: z.string().nullable().optional(),
   label: z.string().nullable().optional(),
+  // added via ALTER TABLE 2026-08-11 — links a delivery-proof photo to the
+  // delivery_proofs row (attempt) it belongs to; null for non-proof rows.
+  proof_id: z.string().nullable().optional(),
 });
 
 /** Directus `order_lines` collection row. */

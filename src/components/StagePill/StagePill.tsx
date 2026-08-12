@@ -1,5 +1,5 @@
-import type { CSSProperties } from 'react';
-import styles from './StagePill.module.css';
+import type { CSSProperties } from "react";
+import styles from "./StagePill.module.css";
 
 interface StagePillProps {
   count: number;
@@ -12,29 +12,36 @@ interface StagePillProps {
 }
 
 /** Clickable dashboard stage pill: stacked count (top) + label (below). */
-export function StagePill({ count, label, highlight = false, color, onClick }: StagePillProps) {
+export function StagePill({
+  count,
+  label,
+  highlight = false,
+  color,
+  onClick,
+}: StagePillProps) {
   // `--stage-color` backs both the persistent highlight colour and its
   // :hover intensification in CSS (a dynamic per-item colour can't live in
   // a static pseudo-class rule otherwise).
   const style: CSSProperties | undefined =
     highlight && color
-      ? ({
-          '--stage-color': color,
-          backgroundColor: `color-mix(in srgb, ${color} 12%, var(--bg-surface))`,
-          borderColor: color,
-          color,
-        } as CSSProperties)
+      ? ({ "--stage-color": color } as CSSProperties)
       : undefined;
 
   return (
     <button
       type="button"
-      className={[styles.pill, highlight ? styles.pillHighlight : ''].filter(Boolean).join(' ')}
+      className={[styles.pill, highlight ? styles.pillHighlight : ""]
+        .filter(Boolean)
+        .join(" ")}
       style={style}
       onClick={onClick}
     >
-      <span className={styles.count} style={style ? { color } : undefined}>{count}</span>
-      <span className={styles.label} style={style ? { color } : undefined}>{label}</span>
+      <span className={styles.count} style={style ? { color } : undefined}>
+        {count}
+      </span>
+      <span className={styles.label} style={style ? { color } : undefined}>
+        {label}
+      </span>
     </button>
   );
 }

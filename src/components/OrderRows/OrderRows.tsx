@@ -64,7 +64,11 @@ export function OrderRows({ order }: { order: OpenOrder }) {
         </td>
         <td className={styles.orderId}>{order.no}</td>
         <td>
-          <StatusPill status={order.status} subLabel={subLabel} />
+          <StatusPill
+            status={order.status}
+            subLabel={subLabel}
+            isReplacement={order.isReplacement}
+          />
         </td>
         <td>{order.orderDate}</td>
         <td>{order.deliveryDate}</td>

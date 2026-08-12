@@ -75,6 +75,9 @@ export interface OpenOrder {
   takenBy: string | null;
   pickup: boolean;
   thirdParty: boolean;
+  /** Drives the `StatusPill`'s "Replacement" badge — see `RETURN_BUCKET_ACTOR`'s
+   *  doc comment in lib/pipeline.ts for why this isn't a pill colour. */
+  isReplacement: boolean;
 }
 
 /** A notification entry, grouped by date. */

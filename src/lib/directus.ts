@@ -886,12 +886,15 @@ export async function readAttachments(
 
 export interface CreateAttachmentInput {
   order_uuid: string;
-  doc_type: string; // 'DO' | 'SI' | 'Return Note' | 'Other'
+  doc_type: string; // 'DO' | 'SI' | 'Return Note' | 'Other' | 'cond' | 'recv' | 'signed'
   number?: string; // document number e.g. "DO-2026-0042"
   note?: string; // admin free-text note
   label?: string; // display label e.g. "Signed Invoice"
   document_file?: string; // uuid from directus_files after uploadFile()
   created_by?: string; // directus user uuid from useCurrentUserId()
+  /** Links a delivery-proof photo (doc_type 'cond'/'recv'/'signed') to the
+   *  delivery_proofs row (attempt) it belongs to. Omit for non-proof docs. */
+  proof_id?: string;
 }
 
 export async function createAttachment(
@@ -1495,6 +1498,34 @@ export async function createDeliveryProof(
   try {
     const raw = await getClient().request(
       createItem("delivery_proofs", input as never),
+    );
+    const parsed = DeliveryProofsCollectionSchema.safeParse(raw);
+    if (!parsed.success) {
+      return {
+        data: null,
+        error: `Invalid delivery_proofs response: ${parsed.error.message}`,
+      };
+    }
+    return { data: parsed.data, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+/**
+ * Archives a superseded delivery-proof attempt (`archived: true`) instead of
+ * deleting it — evidence from a failed/reset attempt stays queryable, only
+ * excluded from `readDeliveryProofs()`'s default (non-archived) read. Used
+ * by "Change method" and "Delivery failed — retry" before starting a new
+ * attempt.
+ */
+export async function updateDeliveryProof(
+  id: string,
+  patch: Record<string, unknown>,
+): Promise<DirectusResult<DeliveryProofsCollection>> {
+  try {
+    const raw = await getClient().request(
+      updateItem("delivery_proofs", id, patch as never),
     );
     const parsed = DeliveryProofsCollectionSchema.safeParse(raw);
     if (!parsed.success) {

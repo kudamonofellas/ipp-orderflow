@@ -1,3 +1,10 @@
+.wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
 .statusPill {
   display: inline-flex;
   align-items: center;
@@ -7,6 +14,23 @@
   border: 1px solid transparent;
   background: var(--bg-muted);
   color: var(--text-muted);
+}
+
+/* Neutral, not role-coloured — a replacement's stage/colour already comes
+   from the main pill above; this only flags "this is a re-send." */
+.replacementBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 7px;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface-hover);
+  color: var(--text-secondary);
+  font: var(--text-caption);
+  font-weight: 600;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .dot {

@@ -38,6 +38,96 @@
   padding: 2px 10px;
 }
 
+/* ===== Delivery proof (capture + read-only record) ===== */
+.proofHeaderRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  margin-bottom: var(--space-sm);
+}
+
+.proofHeaderRow .heading {
+  margin-bottom: 0;
+}
+
+.proofsContainer {
+  display: flex;
+  flex-direction: column;
+  padding-bottom: var(--space-lg);
+}
+
+.proofFieldRow {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-sm);
+  padding: var(--space-sm) 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.proofFieldRow:last-child {
+  border-bottom: none;
+}
+
+.proofCheckEmpty {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--text-muted);
+}
+
+.proofCheckFilled {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--accent-primary);
+}
+
+.proofFieldMain {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  align-items: stretch;
+  gap: var(--space-lg);
+}
+
+.left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex: 1;
+}
+
+.proofFieldLabel {
+  font: var(--text-body);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.proofCod {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.proofActions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+}
+
+.proofActionsRow {
+  display: flex;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.proofActionsRow > * {
+  flex: 1;
+  min-width: 160px;
+}
+
 .titleSection {
   display: flex;
   flex-direction: column;
@@ -503,15 +593,16 @@
 /* Thumbnails list */
 .thumbnailsContainer {
   display: flex;
-  align-items: flex-end;
-  gap: var(--space-md);
+  align-items: stretch;
+  gap: var(--space-sm);
   flex-wrap: wrap;
 }
 
 .thumbnailItem {
   position: relative;
   width: 56px;
-  height: 44px;
+  height: 40px;
+  flex-shrink: 0;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-default);
   cursor: pointer;
@@ -523,6 +614,7 @@
   height: 100%;
   object-fit: cover;
   display: block;
+  border-radius: calc(var(--radius-sm) - 1px);
 }
 
 .thumbnailHoverTrash {
@@ -598,6 +690,11 @@
   display: flex;
   align-items: center;
   gap: var(--space-md);
+}
+
+.secondary {
+  font: var(--text-primary);
+  color: var(--text-secondary);
 }
 
 .lineTotalPrice {
