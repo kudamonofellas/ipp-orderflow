@@ -96,6 +96,11 @@
   font-weight: 500;
 }
 
+.hint {
+  font: var(--text-caption);
+  color: var(--text-muted);
+}
+
 .input,
 .select {
   background: var(--bg-surface-hover);

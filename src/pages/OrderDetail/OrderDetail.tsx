@@ -3,7 +3,6 @@ import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { Card } from "../../components/Card/Card";
 import { Icon } from "../../components/Icon/Icon";
 import { Button } from "../../components/Button/Button";
-import { Checkbox } from "../../components/Checkbox/Checkbox";
 import { Avatar } from "../../components/Avatar/Avatar";
 import { CourierLiveLocation } from "../../components/CourierLiveLocation/CourierLiveLocation";
 import { useDriverLive } from "../../components/CourierLiveLocation/useDriverLive";
@@ -18,6 +17,7 @@ import {
   readOrderHistory,
   readAttachments,
   readCustomers,
+  updateCustomer,
   appendOrderHistory,
   updateOrder,
   createAttachment,
@@ -59,6 +59,8 @@ import type {
   LineCutsCollection,
   ReturnDocumentsCollection,
   DeliveryProofsCollection,
+  GeoStamp,
+  UndoSnapshot,
 } from "../../types/directus";
 import {
   ACTOR,
@@ -188,6 +190,13 @@ const THIRD_PARTY_SERVICES = [
   "Other",
 ] as const;
 
+/** One-tap reasons required when a COD delivery leaves a shortfall. */
+const OUTSTANDING_REASONS = [
+  { key: "will_transfer", label: "Will transfer" },
+  { key: "paid_part", label: "Paid part" },
+  { key: "no_cash", label: "No cash on site" },
+] as const;
+
 /* ─────────────────────────────────────── helpers ── */
 
 const currency = new Intl.NumberFormat("id-ID", {
@@ -229,6 +238,60 @@ function formatTakenAt(iso: string | null | undefined): string {
     hour12: false,
   });
   return `${weekday} ${d.getDate()} ${month} ${d.getFullYear()}  ${time}`;
+}
+
+/** Best-effort GPS fix — resolves `null` on denial/timeout/unsupported
+ *  browser rather than rejecting, so callers never need a try/catch just to
+ *  keep going without a location. Never blocks the caller's own action. */
+function captureGeoStamp(): Promise<{
+  lat: number;
+  lng: number;
+  at: string;
+} | null> {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) {
+      resolve(null);
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) =>
+        resolve({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          at: new Date().toISOString(),
+        }),
+      () => resolve(null),
+      { timeout: 8000 },
+    );
+  });
+}
+
+/** "HH:MM" from an ISO timestamp, for the drop-location row. */
+function formatClock(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
+/** Great-circle distance in meters between two lat/lng points. */
+function haversineMeters(
+  a: { lat: number; lng: number },
+  b: { lat: number; lng: number },
+): number {
+  const R = 6371000;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const sinLat = Math.sin(dLat / 2);
+  const sinLng = Math.sin(dLng / 2);
+  const h =
+    sinLat * sinLat +
+    Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * sinLng * sinLng;
+  return 2 * R * Math.asin(Math.sqrt(h));
 }
 
 interface WeighingLine {
@@ -337,11 +400,26 @@ export function OrderDetail() {
   const recvFileInputRef = useRef<HTMLInputElement>(null);
   const signedFileInputRef = useRef<HTMLInputElement>(null);
   const [receiverName, setReceiverName] = useState("");
-  const [proofCod, setProofCod] = useState(false);
+  /** COD payment outcome for this attempt — never gates delivery, only how
+   *  it's recorded (see handleConfirmDelivery). Null until the courier
+   *  records one; "none" is always a valid, honest choice. */
+  const [codOutcome, setCodOutcome] = useState<
+    "full" | "partial" | "none" | null
+  >(null);
+  const [partialAmountInput, setPartialAmountInput] = useState("");
+  /** Required one-tap reason when the recorded outcome leaves a shortfall. */
+  const [outstandingReason, setOutstandingReason] = useState<string | null>(
+    null,
+  );
   const [uploadingProofSlot, setUploadingProofSlot] = useState<
     "cond" | "recv" | "signed" | null
   >(null);
   const [submittingProof, setSubmittingProof] = useState(false);
+  /** Best-effort GPS fix at condition-photo capture (own-courier hand-off
+   *  only) — staged locally like the photos, written to the order at
+   *  confirm time alongside a fresh `deliverGeo` fix. Never blocks delivery. */
+  const [pickupGeo, setPickupGeo] = useState<GeoStamp | null>(null);
+  const [reconcilingCod, setReconcilingCod] = useState(false);
   /** The current (non-archived) delivery_proofs row for this order, if any —
    *  drives the read-only post-confirm view. */
   const [activeProof, setActiveProof] =
@@ -587,6 +665,12 @@ export function OrderDetail() {
   // an action here, instead of the screen silently having no buttons.
   const stageActor = ACTOR[stage];
   const isStageActor = auth.role === "Owner" || auth.role === stageActor;
+  /** Quiet Undo link eligibility — a snapshot exists (nothing since has
+   *  superseded it, see the clearing in handleSendBack/handleHold/etc.) and
+   *  the viewer is either who confirmed the delivery or an Owner. */
+  const canUndo =
+    !!order.undo_snapshot &&
+    (userId === order.undo_snapshot.who || auth.role === "Owner");
   const showActorNotice =
     !!stageActor &&
     !isStageActor &&
@@ -627,6 +711,18 @@ export function OrderDetail() {
   );
   const customerId = order.customer_id || matchedCustomer?.id;
 
+  /* Drop-location verification distance — only real once the customer has a
+   * stored address pin (matchedCustomer.address_geo). No live geocoding: a
+   * free-text Indonesian address geocodes to a street centroid, not the real
+   * door, which would make "~40m" look authoritative against a guessed
+   * anchor. Until a pin exists, the banner keeps the honest fallback text. */
+  const dropDistanceM =
+    order.deliver_geo && matchedCustomer?.address_geo
+      ? Math.round(
+          haversineMeters(order.deliver_geo, matchedCustomer.address_geo),
+        )
+      : null;
+
   /* Calculate order total value */
   const orderTotal = lines.reduce((acc, line) => {
     const qty =
@@ -640,9 +736,52 @@ export function OrderDetail() {
     return acc + qty * price;
   }, 0);
 
-  /* Split attachments: manual doc entries vs file uploads */
+  /* COD payment — the row never blocks delivery, it only records the
+   * outcome. codAmount reuses the same order-total calc useCashUp.ts uses
+   * (neither `orders` nor `delivery_proofs` has a dedicated COD-amount
+   * column). The 3rd-party hand-off owns its own cash collection, so the
+   * row (and this whole branch) doesn't apply there. */
+  const isCodOrder =
+    (matchedCustomer?.pay_timing ?? "").trim().toLowerCase() === "cod";
+  const codApplies = isCodOrder && handoffMode !== "third";
+  const codAmount = orderTotal;
+  const cashCollected: number | null =
+    codOutcome === "full"
+      ? codAmount
+      : codOutcome === "none"
+        ? 0
+        : codOutcome === "partial"
+          ? parseFloat(partialAmountInput) || null
+          : null;
+
+  /* Follow-ups pending card — COD reconcile row. Reconciles against the
+   * *collected* amount recorded on the delivery proof where present
+   * (partial/short deliveries), falling back to the full order total —
+   * same source of truth `useCashUp.ts` uses, same write it performs. */
+  const codReconcileAmount =
+    activeProof?.cash_collected != null
+      ? typeof activeProof.cash_collected === "string"
+        ? parseFloat(activeProof.cash_collected)
+        : activeProof.cash_collected
+      : codAmount;
+  const showCodRow =
+    isDelivered &&
+    isCodOrder &&
+    !order.cod_reconciled &&
+    auth.can("reconcileCOD");
+  const showDocsRow =
+    isDelivered && !order.docs_returned && canConfirmDocsReturned;
+
+  /* Split attachments: manual doc entries vs file uploads. Excludes
+   * delivery-proof photos (doc_type 'cond'/'recv'/'signed', proof_id set) —
+   * those render in their own "Delivery proof" card, not here. */
   const docEntries = attachments.filter(
-    (a) => !a.message_id && (a.number || a.doc_type),
+    (a) =>
+      !a.message_id &&
+      (a.number || a.doc_type) &&
+      a.doc_type !== "cond" &&
+      a.doc_type !== "recv" &&
+      a.doc_type !== "signed",
   );
 
   /* ────────────── Weighing & Item Photo Handlers ── */
@@ -938,23 +1077,37 @@ export function OrderDetail() {
   async function handleSendBack() {
     if (!id || !flow?.prev || advancing) return;
     setAdvancing(true);
-    // Sending back from dispatch (e.g. to reprint DO/SI) must also clear the
-    // hand-off fields — ported from the prototype's HANDOVER_RESET — or the
-    // order returns to finalise still marked as taken by a courier, and the
-    // 3-way hand-off chooser never shows again when it comes back around.
-    const patch: Record<string, unknown> =
-      stage === "dispatch"
-        ? {
-            stage: flow.prev,
-            taken_by: null,
-            pickup: false,
-            third_party: false,
-            courier_service: null,
-          }
-        : { stage: flow.prev };
+    // Sending back from dispatch (e.g. to reprint DO/SI), or reopening from
+    // delivered, must also clear the hand-off fields — ported from the
+    // prototype's HANDOVER_RESET — or the order returns still marked as
+    // taken by a courier, and the 3-way hand-off chooser never shows again
+    // when it comes back around. Reopening from delivered additionally
+    // archives the now-superseded confirmed proof — a redelivery is a new
+    // attempt, and without this the next confirm just piles up a second
+    // non-archived delivery_proofs row instead of superseding the first.
+    const isDispatchReset = stage === "dispatch" || stage === "delivered";
+    if (stage === "delivered" && activeProof) {
+      await updateDeliveryProof(activeProof.id, { archived: true });
+    }
+    const patch: Record<string, unknown> = isDispatchReset
+      ? {
+          stage: flow.prev,
+          taken_by: null,
+          pickup: false,
+          third_party: false,
+          courier_service: null,
+          // Reopening is a distinct, deliberate action that supersedes any
+          // pending quiet Undo from the delivery this is reopening.
+          ...(stage === "delivered" ? { undo_snapshot: null } : {}),
+        }
+      : { stage: flow.prev };
     const res = await updateOrder(id, patch);
     if (!res.error && res.data) {
       setOrder(res.data);
+      if (stage === "delivered") {
+        setActiveProof(null);
+        resetProofState();
+      }
       await appendOrderHistory({
         order_id: id,
         what: `Stage returned: ${stage} → ${flow.prev}`,
@@ -992,7 +1145,10 @@ export function OrderDetail() {
     setRecvPhotos([]);
     setSignedPhotos([]);
     setReceiverName("");
-    setProofCod(matchedCustomer?.pay_timing === "cod");
+    setCodOutcome(null);
+    setPartialAmountInput("");
+    setOutstandingReason(null);
+    setPickupGeo(null);
   }
 
   /**
@@ -1015,7 +1171,8 @@ export function OrderDetail() {
       cond_photo: condPhotos[0]?.fileId ?? null,
       recv_photo: recvPhotos[0]?.fileId ?? null,
       signed_photo: signedPhotos[0]?.fileId ?? null,
-      cod: proofCod,
+      cod: cashCollected != null && cashCollected > 0,
+      cash_collected: cashCollected,
       name: receiverName.trim() || null,
     });
     if (proofRes.error || !proofRes.data) return;
@@ -1111,7 +1268,13 @@ export function OrderDetail() {
 
   async function handleConfirmDocsReturned() {
     if (!id) return;
-    const res = await updateOrder(id, { docs_returned: true });
+    // Any further action on the order after delivery, including this one,
+    // supersedes the delivery confirm as "the last action" — clears the
+    // quiet Undo link's eligibility.
+    const res = await updateOrder(id, {
+      docs_returned: true,
+      undo_snapshot: null,
+    });
     if (!res.error && res.data) {
       setOrder(res.data);
       await appendOrderHistory({
@@ -1125,6 +1288,36 @@ export function OrderDetail() {
     } else {
       alert(`Failed to confirm documents returned: ${res.error}`);
     }
+  }
+
+  /**
+   * Same write `useCashUp.ts`'s own "Confirm" button performs
+   * (`cod_reconciled: true`) — this is a second entry point for the exact
+   * same action, not a parallel COD-reconcile mechanism, so Cash-up and this
+   * row never disagree about whether an order's cash is settled.
+   */
+  async function handleReconcileCOD() {
+    if (!id) return;
+    setReconcilingCod(true);
+    const res = await updateOrder(id, {
+      cod_reconciled: true,
+      cod_received_at: new Date().toISOString(),
+      undo_snapshot: null,
+    });
+    if (!res.error && res.data) {
+      setOrder(res.data);
+      await appendOrderHistory({
+        order_id: id,
+        what: `COD cash reconciled — ${currency.format(codReconcileAmount)}`,
+        who: userId,
+        stage: null,
+      });
+      const hRes = await readOrderHistory(id);
+      if (!hRes.error) setHistory(hRes.data ?? []);
+    } else {
+      alert(`Failed to reconcile COD: ${res.error}`);
+    }
+    setReconcilingCod(false);
   }
 
   async function handleUploadProofPhoto(
@@ -1149,6 +1342,14 @@ export function OrderDetail() {
     else if (slot === "recv") setRecvPhotos((prev) => [...prev, photo]);
     else setSignedPhotos((prev) => [...prev, photo]);
     e.target.value = "";
+
+    // Best-effort pickup location, own-courier hand-off only, captured once
+    // per attempt (first condition photo) — never blocks the upload itself.
+    if (slot === "cond" && handoffMode === "delivery" && !pickupGeo) {
+      captureGeoStamp().then((geo) => {
+        if (geo) setPickupGeo(geo);
+      });
+    }
   }
 
   /** Removes a staged (not-yet-confirmed) proof photo — pure local-state edit, nothing to delete server-side since it was never attached to a record. */
@@ -1173,7 +1374,7 @@ export function OrderDetail() {
    * need the full set whenever `proofRequired` is on.
    */
   async function handleConfirmDelivery() {
-    if (!id || submittingProof) return;
+    if (!id || !order || submittingProof) return;
     // Condition photo is always required (it's what unlocks the rest of the
     // form in the first place); receiver + signed-doc photos only become
     // mandatory when dispatch_proof_required is on, and never for 3rd-party
@@ -1198,13 +1399,40 @@ export function OrderDetail() {
       alert(t("Enter the receiver's name."));
       return;
     }
+    // Cash never blocks "goods changed hands" — but a COD order does need
+    // *some* recorded outcome (a soft prompt, not a hard gate: "none" is
+    // always an honest, available answer), and a shortfall needs a reason
+    // so Finance knows why before chasing it.
+    if (codApplies && codOutcome === null) {
+      alert(
+        t(
+          "Record whether the COD payment was collected before marking delivered.",
+        ),
+      );
+      return;
+    }
+    if (codApplies && codOutcome !== "full" && !outstandingReason) {
+      alert(
+        t(
+          "Pick a reason for the outstanding balance before marking delivered.",
+        ),
+      );
+      return;
+    }
     setSubmittingProof(true);
+    // Defensive: an existing non-archived proof at this point means some
+    // earlier path (e.g. a reopen) left it un-superseded — archive it before
+    // creating a new one so there's never more than one active attempt.
+    if (activeProof) {
+      await updateDeliveryProof(activeProof.id, { archived: true });
+    }
     const proofRes = await createDeliveryProof({
       order_id: id,
       cond_photo: condPhotos[0]?.fileId ?? null,
       recv_photo: recvPhotos[0]?.fileId ?? null,
       signed_photo: signedPhotos[0]?.fileId ?? null,
-      cod: handoffMode === "third" ? false : proofCod,
+      cod: codApplies && cashCollected != null && cashCollected > 0,
+      cash_collected: codApplies ? cashCollected : null,
       name: receiverName.trim(),
     });
     if (proofRes.error || !proofRes.data) {
@@ -1240,24 +1468,143 @@ export function OrderDetail() {
       ...attachRes.flatMap((r) => (r.data ? [r.data] : [])),
     ]);
     setActiveProof(proofRes.data);
+
+    // Goods changed hands regardless of cash — the branch below only
+    // decides where the order lands and what the record says. A COD
+    // shortfall (partial or none) routes to `outstanding` so Finance
+    // chases the balance, same state `handleHold` already uses.
+    const codShort = codApplies && codOutcome !== "full";
+    let nextStage: string;
+    let historyWhat: string;
+    if (!codApplies) {
+      nextStage = "delivered";
+      historyWhat = `Stage advanced: ${stage} → delivered`;
+    } else if (!codShort) {
+      nextStage = "delivered";
+      historyWhat = `Delivered — COD ${currency.format(cashCollected ?? 0)} collected`;
+    } else {
+      nextStage = "outstanding";
+      const reasonLabel =
+        OUTSTANDING_REASONS.find((r) => r.key === outstandingReason)?.label ??
+        "unspecified";
+      historyWhat = `Delivered, payment outstanding — collected ${currency.format(cashCollected ?? 0)} of ${currency.format(codAmount)} (${reasonLabel})`;
+    }
+
+    // Best-effort drop-location fix, own-courier hand-off only — a fresh
+    // fix at the moment of confirming, distinct from pickupGeo (taken at
+    // condition-photo capture, earlier in the same attempt).
+    const deliverGeo =
+      handoffMode === "delivery" ? await captureGeoStamp() : null;
+
+    // Pre-delivery snapshot for the quiet "Undo" link — the exact values
+    // this action is about to overwrite, plus the proof row it creates (so
+    // Undo can archive it, not just reset the order fields).
+    const undoSnapshot: UndoSnapshot = {
+      prevStage: stage,
+      changedFields: {
+        stage,
+        delivered_at: order.delivered_at ?? null,
+        pickup_geo: order.pickup_geo ?? null,
+        deliver_geo: order.deliver_geo ?? null,
+      },
+      proofId,
+      who: userId,
+      at: new Date().toISOString(),
+    };
+
     const res = await updateOrder(id, {
-      stage: "delivered",
+      stage: nextStage,
       delivered_at: new Date().toISOString(),
+      pickup_geo: handoffMode === "delivery" ? pickupGeo : null,
+      deliver_geo: deliverGeo,
+      undo_snapshot: undoSnapshot,
     });
     if (!res.error && res.data) {
       setOrder(res.data);
       await appendOrderHistory({
         order_id: id,
-        what: `Stage advanced: ${stage} → delivered`,
+        what: historyWhat,
         who: userId,
-        stage: "delivered",
+        stage: nextStage,
       });
       const hRes = await readOrderHistory(id);
       if (!hRes.error) setHistory(hRes.data ?? []);
+
+      // Bootstrap the customer's address pin from real delivery data instead
+      // of geocoding their free-text address — "where we actually delivered"
+      // is a better anchor than a guessed street centroid, and it's free.
+      // Only offered once (skipped once a pin already exists) and only for
+      // an own-courier hand-off with a real fix — pickup/3rd-party/failed-fix
+      // deliveries have no location worth saving as the customer's address.
+      if (
+        handoffMode === "delivery" &&
+        deliverGeo &&
+        matchedCustomer &&
+        !matchedCustomer.address_geo &&
+        (await confirm(
+          t("Set this as {customer}'s delivery location?").replace(
+            "{customer}",
+            matchedCustomer.name,
+          ),
+        ))
+      ) {
+        const custRes = await updateCustomer(matchedCustomer.id, {
+          address_geo: { lat: deliverGeo.lat, lng: deliverGeo.lng },
+        });
+        if (!custRes.error && custRes.data) {
+          setCustomers((prev) =>
+            prev.map((c) => (c.id === custRes.data!.id ? custRes.data! : c)),
+          );
+        }
+      }
     } else {
       alert(`Failed to advance stage: ${res.error}`);
     }
     setSubmittingProof(false);
+  }
+
+  /**
+   * Un-happens a mistaken "Mark delivered" — distinct from Reopen (a
+   * deliberate re-delivery that resets hand-off state and stays available
+   * indefinitely). Undo restores the exact pre-delivery field values from
+   * `undo_snapshot`, archives the delivery_proofs row the confirm created,
+   * and only stays offered while nothing else has touched the order since
+   * (every other order-mutating handler clears `undo_snapshot` itself).
+   */
+  async function handleUndo() {
+    if (!id || !order || !order.undo_snapshot) return;
+    if (
+      !(await confirm(
+        t(
+          "Undo this delivery? The order goes back to dispatch exactly as it was.",
+        ),
+        { danger: true },
+      ))
+    )
+      return;
+    const snapshot = order.undo_snapshot;
+    if (snapshot.proofId) {
+      await updateDeliveryProof(snapshot.proofId, { archived: true });
+    }
+    const res = await updateOrder(id, {
+      ...snapshot.changedFields,
+      undo_snapshot: null,
+    });
+    if (!res.error && res.data) {
+      setOrder(res.data);
+      setActiveProof(null);
+      resetProofState();
+      await appendOrderHistory({
+        order_id: id,
+        what: "Undid — back to dispatch",
+        who: userId,
+        stage: snapshot.prevStage,
+      });
+      const hRes = await readOrderHistory(id);
+      if (!hRes.error) setHistory(hRes.data ?? []);
+    } else {
+      alert(`Failed to undo: ${res.error}`);
+    }
   }
 
   async function handleCancel() {
@@ -1273,6 +1620,7 @@ export function OrderDetail() {
       cancelled: true,
       stage: "cancelled",
       cancelled_from: stage,
+      undo_snapshot: null,
     });
     if (!res.error && res.data) {
       setOrder(res.data);
@@ -1292,7 +1640,10 @@ export function OrderDetail() {
 
   async function handleHold() {
     if (!id) return;
-    const res = await updateOrder(id, { stage: "outstanding" });
+    const res = await updateOrder(id, {
+      stage: "outstanding",
+      undo_snapshot: null,
+    });
     if (!res.error && res.data) {
       setOrder(res.data);
       await appendOrderHistory({
@@ -1912,61 +2263,184 @@ export function OrderDetail() {
             </div>
           </header>
 
-          {/* Stepper */}
-          <div
-            className={styles.stepperContainer}
-            style={{ "--completed-pct": completedPct } as React.CSSProperties}
-          >
-            <div className={styles.stepperTrack}>
-              {PIPELINE_STAGES.map((s, idx) => {
-                const isActive = stage === s.key;
-                const isCompleted = currentStageIndex > idx;
-
-                return (
-                  <div key={s.key} className={styles.stepColumn}>
-                    <div className={styles.stepHeaderRow}>
-                      <div
-                        className={[
-                          styles.stepLine,
-                          idx === 0 ? styles.stepLineInvisible : "",
-                          currentStageIndex >= idx
-                            ? styles.stepLineCompleted
-                            : "",
-                        ].join(" ")}
-                      />
-                      <div
-                        className={[
-                          styles.stepDot,
-                          isActive ? styles.stepDotActive : "",
-                          isCompleted ? styles.stepDotCompleted : "",
-                        ].join(" ")}
-                      />
-                      <div
-                        className={[
-                          styles.stepLine,
-                          idx === PIPELINE_STAGES.length - 1
-                            ? styles.stepLineInvisible
-                            : "",
-                          currentStageIndex > idx
-                            ? styles.stepLineCompleted
-                            : "",
-                        ].join(" ")}
-                      />
+          {/* Stepper — once delivered, replace the 8-step track with one
+              prominent "done" banner instead of a stepper with nothing left
+              to step through. */}
+          {stage === "delivered" ? (
+            <div className={styles.deliveredBanner}>
+              <Card
+                style={{
+                  backgroundColor: "var(--bg-surface-hover)",
+                  borderColor: "var(--accent-primary)",
+                }}
+              >
+                <div className={styles.deliveredBannerHeader}>
+                  <div
+                    className={styles.left}
+                    style={{ color: "var(--accent-primary)" }}
+                  >
+                    <Icon name="check" size={24} />
+                    <div className={styles.deliveredBannerTitleColumn}>
+                      <div className={styles.deliveredBannerTitle}>
+                        {t("Delivered & Closed")}
+                      </div>
+                      {order.taken_by && (
+                        <span className={styles.muted}>
+                          {t("by")} {displayName(order.taken_by)}
+                        </span>
+                      )}
                     </div>
-                    <span
-                      className={[
-                        styles.stepLabel,
-                        isActive ? styles.stepLabelActive : "",
-                        isCompleted ? styles.stepLabelCompleted : "",
-                      ].join(" ")}
-                    >
-                      {t(s.label)}
-                    </span>
                   </div>
-                );
-              })}
+                  {activeProof && (
+                    <div className={styles.thumbnailsContainer}>
+                      {(
+                        [
+                          { key: "cond", label: t("Condition photo") },
+                          {
+                            key: "recv",
+                            label:
+                              handoffMode === "pickup"
+                                ? t("Photo of who collected")
+                                : t("Receiver photo"),
+                          },
+                          { key: "signed", label: t("Signed doc") },
+                        ] as const
+                      ).flatMap(({ key, label }) =>
+                        attachments
+                          .filter(
+                            (a) =>
+                              a.proof_id === activeProof.id &&
+                              a.doc_type === key,
+                          )
+                          .map((a) => (
+                            <div
+                              key={a.id}
+                              className={styles.thumbnailItem}
+                              onClick={() =>
+                                setActiveImageModal({
+                                  url: getAssetUrl(a.document_file ?? ""),
+                                  title: label,
+                                  attachmentId: undefined,
+                                })
+                              }
+                            >
+                              <img
+                                src={getAssetUrl(a.document_file ?? "")}
+                                alt=""
+                                className={styles.thumbnailImg}
+                              />
+                            </div>
+                          )),
+                      )}
+                    </div>
+                  )}
+                </div>
+                {order.deliver_geo && (
+                  <div className={styles.dropLocationRow}>
+                    <span className={styles.dropLocationText}>
+                      <Icon name="location" size={14} />
+                      {dropDistanceM !== null
+                        ? `${t("Dropped at delivery address")} · ~${dropDistanceM}m`
+                        : t("Delivery location captured")}{" "}
+                      · {formatClock(order.deliver_geo.at)}
+                    </span>
+                    <button
+                      type="button"
+                      className={styles.mapLink}
+                      onClick={() =>
+                        window.open(
+                          `https://www.google.com/maps/search/?api=1&query=${order.deliver_geo!.lat},${order.deliver_geo!.lng}`,
+                          "_blank",
+                          "noopener",
+                        )
+                      }
+                    >
+                      {t("Map")}
+                    </button>
+                  </div>
+                )}
+                {activeProof?.name && (
+                  <div className={styles.receivedByRow}>
+                    {t("Received by")} <strong>{activeProof.name}</strong>
+                  </div>
+                )}
+              </Card>
+              {stage === "delivered" && canUndo && (
+                <div className={styles.undoRow}>
+                  <Button type="button" variant="tertiary" onClick={handleUndo}>
+                    <Icon name="undo" size={16} />
+                    {t("Pressed wrongly? Undo — back to dispatch")}
+                  </Button>
+                </div>
+              )}
             </div>
-          </div>
+          ) : (
+            <></>
+          )}
+
+          {stage !== "delivered" && (
+            <div
+              className={styles.stepperContainer}
+              style={{ "--completed-pct": completedPct } as React.CSSProperties}
+            >
+              <div className={styles.stepperTrack}>
+                {PIPELINE_STAGES.map((s, idx) => {
+                  // Once the order is delivered, the whole stepper — every
+                  // dot and every connecting line, not just up to the current
+                  // index — reads as done: no in-progress/pulsing step left.
+                  const isDeliveredStage = stage === "delivered";
+                  const isTerminalDelivered =
+                    s.key === "delivered" && isDeliveredStage;
+                  const isActive = stage === s.key && !isTerminalDelivered;
+                  const isCompleted =
+                    isDeliveredStage || currentStageIndex > idx;
+
+                  return (
+                    <div key={s.key} className={styles.stepColumn}>
+                      <div className={styles.stepHeaderRow}>
+                        <div
+                          className={[
+                            styles.stepLine,
+                            idx === 0 ? styles.stepLineInvisible : "",
+                            isDeliveredStage || currentStageIndex >= idx
+                              ? styles.stepLineCompleted
+                              : "",
+                          ].join(" ")}
+                        />
+                        <div
+                          className={[
+                            styles.stepDot,
+                            isActive ? styles.stepDotActive : "",
+                            isCompleted ? styles.stepDotCompleted : "",
+                          ].join(" ")}
+                        />
+                        <div
+                          className={[
+                            styles.stepLine,
+                            idx === PIPELINE_STAGES.length - 1
+                              ? styles.stepLineInvisible
+                              : "",
+                            isDeliveredStage || currentStageIndex > idx
+                              ? styles.stepLineCompleted
+                              : "",
+                          ].join(" ")}
+                        />
+                      </div>
+                      <span
+                        className={[
+                          styles.stepLabel,
+                          isActive ? styles.stepLabelActive : "",
+                          isCompleted ? styles.stepLabelCompleted : "",
+                        ].join(" ")}
+                      >
+                        {t(s.label)}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Customer Info Card */}
           <Card className={styles.customerCard}>
@@ -2221,6 +2695,52 @@ export function OrderDetail() {
                       </div>
                     )}
 
+                    {/* Delivered is a closed record — final weights + photos
+                        as plain text/images, no inputs/camera/add-weighing.
+                        A weight correction after delivery goes through
+                        Reopen, not an inline edit on the closed order. */}
+                    {isWeighedItem &&
+                      stage === "delivered" &&
+                      weighingLines.length > 0 && (
+                        <div className={styles.weighingSectionReadOnly}>
+                          {weighingLines.map((w) => (
+                            <div
+                              key={w.id}
+                              className={styles.weighingRowReadOnly}
+                            >
+                              <span className={styles.weighingValueReadOnly}>
+                                {w.weight || "0.00"} kg
+                              </span>
+                              {w.photos.length > 0 && (
+                                <div
+                                  className={styles.thumbnailsContainer}
+                                  style={{ marginLeft: "0.5rem" }}
+                                >
+                                  {w.photos.map((p) => (
+                                    <div
+                                      key={p.id}
+                                      className={styles.thumbnailItem}
+                                      onClick={() =>
+                                        setActiveImageModal({
+                                          url: p.url,
+                                          title: `${t("Weighing photo —")} ${line.name}`,
+                                        })
+                                      }
+                                    >
+                                      <img
+                                        src={p.url}
+                                        alt="scale"
+                                        className={styles.thumbnailImg}
+                                      />
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
                     {/* Cutting instruction — shown for every line, weighed or not */}
                     {(lineCutsByLine[line.id] ?? []).length > 0 && (
                       <div className={styles.cuttingInstructions}>
@@ -2286,12 +2806,19 @@ export function OrderDetail() {
                               key={img.id}
                               className={styles.thumbnailItem}
                               onClick={() =>
-                                setActiveImageModal({
-                                  url: img.url,
-                                  title: `${t("Attachment for")} ${line.name}`,
-                                  photoId: img.id,
-                                  lineId: line.id,
-                                })
+                                setActiveImageModal(
+                                  stage === "delivered"
+                                    ? {
+                                        url: img.url,
+                                        title: `${t("Attachment for")} ${line.name}`,
+                                      }
+                                    : {
+                                        url: img.url,
+                                        title: `${t("Attachment for")} ${line.name}`,
+                                        photoId: img.id,
+                                        lineId: line.id,
+                                      },
+                                )
                               }
                             >
                               <img
@@ -2299,16 +2826,18 @@ export function OrderDetail() {
                                 alt="thumbnail"
                                 className={styles.thumbnailImg}
                               />
-                              <div
-                                className={styles.thumbnailHoverTrash}
-                                title={t("Delete image")}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleRemoveItemPhoto(line.id, img.id);
-                                }}
-                              >
-                                <Icon name="trash" size={14} />
-                              </div>
+                              {stage !== "delivered" && (
+                                <div
+                                  className={styles.thumbnailHoverTrash}
+                                  title={t("Delete image")}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleRemoveItemPhoto(line.id, img.id);
+                                  }}
+                                >
+                                  <Icon name="trash" size={14} />
+                                </div>
+                              )}
                             </div>
                           ))}
                         </div>
@@ -2489,31 +3018,6 @@ export function OrderDetail() {
             )}
           </Card>
 
-          {isDelivered && !order.docs_returned && canConfirmDocsReturned && (
-            <Card style={{ marginTop: "0.75rem" }}>
-              <div className={styles.heading}>
-                <span>{t("Signed DO & SI returned?")}</span>
-              </div>
-              <p>
-                {t(
-                  "Make sure the signed Delivery Order & Sales Invoice come back to the office and are filed.",
-                )}
-              </p>
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={handleConfirmDocsReturned}
-              >
-                {t("Confirm signed DO & SI returned")}
-              </Button>
-            </Card>
-          )}
-          {isDelivered && order.docs_returned && (
-            <p style={{ margin: "0.5rem 0" }}>
-              ✓ {t("Signed DO & SI returned")}
-            </p>
-          )}
-
           {showActorNotice && (
             <div className={styles.actorNotice}>
               {t("This order is currently with")}{" "}
@@ -2613,7 +3117,7 @@ export function OrderDetail() {
 
               {/* Proof capture — mode chosen, relabeled per mode */}
               {stage === "dispatch" && canAdvance && handoffMode && (
-                <Card style={{ marginTop: "0.75rem" }}>
+                <Card>
                   <div className={styles.proofHeaderRow}>
                     <span className={styles.heading}>
                       {handoffMode === "pickup"
@@ -2647,7 +3151,15 @@ export function OrderDetail() {
                     </div>
                   )}
                   <div className={styles.proofsContainer}>
-                    <div className={styles.proofFieldRow}>
+                    <div
+                      className={styles.proofFieldRow}
+                      style={{
+                        borderColor:
+                          condPhotos.length > 0
+                            ? "var(--accent-primary)"
+                            : "var(--border-subtle)",
+                      }}
+                    >
                       <div className={styles.proofFieldMain}>
                         <div className={styles.left}>
                           <Icon
@@ -2659,7 +3171,7 @@ export function OrderDetail() {
                                 : styles.proofCheckEmpty
                             }
                           />
-                          <span className={styles.proofFieldLabel}>
+                          <span className={styles.fieldLabel}>
                             {t("Condition photo")}
                           </span>
                         </div>
@@ -2719,7 +3231,16 @@ export function OrderDetail() {
 
                     {condPhotos.length > 0 && handoffMode !== "third" && (
                       <>
-                        <div className={styles.proofFieldRow}>
+                        <div
+                          className={styles.proofFieldRow}
+                          style={{
+                            borderColor:
+                              recvPhotos.length > 0 &&
+                              receiverName.trim() !== ""
+                                ? "var(--accent-primary)"
+                                : "var(--border-subtle)",
+                          }}
+                        >
                           <div className={styles.proofFieldMain}>
                             <div className={styles.left}>
                               <Icon
@@ -2732,7 +3253,7 @@ export function OrderDetail() {
                                     : styles.proofCheckEmpty
                                 }
                               />
-                              <span className={styles.proofFieldLabel}>
+                              <span className={styles.fieldLabel}>
                                 {handoffMode === "pickup"
                                   ? t("Photo of who collected")
                                   : t("Receiver photo")}
@@ -2814,7 +3335,15 @@ export function OrderDetail() {
                           </div>
                         </div>
 
-                        <div className={styles.proofFieldRow}>
+                        <div
+                          className={styles.proofFieldRow}
+                          style={{
+                            borderColor:
+                              signedPhotos.length > 0
+                                ? "var(--accent-primary)"
+                                : "var(--border-subtle)",
+                          }}
+                        >
                           <div className={styles.proofFieldMain}>
                             <div className={styles.left}>
                               <Icon
@@ -2826,7 +3355,7 @@ export function OrderDetail() {
                                     : styles.proofCheckEmpty
                                 }
                               />
-                              <span className={styles.proofFieldLabel}>
+                              <span className={styles.fieldLabel}>
                                 {proofRequired
                                   ? t("Signed doc")
                                   : t("Signed doc (optional)")}
@@ -2904,22 +3433,134 @@ export function OrderDetail() {
                         placeholder={t("Receiver's name")}
                         value={receiverName}
                         onChange={(e) => setReceiverName(e.target.value)}
-                        style={{ width: "100%", marginTop: "0.75rem" }}
+                        style={{ width: "100%" }}
                       />
                     )}
-                  </div>
 
-                  {condPhotos.length > 0 && handoffMode !== "third" && (
-                    <div className={styles.proofCod}>
-                      <Checkbox
-                        size="sm"
-                        checked={proofCod}
-                        onChange={setProofCod}
-                        label={t("COD collected")}
-                      />
-                      {t("COD collected")}
-                    </div>
-                  )}
+                    {condPhotos.length > 0 && codApplies && (
+                      <div
+                        className={styles.proofFieldRow}
+                        style={{
+                          borderColor:
+                            cashCollected != null
+                              ? "var(--accent-primary)"
+                              : "var(--border-subtle)",
+                        }}
+                      >
+                        <div className={styles.proofFieldMain}>
+                          <div className={styles.left}>
+                            <Icon
+                              name="check"
+                              size={18}
+                              className={
+                                cashCollected != null
+                                  ? styles.proofCheckFilled
+                                  : styles.proofCheckEmpty
+                              }
+                            />
+                            <span className={styles.fieldLabel}>
+                              {t("COD payment")}
+                            </span>
+                            <span className={styles.codOwedChip}>
+                              {t("Collect COD")} {currency.format(codAmount)}
+                            </span>
+                          </div>
+                        </div>
+                        <div className={styles.codOutcome}>
+                          <div className={styles.codSegments}>
+                            <button
+                              type="button"
+                              className={[
+                                styles.codSegment,
+                                codOutcome === "full"
+                                  ? styles.codSegmentSuccess
+                                  : "",
+                              ].join(" ")}
+                              onClick={() => {
+                                setCodOutcome("full");
+                                setPartialAmountInput("");
+                                setOutstandingReason(null);
+                              }}
+                            >
+                              {t("Full")}
+                            </button>
+                            <button
+                              type="button"
+                              className={[
+                                styles.codSegment,
+                                codOutcome === "partial"
+                                  ? styles.codSegmentWarning
+                                  : "",
+                              ].join(" ")}
+                              onClick={() => setCodOutcome("partial")}
+                            >
+                              {t("Partial")}
+                            </button>
+                            <button
+                              type="button"
+                              className={[
+                                styles.codSegment,
+                                codOutcome === "none"
+                                  ? styles.codSegmentWarning
+                                  : "",
+                              ].join(" ")}
+                              onClick={() => {
+                                setCodOutcome("none");
+                                setPartialAmountInput("");
+                              }}
+                            >
+                              {t("None")}
+                            </button>
+                          </div>
+                          {codOutcome === "partial" && (
+                            <input
+                              type="number"
+                              className={styles.editInput}
+                              placeholder={t("Amount collected (Rp)")}
+                              value={partialAmountInput}
+                              onChange={(e) =>
+                                setPartialAmountInput(e.target.value)
+                              }
+                              style={{ width: 180 }}
+                            />
+                          )}
+                          {codOutcome && (
+                            <div
+                              className={[
+                                styles.codOutcomeLine,
+                                codOutcome === "full"
+                                  ? styles.codOutcomeLineSuccess
+                                  : styles.codOutcomeLineWarning,
+                              ].join(" ")}
+                            >
+                              {t("Collected")}{" "}
+                              {currency.format(cashCollected ?? 0)} {t("of")}{" "}
+                              {currency.format(codAmount)}
+                            </div>
+                          )}
+                          {codOutcome && codOutcome !== "full" && (
+                            <div className={styles.codReasonRow}>
+                              {OUTSTANDING_REASONS.map((r) => (
+                                <button
+                                  key={r.key}
+                                  type="button"
+                                  className={[
+                                    styles.codReasonChip,
+                                    outstandingReason === r.key
+                                      ? styles.codReasonChipActive
+                                      : "",
+                                  ].join(" ")}
+                                  onClick={() => setOutstandingReason(r.key)}
+                                >
+                                  {t(r.label)}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
 
                   {condPhotos.length > 0 && (
                     <div className={styles.proofActions}>
@@ -2976,82 +3617,71 @@ export function OrderDetail() {
                 </Card>
               )}
 
-              {/* Confirmed delivery proof — read-only record, persists past the dispatch stage */}
-              {activeProof && (
-                <Card style={{ marginTop: "0.75rem" }}>
-                  <div className={styles.heading}>{t("Delivery proof")}</div>
-                  <div className={styles.secondary}>
-                    {t("Taken by")}{" "}
-                    <strong>{displayName(order.taken_by)}</strong> {t("on")}{" "}
-                    {formatTakenAt(activeProof.created_at)}
+              {(showCodRow || showDocsRow) && (
+                <Card className={styles.followUpsCard}>
+                  <div className={styles.heading}>
+                    <span>{t("Follow-ups pending")}</span>
                   </div>
-                  {(
-                    [
-                      { key: "cond", label: t("Condition photo") },
-                      {
-                        key: "recv",
-                        label:
-                          handoffMode === "pickup"
-                            ? t("Photo of who collected")
-                            : t("Receiver photo"),
-                      },
-                      { key: "signed", label: t("Signed doc") },
-                    ] as const
-                  ).map(({ key, label }) => {
-                    const photosForSlot = attachments.filter(
-                      (a) =>
-                        a.proof_id === activeProof.id && a.doc_type === key,
-                    );
-                    if (photosForSlot.length === 0) return null;
-                    return (
-                      <div key={key} className={styles.proofsContainer}>
-                        <div className={styles.proofFieldRow}>
-                          <div className={styles.proofFieldMain}>
-                            <div className={styles.left}>
-                              <span className={styles.proofFieldLabel}>
-                                {label}
-                                {key === "recv" && activeProof.name
-                                  ? `  ${activeProof.name}`
-                                  : ""}
-                              </span>
-                            </div>
-                            <div className={styles.thumbnailsContainer}>
-                              {photosForSlot.map((a) => (
-                                <div
-                                  key={a.id}
-                                  className={styles.thumbnailItem}
-                                  onClick={() =>
-                                    setActiveImageModal({
-                                      url: getAssetUrl(a.document_file ?? ""),
-                                      title: label,
-                                      attachmentId: a.id ?? undefined,
-                                    })
-                                  }
-                                >
-                                  <img
-                                    src={getAssetUrl(a.document_file ?? "")}
-                                    alt=""
-                                    className={styles.thumbnailImg}
-                                  />
-                                  <div
-                                    className={styles.thumbnailHoverTrash}
-                                    title={t("Delete image")}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      if (a.id) handleDeleteDocument(a.id);
-                                    }}
-                                  >
-                                    <Icon name="trash" size={14} />
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
+                  {showCodRow && (
+                    <div className={styles.followUpRow}>
+                      <Icon
+                        name="cash"
+                        size={24}
+                        className={styles.followUpIcon}
+                      />
+                      <div className={styles.followUpMain}>
+                        <span className={styles.fieldLabel}>
+                          {t("COD cash awaiting office reconcile")}
+                        </span>
+                        <span className={styles.secondary}>
+                          {currency.format(codReconcileAmount)} ·{" "}
+                          {t("collected by courier")}
+                        </span>
                       </div>
-                    );
-                  })}
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="md"
+                        onClick={handleReconcileCOD}
+                        disabled={reconcilingCod}
+                        style={{ width: "140px" }}
+                      >
+                        {reconcilingCod ? t("Saving…") : t("Confirm received")}
+                      </Button>
+                    </div>
+                  )}
+                  {showDocsRow && (
+                    <div className={styles.followUpRow}>
+                      <Icon
+                        name="fileDoc"
+                        size={24}
+                        className={styles.followUpIcon}
+                      />
+                      <div className={styles.followUpMain}>
+                        <span className={styles.fieldLabel}>
+                          {t("Signed DO & SI not yet returned")}
+                        </span>
+                        <span className={styles.secondary}>
+                          {t("Confirm the signed docs are back and filed")}
+                        </span>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="md"
+                        style={{ width: "140px" }}
+                        onClick={handleConfirmDocsReturned}
+                      >
+                        {t("Mark returned")}
+                      </Button>
+                    </div>
+                  )}
                 </Card>
+              )}
+              {isDelivered && order.docs_returned && (
+                <p style={{ margin: "0.5rem 0" }}>
+                  ✓ {t("Signed DO & SI returned")}
+                </p>
               )}
 
               {canTrackCourier &&
@@ -3061,7 +3691,7 @@ export function OrderDetail() {
                 )}
 
               {showRefuseForm && (
-                <Card style={{ marginTop: "0.75rem" }}>
+                <Card>
                   <div className={styles.heading}>
                     <span>{t("Customer refused / returned")}</span>
                   </div>
@@ -3122,14 +3752,12 @@ export function OrderDetail() {
                     style={{
                       width: "100%",
                       minHeight: 60,
-                      marginTop: "0.5rem",
                     }}
                   />
                   <div
                     style={{
                       display: "flex",
                       gap: "0.75rem",
-                      marginTop: "0.75rem",
                     }}
                   >
                     <Button
@@ -3156,7 +3784,7 @@ export function OrderDetail() {
 
           {/* Returns Sub-Flow — parallel buckets (receive / settle / sign) */}
           {isReturned && !isCancelled && (
-            <Card style={{ marginTop: "0.75rem" }}>
+            <Card>
               <div className={styles.heading}>
                 <span>{t("Customer Return")}</span>
               </div>
@@ -3310,7 +3938,7 @@ export function OrderDetail() {
                           ? t("Photo attached ✓")
                           : t("Attach signed document")}
                       </label>
-                      <div style={{ marginTop: "0.5rem" }}>
+                      <div>
                         <Button
                           type="button"
                           variant="primary"
@@ -3396,7 +4024,7 @@ export function OrderDetail() {
                     variant="secondary"
                     buttonStyle="fullWidth"
                     size="lg"
-                    icon="chevronLeft"
+                    icon="backward"
                     onClick={handleSendBack}
                     disabled={advancing}
                   >

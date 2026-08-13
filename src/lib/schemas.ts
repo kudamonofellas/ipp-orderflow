@@ -11,6 +11,35 @@
 
 import { z } from "zod";
 
+/** A single GPS fix — `orders.pickup_geo`/`deliver_geo`. Best-effort: null
+ *  whenever the courier denied location permission or capture failed. */
+export const GeoStampSchema = z.object({
+  lat: z.number(),
+  lng: z.number(),
+  at: z.string(),
+});
+
+/** `customers.address_geo` — a fixed reference pin for this customer's
+ *  delivery address (no `at`, unlike `GeoStampSchema` — this isn't an event,
+ *  it's a stored location). Bootstrapped from a courier's first confirmed
+ *  `deliver_geo`, or set/corrected manually in Customer Edit. */
+export const LatLngSchema = z.object({
+  lat: z.number(),
+  lng: z.number(),
+});
+
+/** `orders.undo_snapshot` — the pre-delivery state, written on advancing to
+ *  `delivered`, consumed (and cleared) by the quiet "Undo" action. */
+export const UndoSnapshotSchema = z.object({
+  prevStage: z.string(),
+  changedFields: z.record(z.string(), z.unknown()),
+  /** The delivery_proofs row this confirm created — archived (not deleted)
+   *  when Undo restores the pre-delivery state. */
+  proofId: z.string().nullable().optional(),
+  who: z.string().nullable(),
+  at: z.string(),
+});
+
 /**
  * Directus `orders` collection row.
  *
@@ -54,6 +83,10 @@ export const OrdersCollectionSchema = z.object({
   courier_service: z.string().nullable().optional(),
   payment_confirmed: z.boolean().nullable().optional(),
   cod_reconciled: z.boolean().nullable().optional(),
+  cod_received_at: z.string().nullable().optional(),
+  pickup_geo: GeoStampSchema.nullable().optional(),
+  deliver_geo: GeoStampSchema.nullable().optional(),
+  undo_snapshot: UndoSnapshotSchema.nullable().optional(),
   docs_returned: z.boolean().nullable().optional(),
   return_received: z.boolean().nullable().optional(),
   return_settle: z.string().nullable().optional(),
@@ -78,6 +111,7 @@ export const CustomersCollectionSchema = z.object({
   channel: z.string().nullable().optional(),
   contact: z.string().nullable().optional(),
   address: z.string().nullable().optional(),
+  address_geo: LatLngSchema.nullable().optional(),
   area: z.string().nullable().optional(),
   sales: z.string().nullable().optional(),
   credit_limit: numeric,
@@ -254,6 +288,9 @@ export const DeliveryProofsCollectionSchema = z.object({
   name: z.string().nullable().optional(),
   archived: z.boolean().nullable().optional(),
   created_at: z.string().nullable().optional(),
+  /** Rupiah amount actually collected on this attempt (COD orders only).
+   *  Null = not recorded yet; 0 = recorded as nothing collected. */
+  cash_collected: numeric,
 });
 export const DeliveryProofsCollectionArraySchema = z.array(
   DeliveryProofsCollectionSchema,

@@ -24,7 +24,7 @@
   font: var(--text-h3);
   margin-bottom: var(--space-md);
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: var(--space-md);
   flex-wrap: wrap;
 }
@@ -54,7 +54,8 @@
 .proofsContainer {
   display: flex;
   flex-direction: column;
-  padding-bottom: var(--space-lg);
+  gap: var(--space-md);
+  padding: var(--space-md) 0;
 }
 
 .proofFieldRow {
@@ -62,12 +63,9 @@
   flex-direction: column;
   align-items: stretch;
   gap: var(--space-sm);
-  padding: var(--space-sm) 0;
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.proofFieldRow:last-child {
-  border-bottom: none;
+  padding: var(--space-sm);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--space-md);
 }
 
 .proofCheckEmpty {
@@ -97,17 +95,115 @@
   flex: 1;
 }
 
-.proofFieldLabel {
+.fieldLabel {
   font: var(--text-body);
   font-weight: 600;
   color: var(--text-primary);
 }
 
-.proofCod {
-  display: flex;
-  flex-direction: row;
+.proofReceiverNameTag {
+  font: var(--text-body);
+  font-weight: 400;
+  color: var(--text-secondary);
+  margin-left: var(--space-xs);
+}
+
+/* ===== COD payment outcome (never blocks delivery — see handleConfirmDelivery) ===== */
+.codOwedChip {
+  display: inline-flex;
   align-items: center;
+  font: var(--text-caption);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  padding: 2px 8px;
+  border-radius: var(--radius-xl);
+  color: var(--state-warning);
+  background: color-mix(in srgb, var(--state-warning) 13%, transparent);
+  border: 1px solid color-mix(in srgb, var(--state-warning) 33%, transparent);
+}
+
+.codOutcome {
+  display: flex;
+  flex-direction: column;
   gap: var(--space-sm);
+  flex-shrink: 0;
+  margin-left: 28px;
+}
+
+.codSegments {
+  display: flex;
+  gap: var(--space-sm);
+}
+
+.codSegment {
+  font: var(--text-label);
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) var(--ease-default),
+    border-color var(--duration-fast) var(--ease-default),
+    color var(--duration-fast) var(--ease-default);
+}
+
+.codSegment:hover {
+  border-color: var(--accent-primary);
+}
+
+.codSegmentSuccess {
+  color: var(--state-success);
+  background: color-mix(in srgb, var(--state-success) 13%, transparent);
+  border-color: var(--state-success);
+}
+
+.codSegmentWarning {
+  color: var(--state-warning);
+  background: color-mix(in srgb, var(--state-warning) 13%, transparent);
+  border-color: var(--state-warning);
+}
+
+.codOutcomeLine {
+  font: var(--text-caption);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
+.codOutcomeLineSuccess {
+  color: var(--state-success);
+}
+
+.codOutcomeLineWarning {
+  color: var(--state-warning);
+}
+
+.codReasonRow {
+  display: flex;
+  gap: var(--space-xs);
+  flex-wrap: wrap;
+}
+
+.codReasonChip {
+  font: var(--text-caption);
+  padding: 3px 10px;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.codReasonChip:hover {
+  border-color: var(--accent-primary);
+}
+
+.codReasonChipActive {
+  color: var(--state-warning);
+  background: color-mix(in srgb, var(--state-warning) 13%, transparent);
+  border-color: var(--state-warning);
 }
 
 .proofActions {
@@ -292,6 +388,7 @@
 .orderActions {
   display: flex;
   flex-direction: column;
+  padding-top: var(--space-3xl);
   gap: var(--space-md);
 }
 
@@ -378,6 +475,103 @@
 }
 
 /* Stepper / Timeline */
+
+.deliveredBanner {
+  display: flex;
+  flex-direction: column;
+}
+
+.deliveredBannerHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding-bottom: var(--space-md);
+  border-bottom: 1px solid var(--border-default);
+}
+
+.deliveredBannerTitleColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.deliveredBannerTitle {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  color: var(--accent-primary);
+  font: var(--text-h3);
+  font-weight: 700;
+}
+
+.dropLocationRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  font: var(--text-caption);
+  color: var(--text-secondary);
+}
+
+.dropLocationText {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.mapLink {
+  flex-shrink: 0;
+  border: none;
+  background: none;
+  padding: 0;
+  font: var(--text-caption);
+  font-weight: 600;
+  color: var(--accent-primary);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.receivedByRow {
+  font: var(--text-body);
+  padding-top: var(--space-md);
+  color: var(--text-primary);
+}
+
+.undoRow {
+  display: flex;
+  flex-direction: row;
+}
+
+.followUpsCard {
+  border-color: var(--state-warning);
+  display: flex;
+  flex-direction: column;
+}
+
+.followUpRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-sm) 0;
+}
+
+.followUpRow + .followUpRow {
+  border-top: 1px solid var(--border-default);
+}
+
+.followUpIcon {
+  flex-shrink: 0;
+  color: var(--state-warning);
+}
+
+.followUpMain {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
 
 .stepperContainer {
   width: 100%;
@@ -561,6 +755,25 @@
   gap: var(--space-sm);
 }
 
+.weighingSectionReadOnly {
+  margin-left: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.weighingRowReadOnly {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.weighingValueReadOnly {
+  font: var(--text-body);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
 .weighingInput {
   width: 100px;
   text-align: right;
@@ -714,7 +927,7 @@
   font: var(--text-body);
   font-weight: 600;
   padding-top: var(--space-md);
-  border-top: 1.5px solid var(--border-default);
+  border-top: 1px solid var(--border-subtle);
   margin-top: var(--space-md);
 }
 

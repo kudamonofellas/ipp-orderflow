@@ -1489,6 +1489,8 @@ export interface CreateDeliveryProofInput {
   signed_photo?: string | null;
   cod?: boolean;
   name?: string | null; // receiver's name
+  /** Rupiah amount actually collected (COD only). Null/omitted = not recorded. */
+  cash_collected?: number | null;
 }
 
 /** Records a courier's delivery-confirmation proof set. */

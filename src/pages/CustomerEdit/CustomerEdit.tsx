@@ -9,7 +9,36 @@ import {
   updateCustomer,
   createCustomer,
 } from "../../lib/directus";
+import type { LatLng } from "../../types/directus";
 import styles from "./CustomerEdit.module.css";
+
+/**
+ * Accepts a plain "lat, lng" pair or a pasted Google Maps URL containing
+ * coordinates (the "@lat,lng,zoomz" form or a "?q=lat,lng" query param).
+ * Returns null for anything else — including a URL with no coordinates in
+ * it (e.g. a shortened maps.app.goo.gl link), which needs the full/desktop
+ * link instead.
+ */
+function parseLatLng(raw: string): LatLng | null {
+  const s = raw.trim();
+  if (!s) return null;
+  const patterns = [/@(-?\d+\.\d+),(-?\d+\.\d+)/, /[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)/, /^(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)$/];
+  for (const re of patterns) {
+    const m = s.match(re);
+    if (m) {
+      const lat = parseFloat(m[1]);
+      const lng = parseFloat(m[2]);
+      if (Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
+        return { lat, lng };
+      }
+    }
+  }
+  return null;
+}
+
+function formatLatLng(g: LatLng | null | undefined): string {
+  return g ? `${g.lat}, ${g.lng}` : "";
+}
 
 export function CustomerEdit() {
   const { id } = useParams<{ id: string }>();
@@ -30,6 +59,7 @@ export function CustomerEdit() {
   const [origChannel, setOrigChannel] = useState("horeca");
   const [origContact, setOrigContact] = useState("");
   const [origAddress, setOrigAddress] = useState("");
+  const [origAddressGeoInput, setOrigAddressGeoInput] = useState("");
   const [origArea, setOrigArea] = useState("");
   const [origSales, setOrigSales] = useState("");
   const [origPayTiming, setOrigPayTiming] = useState("upfront");
@@ -43,6 +73,7 @@ export function CustomerEdit() {
   const [channel, setChannel] = useState("horeca");
   const [contact, setContact] = useState("");
   const [address, setAddress] = useState("");
+  const [addressGeoInput, setAddressGeoInput] = useState("");
   const [area, setArea] = useState("");
   const [sales, setSales] = useState("");
   const [payTiming, setPayTiming] = useState("upfront");
@@ -75,6 +106,7 @@ export function CustomerEdit() {
       setOrigChannel(c.channel ?? "horeca");
       setOrigContact(c.contact ?? "");
       setOrigAddress(c.address ?? "");
+      setOrigAddressGeoInput(formatLatLng(c.address_geo));
       setOrigArea(c.area ?? "");
       setOrigSales(c.sales ?? "");
       setOrigPayTiming(c.pay_timing ?? "upfront");
@@ -88,6 +120,7 @@ export function CustomerEdit() {
       setChannel(c.channel ?? "horeca");
       setContact(c.contact ?? "");
       setAddress(c.address ?? "");
+      setAddressGeoInput(formatLatLng(c.address_geo));
       setArea(c.area ?? "");
       setSales(c.sales ?? "");
       setPayTiming(c.pay_timing ?? "upfront");
@@ -118,6 +151,7 @@ export function CustomerEdit() {
     channel !== origChannel ||
     contact.trim() !== origContact.trim() ||
     address.trim() !== origAddress.trim() ||
+    addressGeoInput.trim() !== origAddressGeoInput.trim() ||
     area.trim() !== origArea.trim() ||
     sales.trim() !== origSales.trim() ||
     payTiming !== origPayTiming ||
@@ -135,6 +169,19 @@ export function CustomerEdit() {
     e.preventDefault();
     if (!canSave) return;
 
+    const trimmedGeo = addressGeoInput.trim();
+    let addressGeo: LatLng | null = null;
+    if (trimmedGeo) {
+      const parsed = parseLatLng(trimmedGeo);
+      if (!parsed) {
+        setError(
+          "Couldn't read that as coordinates — paste \"lat, lng\" or a Google Maps link with coordinates in it.",
+        );
+        return;
+      }
+      addressGeo = parsed;
+    }
+
     setSaving(true);
     const payload = {
       name: name.trim(),
@@ -142,6 +189,7 @@ export function CustomerEdit() {
       channel,
       contact: contact.trim() || null,
       address: address.trim() || null,
+      address_geo: addressGeo,
       area: area.trim() || null,
       sales: sales.trim() || null,
       pay_timing: payTiming,
@@ -286,6 +334,22 @@ export function CustomerEdit() {
                 disabled={saving}
                 placeholder="Delivery address"
               />
+            </label>
+            <label className={styles.field}>
+              <span className={styles.label}>{t("Delivery Location Pin")}</span>
+              <input
+                type="text"
+                className={styles.input}
+                value={addressGeoInput}
+                onChange={(e) => setAddressGeoInput(e.target.value)}
+                disabled={saving}
+                placeholder="-6.914744, 107.609810 or paste a Google Maps link"
+              />
+              <span className={styles.hint}>
+                {t(
+                  "Used to verify a courier's drop-off distance on the order page. Leave blank if unknown — it gets set automatically from the customer's first confirmed delivery.",
+                )}
+              </span>
             </label>
             <label className={styles.field}>
               <span className={styles.label}>{t("Phone / Contact")}</span>

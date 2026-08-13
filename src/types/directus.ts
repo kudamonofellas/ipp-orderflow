@@ -26,10 +26,16 @@ import type {
   ReturnDocumentsCollectionSchema,
   DeliveryProofsCollectionSchema,
   SettingsCollectionSchema,
-  CourierLocationsCollectionSchema
+  CourierLocationsCollectionSchema,
+  GeoStampSchema,
+  UndoSnapshotSchema,
+  LatLngSchema
 } from '../lib/schemas';
 
 export type OrdersCollection = z.infer<typeof OrdersCollectionSchema>;
+export type GeoStamp = z.infer<typeof GeoStampSchema>;
+export type UndoSnapshot = z.infer<typeof UndoSnapshotSchema>;
+export type LatLng = z.infer<typeof LatLngSchema>;
 export type CustomersCollection = z.infer<typeof CustomersCollectionSchema>;
 export type ProductsCollection = z.infer<typeof ProductsCollectionSchema>;
 export type OrderLinesCollection = z.infer<typeof OrderLinesCollectionSchema>;

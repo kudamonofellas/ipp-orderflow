@@ -66,6 +66,9 @@ export const ICONS = {
   navigation: "hugeicons:navigation-03",
   pencilEdit: "hugeicons:edit-03",
   reload: "hugeicons:refresh-01",
+  undo: "hugeicons:undo-02",
+  fileDoc: "hugeicons:file-02",
+  backward: "hugeicons:link-backward",
 } as const;
 
 export type IconName = keyof typeof ICONS;

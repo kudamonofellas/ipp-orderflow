@@ -40,6 +40,7 @@ Replaces `data/customers.js`. The Horeca account book.
 | `channel`      | TEXT NOT NULL DEFAULT 'horeca' | enum: `horeca`, (future: `retail`, `b2c`)            |
 | `contact`      | TEXT                           | phone / contact person                               |
 | `address`      | TEXT                           |                                                      |
+| `address_geo`  | JSON, nullable                 | **added 2026-08-13** — `{lat, lng}` pin, no timestamp (a fixed reference point, unlike `orders.pickup_geo`/`deliver_geo`). Bootstrapped from a courier's first confirmed delivery, or set/corrected manually in Customer Edit. Powers the "Dropped at delivery address · ~Nm" verification distance on a delivered order; falls back to the plain "captured" wording until set. Courier has a field-scoped `update` grant limited to this one field (needed for the delivery-time bootstrap prompt) — Admin/Owner have full `customers.update` already. |
 | `area`         | TEXT                           | delivery zone                                        |
 | `sales`        | TEXT                           | assigned sales rep name (→ `users.name` once linked) |
 | `credit_limit` | NUMERIC(15,2) DEFAULT 0        | Rp; 0 = no limit set                                 |
@@ -105,6 +106,14 @@ The core pipeline record. Replaces the order objects in `store.jsx` → `seed()`
 | `updated_at`        | TIMESTAMPTZ DEFAULT now()      |                                                                                                                                                     |
 | `hold`              | BOOLEAN DEFAULT FALSE          | **live but undocumented until 2026-08-07** — freezes an order out of the Finance-parallel-queue count while at `cold` |
 | `docs_returned`     | BOOLEAN DEFAULT FALSE          | **live but undocumented until 2026-08-07** — signed DO/SI returned for a `delivered` order |
+| `cod_reconciled`    | BOOLEAN DEFAULT FALSE          | office has confirmed COD cash received (written by both Cash-up's Confirm and `OrderDetail`'s Follow-ups row) |
+| `cod_received_at`   | TIMESTAMPTZ                    | **added 2026-08-13** — stamp for the above |
+| `courier_service`   | TEXT                           | 3rd-party hand-off service name/ref, nullable |
+| `pickup_geo`        | JSON, nullable                 | **added 2026-08-13** — `{lat, lng, at}`, captured at condition-photo upload (delivery mode only), best-effort |
+| `deliver_geo`       | JSON, nullable                 | **added 2026-08-13** — `{lat, lng, at}`, captured at delivery confirm, best-effort; drives the "Delivered & Closed" banner's drop-location row |
+| `undo_snapshot`     | JSON, nullable                 | **added 2026-08-13** — `{prevStage, changedFields, proofId, who, at}` written when a delivery is confirmed, cleared by every subsequent order-mutating action; backs the quiet "Undo — back to dispatch" link (distinct from "Re-open to Dispatch") |
+
+> Note: this table has drifted from the live schema in a few other spots too (e.g. `delivery_proofs.cash_collected`, `attachments.proof_id`, added earlier in the 2026-08-13 session) — `context/schema/snapshot.json` is the authoritative live export; treat gaps here as documentation debt, not evidence a column doesn't exist.
 
 ### `order_lines`
 
