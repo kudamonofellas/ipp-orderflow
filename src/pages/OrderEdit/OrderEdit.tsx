@@ -9,6 +9,7 @@ import {
 } from "../../components/AddItemModal/AddItemModal";
 import { useAuth, useCurrentUserId } from "../../hooks/useAuth";
 import { useLanguage } from "../../hooks/useLanguage";
+import { isOrderLocked } from "../../lib/pipeline";
 import {
   readOrder,
   readOrderLines,
@@ -105,9 +106,15 @@ export function OrderEdit() {
   // Production, Courier) could open /orders/:id/edit directly via URL and
   // interact with the whole form — only the final Save button was disabled.
   const stage = order?.stage ?? "intake";
-  const isCancelled = order?.cancelled === true || stage === "cancelled";
-  const isDelivered = stage === "delivered";
-  const canEdit = auth.can("editOrderLines") && !isCancelled && !isDelivered;
+  const canEdit =
+    auth.can("editOrderLines") &&
+    (!isOrderLocked({
+      stage,
+      taken_by: order?.taken_by,
+      pickup: order?.pickup,
+      third_party: order?.third_party,
+    }) ||
+      auth.can("editAfterLock"));
 
   useEffect(() => {
     if (!loading && !canEdit) {

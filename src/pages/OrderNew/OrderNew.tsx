@@ -7,11 +7,16 @@ import {
   AddItemModal,
   type AddItemResult,
 } from "../../components/AddItemModal/AddItemModal";
-import { useAuth, useCurrentUserName } from "../../hooks/useAuth";
+import {
+  useAuth,
+  useCurrentUserId,
+  useCurrentUserName,
+} from "../../hooks/useAuth";
 import { useLanguage } from "../../hooks/useLanguage";
 import { useDialog } from "../../hooks/useDialog";
 import {
   appendOrderHistory,
+  createAttachment,
   createLineCut,
   createOrder,
   createOrderLines,
@@ -20,7 +25,11 @@ import {
   readCustomers,
   readOrders,
   readProducts,
+  uploadFile,
+  upsertCorrection,
   type CreateOrderLineInput,
+  type ParsedOrderDraft,
+  type ParsedOrderLine,
 } from "../../lib/directus";
 import { matchCustomer } from "../../lib/customerMatch";
 import type {
@@ -31,6 +40,9 @@ import { dateCode, buildOrderNo, parseOrderNo } from "../../lib/orderNo";
 import styles from "./OrderNew.module.css";
 
 interface NewOrderLocationState {
+  prefill?: ParsedOrderDraft | null;
+  rawText?: string;
+  attachments?: File[];
   /** Where to return to on cancel / after create — the page this flow was
    *  started from (Orders list or Dashboard). Falls back to "/orders" when
    *  absent (e.g. a direct link), rather than relying on browser history
@@ -51,6 +63,9 @@ interface LineDraft {
   unit: string;
   price: string;
   cuts: CutItem[];
+  parseStatus?: ParsedOrderLine["status"];
+  learned?: boolean;
+  rawText?: string;
 }
 
 const UNITS = ["kg", "gram", "pack", "pcs", "box", "ekor", "loaf"] as const;
@@ -81,20 +96,25 @@ const currency = new Intl.NumberFormat("id-ID", {
   minimumFractionDigits: 0,
 });
 
-/** Full page: pick/create a customer + add product lines. Mirrors
- *  OrderDetail's layout (sticky header) so creating an order feels like the
- *  same surface as editing one. */
+/** Full page: pick/create a customer + add product lines, optionally prefilled
+ *  from the WhatsApp intake parser (via router state — see Dashboard.tsx's
+ *  handleParsed). Mirrors OrderDetail's layout (sticky header, side panel) so
+ *  creating an order feels like the same surface as editing one. */
 export function OrderNew() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { from } = (location.state as NewOrderLocationState) || {};
+  const { prefill, rawText, attachments, from } =
+    (location.state as NewOrderLocationState) || {};
   const returnTo = from ?? "/orders";
 
   const can = useAuth().can;
   const { t } = useLanguage();
   const { alert } = useDialog();
   const currentUserName = useCurrentUserName();
+  const userId = useCurrentUserId();
   const allowed = can("createOrders");
+
+  const [isPanelOpen, setIsPanelOpen] = useState(true);
 
   const [orderNoValue, setOrderNoValue] = useState("");
   const [orderNoTouched, setOrderNoTouched] = useState(false);
@@ -103,6 +123,9 @@ export function OrderNew() {
   const [customers, setCustomers] = useState<CustomersCollection[]>([]);
   const [products, setProducts] = useState<ProductsCollection[]>([]);
   const [loadingOpts, setLoadingOpts] = useState(false);
+
+  const [dateGuessed, setDateGuessed] = useState(false);
+  const [multiCustomer, setMultiCustomer] = useState(false);
 
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
@@ -141,12 +164,53 @@ export function OrderNew() {
       if (p.error === null) setProducts(p.data);
 
       setLoadingOpts(false);
+
+      if (prefill && !cancelled) {
+        if (prefill.customerTyped) setCustomerName(prefill.customerTyped);
+        if (prefill.phone) setCustomerPhone(prefill.phone);
+        if (prefill.address) setCustomerAddress(prefill.address);
+        if (prefill.company) setCompany(prefill.company);
+        if (prefill.deliver) setdeliverDate(prefill.deliver.slice(0, 10));
+        setDateGuessed(!!prefill.dateGuessed);
+        setMultiCustomer(!!prefill.multiCustomer);
+
+        if (prefill.ref && prefill.deliver) {
+          const seq = parseInt(prefill.ref, 10);
+          if (Number.isFinite(seq) && seq > 0) {
+            setOrderNoValue(buildOrderNo(dateCode(prefill.deliver), seq));
+            setOrderNoTouched(true);
+          }
+        }
+
+        if (prefill.sales) setSales(prefill.sales);
+        if (prefill.lines && prefill.lines.length > 0 && p.data) {
+          const productMap = new Map(p.data.map((pr) => [pr.id, pr.name]));
+          setLines(
+            prefill.lines.map((pl) => ({
+              id: newLineId(),
+              productId:
+                pl.productId && productMap.has(pl.productId)
+                  ? pl.productId
+                  : "",
+              freeText: pl.productId ? "" : pl.name,
+              qty: String(pl.qty ?? 1),
+              unit: pl.unit || "kg",
+              price: pl.price ? String(pl.price) : "",
+              cuts: [],
+              parseStatus: pl.status,
+              learned: pl.learned,
+              rawText: pl.raw,
+            })),
+          );
+        }
+      }
     }
     loadOptions();
     return () => {
       cancelled = true;
     };
-  }, [currentUserName]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUserName]); // prefill is a one-shot value from navigation state — deliberately not a dep
 
   useEffect(() => {
     if (!deliverDate) return;
@@ -409,6 +473,36 @@ export function OrderNew() {
       }
     }
 
+    const correctionPromises = cleanLines
+      .filter((l) => l.productId && l.rawText)
+      .map((l) => upsertCorrection(l.rawText!, l.productId));
+    await Promise.allSettled(correctionPromises);
+
+    if (attachments && attachments.length > 0) {
+      const attachmentResults = await Promise.allSettled(
+        attachments.map(async (file) => {
+          const uploadRes = await uploadFile(file);
+          if (uploadRes.error || !uploadRes.data)
+            throw new Error(uploadRes.error ?? "upload failed");
+          return createAttachment({
+            order_uuid: orderId,
+            doc_type: "PO",
+            label: file.name || "PO",
+            document_file: uploadRes.data.id,
+            created_by: userId ?? undefined,
+          });
+        }),
+      );
+      const failedCount = attachmentResults.filter(
+        (r) => r.status === "rejected",
+      ).length;
+      if (failedCount > 0) {
+        alert(
+          `Order created, but ${failedCount} attachment(s) failed to upload. You can add them from the order page.`,
+        );
+      }
+    }
+
     await appendOrderHistory({
       order_id: orderId,
       what: "Order created",
@@ -430,7 +524,13 @@ export function OrderNew() {
 
   return (
     <div className={styles.container}>
-      <div className={styles.mainColumn}>
+      <div
+        className={[
+          styles.layoutGrid,
+          isPanelOpen ? styles.layoutGridWithPanel : styles.layoutGridFull,
+        ].join(" ")}
+      >
+        <div className={styles.mainColumn}>
           <header className={styles.header}>
             <div className={styles.titleSection}>
               <Button
@@ -479,6 +579,14 @@ export function OrderNew() {
             className={styles.form}
             onSubmit={handleSubmit}
           >
+            {multiCustomer && (
+              <p className={styles.error} role="alert">
+                {t(
+                  "This looks like more than one customer's order — please enter them as separate orders.",
+                )}
+              </p>
+            )}
+
             <Card className={styles.customerCard}>
               {badNo && (
                 <p className={`${styles.hint} ${styles.banner}`}>
@@ -530,9 +638,20 @@ export function OrderNew() {
                     type="date"
                     className={styles.input}
                     value={deliverDate}
-                    onChange={(e) => setdeliverDate(e.target.value)}
+                    onChange={(e) => {
+                      setdeliverDate(e.target.value);
+                      setDateGuessed(false);
+                    }}
                     disabled={submitting || !allowed}
                   />
+                  {dateGuessed && (
+                    <p
+                      className={styles.secondary}
+                      style={{ color: "var(--state-warning)" }}
+                    >
+                      {t("Delivery date was guessed — please check.")}
+                    </p>
+                  )}
                 </label>
               </div>
               <div className={styles.row}>
@@ -726,6 +845,8 @@ export function OrderNew() {
                               updateLine(l.id, {
                                 productId: e.target.value,
                                 freeText: "",
+                                parseStatus: undefined,
+                                learned: undefined,
                               })
                             }
                             disabled={submitting || !allowed}
@@ -752,6 +873,14 @@ export function OrderNew() {
                               );
                             }}
                           />
+                        )}
+                        {l.parseStatus && (
+                          <span
+                            className={styles.statusChip}
+                            data-status={l.learned ? "learned" : l.parseStatus}
+                          >
+                            {l.learned ? t("learned") : t(l.parseStatus)}
+                          </span>
                         )}
                       </div>
                       <Button
@@ -900,6 +1029,50 @@ export function OrderNew() {
               </p>
             )}
           </form>
+        </div>
+
+        <aside className={styles.sidePanelColumn}>
+          <Button
+            type="button"
+            variant="secondary"
+            icon={isPanelOpen ? "chevronRight" : "chevronLeft"}
+            iconOnly
+            className={styles.panelToggleBtn}
+            isActive={isPanelOpen}
+            onClick={() => setIsPanelOpen((prev) => !prev)}
+            title={isPanelOpen ? t("Collapse side panel") : t("Expand side panel")}
+          />
+
+          <div
+            className={[
+              styles.sidePanelStickyContent,
+              !isPanelOpen ? styles.sidePanelStickyContentCollapsed : "",
+            ].join(" ")}
+          >
+            <Card className={styles.notesCard}>
+              <h3 className={styles.heading}>{t("Original WhatsApp message")}</h3>
+              {rawText && rawText.trim() ? (
+                <pre className={styles.pre}>{rawText}</pre>
+              ) : (
+                <p className={styles.muted}>
+                  {t("No pasted message — entered manually.")}
+                </p>
+              )}
+              {attachments && attachments.length > 0 && (
+                <div className={styles.attachmentsNote}>
+                  <p className={styles.muted}>
+                    {attachments.length} {t("attachment(s) will be added as PO document(s):")}
+                  </p>
+                  <ul>
+                    {attachments.map((f, i) => (
+                      <li key={i}>{f.name}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </Card>
+          </div>
+        </aside>
       </div>
       <AddItemModal
         open={isAddItemModalOpen}

@@ -7,7 +7,6 @@ interface QuickActionCardProps {
   label: string;
   /** Pass "-" (or any non-numeric placeholder) when there's nothing to act on yet. */
   value: string | number;
-  suffix: string;
   onClick: () => void;
   title?: string;
 }
@@ -17,7 +16,6 @@ export function QuickActionCard({
   icon,
   label,
   value,
-  suffix,
   onClick,
   title,
 }: QuickActionCardProps) {
@@ -36,7 +34,6 @@ export function QuickActionCard({
       </span>
       <span className={styles.right}>
         <span className={styles.value}>{value}</span>
-        <span className={styles.suffix}>{suffix}</span>
       </span>
     </button>
   );

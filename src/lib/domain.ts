@@ -101,7 +101,6 @@ export const ALLOW: Record<Exclude<Role, 'Owner'>, Partial<Record<Capability, bo
     seePrices: true,
     seeCustomerContact: true,
     viewPickList: true,
-    viewDeliveryRun: true,
     reconcileCOD: true,
     seeCustomerCredit: true,
     browseCustomers: true,

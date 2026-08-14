@@ -41,7 +41,12 @@ export function OrderRows({ order }: { order: OpenOrder }) {
   }
 
   function handleRowClick() {
-    navigate(`/orders/${order.id}`, { state: { from: location.pathname } });
+    // Include the query string (`?stage=...&search=...`), not just the
+    // pathname — otherwise Orders.tsx's stage/search filter is dropped when
+    // the Back button on OrderDetail navigates here.
+    navigate(`/orders/${order.id}`, {
+      state: { from: location.pathname + location.search },
+    });
   }
 
   return (
@@ -56,7 +61,7 @@ export function OrderRows({ order }: { order: OpenOrder }) {
         <td className={styles.arrowCell} onClick={toggle}>
           {hasItems && (
             <Icon
-              name="chevronRight"
+              name="circleArrowRight"
               size={16}
               className={`${styles.chevron} ${expanded ? styles.chevronOpen : ""}`}
             />

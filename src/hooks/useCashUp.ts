@@ -1,13 +1,20 @@
 /**
  * Cash-up — the desk's COD reconciliation queue. Pools every order out for
- * delivery or delivered (not cancelled) whose customer pays COD
- * (`customers.pay_timing === 'cod'`) and hasn't been reconciled yet
+ * delivery, delivered, or outstanding (not cancelled) whose customer pays
+ * COD (`customers.pay_timing === 'cod'`) and hasn't been reconciled yet
  * (`orders.cod_reconciled`), grouped by the courier holding the cash
- * (`orders.taken_by`), so the desk settles one person at a time.
+ * (`orders.taken_by`), so the desk settles one person at a time. Outstanding
+ * orders (a short/zero COD collection routed there by OrderDetail's
+ * delivery-confirm flow) still need their partially-collected cash
+ * reconciled from the courier — the uncollected remainder is a receivable
+ * this queue doesn't chase, only the cash actually in the courier's hand.
  *
- * The per-order amount is the order total (sum of `order_lines` qty×price —
- * same calculation as OrderDetail's `orderTotal`), since neither `orders`
- * nor `delivery_proofs` has a dedicated COD-amount column in the live schema.
+ * The per-order amount prefers the courier's own recorded collection
+ * (`delivery_proofs.cash_collected`, the current non-archived attempt),
+ * falling back to the order total (sum of `order_lines` qty×price — same
+ * calculation as OrderDetail's `orderTotal`) when no proof has been
+ * recorded yet, since a dispatch-stage order hasn't necessarily reached the
+ * delivery-confirm step where `cash_collected` gets written.
  *
  * "Confirm" writes `orders.cod_reconciled = true` for real (added 2026-08-09
  * — `orders.cod_reconciled` didn't exist on the live schema before that;
@@ -18,7 +25,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { readOrders, readCustomers, readOrderLines, readAllUsers, updateOrder, appendOrderHistory } from '../lib/directus';
+import { readOrders, readCustomers, readOrderLines, readAllUsers, readDeliveryProofs, updateOrder, appendOrderHistory } from '../lib/directus';
 import { useCurrentUserId } from './useAuth';
 
 export interface CashUpOrderRow {
@@ -26,6 +33,10 @@ export interface CashUpOrderRow {
   orderNo: string;
   customerName: string;
   amount: number;
+  /** Order is at the `outstanding` stage — `amount` is what the courier
+   *  actually collected, not the full order total; a balance remains owed
+   *  directly by the customer, which this queue doesn't chase. */
+  isOutstanding: boolean;
 }
 
 export interface CashUpCourierGroup {
@@ -79,13 +90,13 @@ export function useCashUp(): UseCashUpResult {
       const ordersRes = await readOrders({
         filter: {
           _and: [
-            { stage: { _in: ['dispatch', 'delivered'] } },
+            { stage: { _in: ['dispatch', 'delivered', 'outstanding'] } },
             { cancelled: { _neq: true } },
             { taken_by: { _nnull: true } },
             { cod_reconciled: { _neq: true } },
           ],
         },
-        fields: ['id', 'no', 'customer_id', 'customer_name', 'taken_by'],
+        fields: ['id', 'no', 'customer_id', 'customer_name', 'taken_by', 'stage'],
         sort: ['taken_by'],
         limit: -1,
       });
@@ -106,7 +117,7 @@ export function useCashUp(): UseCashUpResult {
       const customerIds = [...new Set(orders.map((o) => o.customer_id).filter((id): id is string => !!id))];
       const orderIds = orders.map((o) => o.id);
 
-      const [customersRes, linesRes, usersRes] = await Promise.all([
+      const [customersRes, linesRes, usersRes, proofsRes] = await Promise.all([
         customerIds.length === 0
           ? Promise.resolve({ data: [], error: null })
           : readCustomers({
@@ -127,6 +138,10 @@ export function useCashUp(): UseCashUpResult {
         // `orders.taken_by` is a UUID FK to directus_users.id, not a courier
         // name — resolve it to a display name the same way OrderDetail does.
         readAllUsers(),
+        // The courier's actually-collected cash, when a delivery proof has
+        // been recorded — falls back to the order-lines total below when
+        // absent (e.g. an order still sitting at dispatch).
+        readDeliveryProofs(orderIds),
       ]);
       if (cancelled) return;
       if (customersRes.error) {
@@ -136,6 +151,11 @@ export function useCashUp(): UseCashUpResult {
       }
       if (linesRes.error) {
         setError(`Failed to load cash-up: ${linesRes.error}`);
+        setLoading(false);
+        return;
+      }
+      if (proofsRes.error) {
+        setError(`Failed to load cash-up: ${proofsRes.error}`);
         setLoading(false);
         return;
       }
@@ -153,18 +173,24 @@ export function useCashUp(): UseCashUpResult {
         const amount = toNumber(line.qty) * toNumber(line.price);
         totalByOrder.set(line.order_id, (totalByOrder.get(line.order_id) ?? 0) + amount);
       }
+      const collectedByOrder = new Map<string, number>();
+      for (const proof of proofsRes.data ?? []) {
+        if (!proof.order_id || proof.cash_collected == null) continue;
+        collectedByOrder.set(proof.order_id, toNumber(proof.cash_collected));
+      }
 
       const byCourier = new Map<string, CashUpOrderRow[]>();
       const built: CashUpOrderRow[] = [];
       for (const order of orders) {
         if (!order.customer_id || !codByCustomer.get(order.customer_id)) continue;
-        const amount = totalByOrder.get(order.id) ?? 0;
+        const amount = collectedByOrder.get(order.id) ?? totalByOrder.get(order.id) ?? 0;
         if (amount <= 0) continue;
         const row: CashUpOrderRow = {
           orderId: order.id,
           orderNo: order.no ?? '—',
           customerName: order.customer_name ?? '—',
           amount,
+          isOutstanding: order.stage === 'outstanding',
         };
         built.push(row);
         const courier = order.taken_by ? (nameByUserId.get(order.taken_by) ?? order.taken_by) : 'Unassigned';

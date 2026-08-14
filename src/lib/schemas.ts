@@ -82,6 +82,7 @@ export const OrdersCollectionSchema = z.object({
   third_party: z.boolean().nullable().optional(),
   courier_service: z.string().nullable().optional(),
   payment_confirmed: z.boolean().nullable().optional(),
+  payment_confirmed_at: z.string().nullable().optional(),
   cod_reconciled: z.boolean().nullable().optional(),
   cod_received_at: z.string().nullable().optional(),
   pickup_geo: GeoStampSchema.nullable().optional(),
@@ -275,6 +276,19 @@ export const CourierLocationsCollectionSchema = z.object({
 });
 export const CourierLocationsCollectionArraySchema = z.array(
   CourierLocationsCollectionSchema,
+);
+
+/** Directus `corrections` collection row (learned product-match corrections). */
+export const CorrectionsCollectionSchema = z.object({
+  id: z.string(),
+  token_key: z.string(),
+  product_id: z.string(),
+  created_by: z.string().nullable().optional(),
+  date_created: z.string().nullable().optional(),
+  times_used: z.number().nullable().optional(),
+});
+export const CorrectionsCollectionArraySchema = z.array(
+  CorrectionsCollectionSchema,
 );
 
 /** Directus `delivery_proofs` collection row — courier's 3-photo proof set + COD flag. */

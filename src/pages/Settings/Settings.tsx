@@ -10,6 +10,7 @@ import { useLanguage } from "../../hooks/useLanguage";
 import { useDialog } from "../../hooks/useDialog";
 import { useSettings } from "../../hooks/useSettings";
 import { useTeamSettings } from "../../hooks/useTeamSettings";
+import { useCorrections } from "../../hooks/useCorrections";
 import {
   updateTeamMember,
   deleteTeamMember,
@@ -30,15 +31,22 @@ import styles from "./Settings.module.css";
 const NOT_AVAILABLE =
   "Not available yet — this feature has no backing implementation.";
 
-/** Full Settings page — Account, Team, Roles & Permissions, Cold Storage, Dispatch, General, and Data sections. */
+/** Full Settings page — Account, Team, Roles & Permissions, Intake Learning, Cold Storage, Dispatch, General, and Data sections. */
 export function Settings() {
   const navigate = useNavigate();
   const auth = useAuth();
   const { role, logout, can, refreshPermissions } = auth;
   const name = useCurrentUserName();
-  const { settings, loading, error, update } = useSettings();
+  const { settings, learnedMatches, loading, error, update } = useSettings();
   const { lang, setLang, t } = useLanguage();
   const { alert, confirm } = useDialog();
+  const {
+    rows: correctionRows,
+    loading: correctionsLoading,
+    error: correctionsError,
+    deletingIds: deletingCorrectionIds,
+    remove: removeCorrection,
+  } = useCorrections();
   const {
     members,
     roles,
@@ -132,6 +140,21 @@ export function Settings() {
     }
     setEditingId(null);
     reloadTeam();
+  }
+
+  async function handleDeleteCorrection(id: string, tokenKey: string) {
+    if (
+      !(await confirm(
+        `${t("Remove learned match")} "${tokenKey}"? ${t("This cannot be undone.")}`,
+        { danger: true, confirmLabel: t("Remove") },
+      ))
+    ) {
+      return;
+    }
+    const res = await removeCorrection(id);
+    if (res.error) {
+      alert(res.error);
+    }
   }
 
   async function handleToggleActive(m: TeamMember, nextActive: boolean) {
@@ -446,6 +469,72 @@ export function Settings() {
           </Card>
         </section>
       )}
+
+      <section>
+        <h2 className={styles.sectionHeading}>{t("Intake Learning")}</h2>
+        <Card>
+          <div className={styles.row}>
+            <Icon name="ai" size={20} className={styles.rowIcon} />
+            <div className={styles.rowInfo}>
+              <span className={styles.rowTitle}>
+                {learnedMatches} {t("learned matches")}
+              </span>
+              <span className={styles.rowNote}>
+                {t(
+                  "Shared knowledge base — every correction your team makes is kept and reused, reviewed here.",
+                )}
+              </span>
+            </div>
+          </div>
+        </Card>
+
+        {correctionsLoading ? (
+          <div className={styles.muted}>{t("Loading learned matches…")}</div>
+        ) : correctionsError ? (
+          <div className={styles.error}>{correctionsError}</div>
+        ) : correctionRows.length === 0 ? (
+          <div className={styles.muted}>{t("No learned matches yet.")}</div>
+        ) : (
+          <Card className={styles.correctionsCard} flush>
+            {correctionRows.map((c) => (
+              <div key={c.id} className={styles.correctionRow}>
+                <div className={styles.correctionInfo}>
+                  <span className={styles.correctionToken}>
+                    "{c.tokenKey}"
+                    <span className={styles.correctionArrow}>→</span>
+                    {c.productName}
+                  </span>
+                  <span className={styles.correctionMeta}>
+                    {t("Added by")} {c.createdBy}
+                    {c.dateCreated
+                      ? ` · ${new Date(c.dateCreated).toLocaleDateString("en-US")}`
+                      : ""}
+                  </span>
+                </div>
+                <div className={styles.correctionRight}>
+                  <span className={styles.correctionCount}>
+                    {c.timesUsed} {c.timesUsed === 1 ? t("use") : t("uses")}
+                  </span>
+                  {canManageSettings && (
+                    <Button
+                      type="button"
+                      variant="tertiary"
+                      size="md"
+                      iconOnly
+                      icon="trash"
+                      title={t("Remove learned match")}
+                      disabled={deletingCorrectionIds.has(c.id)}
+                      onClick={() => handleDeleteCorrection(c.id, c.tokenKey)}
+                    >
+                      {t("Remove")}
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </Card>
+        )}
+      </section>
 
       {loading ? (
         <div className={styles.muted}>{t("Loading settings…")}</div>

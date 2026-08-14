@@ -11,6 +11,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { readOrderHistoryFeed, readOrders } from '../lib/directus';
+import { useCan } from './useAuth';
+import { redactHistoryPrices } from '../lib/redactHistory';
 import type { NotificationEntry, NotificationGroup } from '../types/dashboard';
 
 /** Rows fetched per batch — both the initial load and every `loadMore()`. */
@@ -55,6 +57,7 @@ interface UseNotificationsResult {
 }
 
 export function useNotifications(): UseNotificationsResult {
+  const canSeePrices = useCan()('seePrices');
   const [groups, setGroups] = useState<NotificationGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -115,6 +118,12 @@ export function useNotifications(): UseNotificationsResult {
 
     for (const row of rows) {
       if (!row.at) continue;
+      // A row whose entire content was a price change (e.g. a line-price-only
+      // edit) redacts to `null` — drop it rather than show a hollow "Edited —"
+      // with nothing after it, per explicit product decision: hide the whole
+      // notification, don't just mask the figure.
+      const action = canSeePrices ? row.what : redactHistoryPrices(row.what);
+      if (action === null) continue;
       const key = dayKey(row.at);
       const bucket = byDayRef.current.get(key) ?? {
         heading: formatDateHeading(row.at),
@@ -128,7 +137,7 @@ export function useNotifications(): UseNotificationsResult {
           ? (labelByOrderIdRef.current.get(row.order_id) ?? row.order_id)
           : '—',
         orderUuid: row.order_id ?? '',
-        action: row.what,
+        action,
       });
       byDayRef.current.set(key, bucket);
     }
@@ -139,7 +148,7 @@ export function useNotifications(): UseNotificationsResult {
         entries: b.entries,
       })),
     );
-  }, []);
+  }, [canSeePrices]);
 
   const loadMore = useCallback(() => {
     if (loading || loadingMore || !hasMore) return;

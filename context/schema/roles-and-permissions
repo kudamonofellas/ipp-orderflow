@@ -108,11 +108,11 @@ Creates cut instructions, marks cutting progress.
 
 ## Role 5 — Finance (payment gate)
 
-Approves/rejects payment. Minimal write access — just the payment flag.
+Approves/rejects payment (and reconciles COD cash — Cash-up shares this role's `reconcileCOD` grant). Minimal write access — just the payment/COD flags and their timestamps.
 
 | Collection | Create | Read | Update | Delete | Notes |
 |---|:---:|:---:|:---:|:---:|---|
-| `orders` | ❌ | ✅ | ✅ (field only) | ❌ | Reads all; can update only: `payment_confirmed` |
+| `orders` | ❌ | ✅ | ✅ (field only) | ❌ | Reads all; can update only: `payment_confirmed`, `payment_confirmed_at` (2026-08-14, Approve Payment + Undo), `cod_reconciled`, `cod_received_at` |
 | `order_history` | ✅ | ✅ | ❌ | ❌ | Append-only — logs approve/reject |
 | `customers` | ❌ | ✅ | ❌ | ❌ | Read-only — needs credit_limit + term_days |
 | `order_lines` | ❌ | ✅ | ❌ | ❌ | Read-only |

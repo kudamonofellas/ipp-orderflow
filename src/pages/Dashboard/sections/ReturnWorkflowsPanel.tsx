@@ -20,7 +20,20 @@ export function ReturnWorkflowsPanel({ stages, focusStages = [], onStageClick }:
       <div className={styles.list}>
         {stages.map((stage) => {
           const highlight = focusStages.includes(stage.stage);
-          const color = highlight ? statusColor(stage.stage) : undefined;
+          // `replacement_transit` spans every role (Warehouse/Production/Courier/
+          // Admin can all "own" it depending on where the replacement order
+          // currently sits), so `statusColor()` deliberately can't claim a single
+          // role's colour for it (falls through to neutral) — but the tile still
+          // needs to read as urgent when it's highlighted. Danger-red here is
+          // local to this one bucket tile, not routed through `statusColor()`,
+          // so it can't affect a replacement order's own `StatusPill` (which
+          // colours by its real current stage, with a separate `isReplacement`
+          // badge — see pipeline.ts's `RETURN_BUCKET_ACTOR` doc comment).
+          const color = !highlight
+            ? undefined
+            : stage.stage === 'replacement_transit'
+              ? 'var(--state-error)'
+              : statusColor(stage.stage);
           const style = color
             ? ({
                 '--stage-color': color,

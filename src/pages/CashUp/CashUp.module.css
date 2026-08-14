@@ -140,6 +140,17 @@
   white-space: nowrap;
 }
 
+.outstandingBadge {
+  font: var(--text-caption);
+  font-weight: 600;
+  color: var(--state-warning);
+  background: color-mix(in srgb, var(--state-warning) 13%, transparent);
+  border: 1px solid color-mix(in srgb, var(--state-warning) 35%, transparent);
+  border-radius: var(--radius-sm);
+  padding: 2px var(--space-xs);
+  white-space: nowrap;
+}
+
 .amount {
   font: var(--text-body);
   font-weight: 600;

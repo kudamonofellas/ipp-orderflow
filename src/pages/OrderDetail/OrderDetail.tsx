@@ -67,8 +67,10 @@ import {
   returnBucketsForOrder,
   STAGE_LABELS,
   dispatchSubStatus,
+  isOrderLocked,
   type ReturnStage,
 } from "../../lib/pipeline";
+import { redactHistoryPrices } from "../../lib/redactHistory";
 import { dateCode } from "../../lib/orderNo";
 import { ImageDetailsModal } from "../../components/ImageDetailsModal/ImageDetailsModal";
 import styles from "./OrderDetail.module.css";
@@ -420,6 +422,7 @@ export function OrderDetail() {
    *  confirm time alongside a fresh `deliverGeo` fix. Never blocks delivery. */
   const [pickupGeo, setPickupGeo] = useState<GeoStamp | null>(null);
   const [reconcilingCod, setReconcilingCod] = useState(false);
+  const [approvingFinance, setApprovingFinance] = useState(false);
   /** The current (non-archived) delivery_proofs row for this order, if any —
    *  drives the read-only post-confirm view. */
   const [activeProof, setActiveProof] =
@@ -612,7 +615,12 @@ export function OrderDetail() {
   const isDelivered = stage === "delivered";
   const isReturned = stage === "returned";
 
-  const canEdit = auth.can("editOrderLines") && !isCancelled && !isDelivered;
+  // Locked once delivered, dispatched-and-taken, or in a terminal off-pipeline
+  // stage (outstanding/cancelled/returned) — `editAfterLock` (Owner by
+  // default, via the Owner short-circuit in `can()`) can override the lock.
+  const canEdit =
+    auth.can("editOrderLines") &&
+    (!isOrderLocked(order) || auth.can("editAfterLock"));
   // A role can advance a stage it owns (flow.capability) OR — if granted the
   // separate "floor helper" capability — cover any stage regardless of owner.
   const canAdvance = flow
@@ -631,6 +639,16 @@ export function OrderDetail() {
   const canAddDocs = auth.can("printDocuments");
   const canProcessReturns = auth.can("processReturns");
   const canSeePrices = auth.can("seePrices");
+  // History card render — same treatment as the Notifications feed
+  // (`useNotifications.ts`): price clauses removed outright (not masked),
+  // and an entry dropped entirely if nothing else was in it. This panel
+  // previously rendered `order_history.what` raw with no `seePrices` gate.
+  const visibleHistory: typeof history = canSeePrices
+    ? history
+    : history.flatMap((h) => {
+        const redacted = redactHistoryPrices(h.what);
+        return redacted === null ? [] : [{ ...h, what: redacted }];
+      });
   const canSeeCustomerContact = auth.can("seeCustomerContact");
   const canConfirmDocsReturned = auth.can("confirmDocsReturned");
   const canTrackCourier = auth.can("trackCourier");
@@ -640,7 +658,15 @@ export function OrderDetail() {
   // camera. At every other stage the item list is read-only (what was
   // ordered / what was prepared). `weighColdStorage` naturally excludes
   // Finance — at cold, Finance's only job is clearing the payment gate.
-  const canWeighHere = stage === "cold" && auth.can("weighColdStorage");
+  // Also needs `helpOtherStages`, same as `canAdvance` below — the
+  // prototype's own `canWeighHere`/`canAct` is uniformly helper-inclusive
+  // across all 4 floor stages (Dev-OrderDetail.jsx:122); this port had
+  // split weighing onto the bare `weighColdStorage` capability, which left
+  // Admin (the floor helper) unable to weigh or attach item photos while
+  // covering someone else's cold-storage queue.
+  const canWeighHere =
+    stage === "cold" &&
+    (auth.can("weighColdStorage") || auth.can("helpOtherStages"));
   const canReorder = auth.can("createOrders");
 
   // Hand-off mode at the dispatch stage — null until the courier/dispatcher
@@ -771,6 +797,19 @@ export function OrderDetail() {
     auth.can("reconcileCOD");
   const showDocsRow =
     isDelivered && !order.docs_returned && canConfirmDocsReturned;
+
+  /* Finance gate — a parallel check alongside Cold Storage's own weighing
+   * (see the `canWeighHere` doc comment above): `stage` stays `'cold'`
+   * throughout, `payment_confirmed` is the actual signal, so this card is
+   * gated on the flag, not a stage transition. Undo is available any time
+   * afterward (not stage-restricted) — flipping the flag back is a fully
+   * self-contained, safely-repeatable write with no other state to
+   * reconcile, unlike the delivered-order Undo which has to restore a whole
+   * pre-delivery snapshot. */
+  const canApproveFinance = auth.can("approveFinance");
+  const showFinanceApproveRow =
+    stage === "cold" && !order.payment_confirmed && canApproveFinance;
+  const showFinanceUndoRow = !!order.payment_confirmed && canApproveFinance;
 
   /* Split attachments: manual doc entries vs file uploads. Excludes
    * delivery-proof photos (doc_type 'cond'/'recv'/'signed', proof_id set) —
@@ -1318,6 +1357,60 @@ export function OrderDetail() {
       alert(`Failed to reconcile COD: ${res.error}`);
     }
     setReconcilingCod(false);
+  }
+
+  /** Clears the Finance gate — the previously-missing write behind the
+   *  `approveFinance` capability and the "Orders awaiting finance approval"
+   *  Needs Attention bucket, which existed with nothing to actually press.
+   *  Mirrors the prototype's Finance/Owner-gated "Clear — OK to proceed"
+   *  (`Dev-OrderDetail.jsx:678-742`) — Clear-only, no reject; a Finance user
+   *  who won't clear simply leaves the order parked here. */
+  async function handleApproveFinance() {
+    if (!id) return;
+    setApprovingFinance(true);
+    const res = await updateOrder(id, {
+      payment_confirmed: true,
+      payment_confirmed_at: new Date().toISOString(),
+    });
+    if (!res.error && res.data) {
+      setOrder(res.data);
+      await appendOrderHistory({
+        order_id: id,
+        what: "Payment cleared — Finance",
+        who: userId,
+        stage: null,
+      });
+      const hRes = await readOrderHistory(id);
+      if (!hRes.error) setHistory(hRes.data ?? []);
+    } else {
+      alert(`Failed to clear payment: ${res.error}`);
+    }
+    setApprovingFinance(false);
+  }
+
+  /** Undoes an accidental Finance clearance — just flips the flag back, no
+   *  stage or snapshot to reconcile (see the `showFinanceUndoRow` comment). */
+  async function handleUndoFinanceClear() {
+    if (!id) return;
+    setApprovingFinance(true);
+    const res = await updateOrder(id, {
+      payment_confirmed: false,
+      payment_confirmed_at: null,
+    });
+    if (!res.error && res.data) {
+      setOrder(res.data);
+      await appendOrderHistory({
+        order_id: id,
+        what: "Payment clearance undone",
+        who: userId,
+        stage: null,
+      });
+      const hRes = await readOrderHistory(id);
+      if (!hRes.error) setHistory(hRes.data ?? []);
+    } else {
+      alert(`Failed to undo payment clearance: ${res.error}`);
+    }
+    setApprovingFinance(false);
   }
 
   async function handleUploadProofPhoto(
@@ -2270,7 +2363,7 @@ export function OrderDetail() {
             <div className={styles.deliveredBanner}>
               <Card
                 style={{
-                  backgroundColor: "var(--bg-surface-hover)",
+                  backgroundColor: "var(--bg-surface-hover-dark)",
                   borderColor: "var(--accent-primary)",
                 }}
               >
@@ -3028,22 +3121,18 @@ export function OrderDetail() {
           {/* Stage Action Controls */}
           {!isCancelled && (
             <div className={styles.stageActions}>
-              <div
-                style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}
-              >
-                {flow?.next && canAdvance && stage !== "dispatch" && (
-                  <Button
-                    type="button"
-                    variant="primary"
-                    size="lg"
-                    onClick={handleAdvance}
-                    disabled={advancing}
-                    className={styles.actionBtn}
-                  >
-                    {advancing ? t("Saving…") : t(flow.advanceLabel)}
-                  </Button>
-                )}
-              </div>
+              {flow?.next && canAdvance && stage !== "dispatch" && (
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="lg"
+                  onClick={handleAdvance}
+                  disabled={advancing}
+                  className={styles.actionBtn}
+                >
+                  {advancing ? t("Saving…") : t(flow.advanceLabel)}
+                </Button>
+              )}
 
               {/* Hand-off mode chooser — dispatch stage, no mode picked yet */}
               {stage === "dispatch" && canAdvance && !handoffMode && (
@@ -3679,9 +3768,70 @@ export function OrderDetail() {
                 </Card>
               )}
               {isDelivered && order.docs_returned && (
-                <p style={{ margin: "0.5rem 0" }}>
-                  ✓ {t("Signed DO & SI returned")}
-                </p>
+                <Card
+                  style={{
+                    borderColor: "var(--accent-primary)",
+                    backgroundColor: "var(--bg-surface-hover-dark)",
+                  }}
+                >
+                  <div
+                    className={styles.left}
+                    style={{ color: "var(--accent-primary)" }}
+                  >
+                    <Icon name="check" />
+                    <div className={styles.fieldLabel}>
+                      {t("Signed DO & SI returned")}
+                    </div>
+                  </div>
+                </Card>
+              )}
+
+              {showFinanceApproveRow && (
+                <Card className={styles.followUpsCard}>
+                  <div className={styles.heading}>
+                    <span>{t("Finance gate")}</span>
+                  </div>
+                  <div className={styles.followUpRow}>
+                    <Icon
+                      name="cash"
+                      size={24}
+                      className={styles.followUpIcon}
+                    />
+                    <div className={styles.followUpMain}>
+                      <span className={styles.fieldLabel}>
+                        {t("Awaiting payment approval")}
+                      </span>
+                      <span className={styles.secondary}>
+                        {t("Finance is clearing payment in parallel")}
+                      </span>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="md"
+                      onClick={handleApproveFinance}
+                      disabled={approvingFinance}
+                      style={{ width: "140px" }}
+                    >
+                      {approvingFinance
+                        ? t("Saving…")
+                        : t("Approve Payment")}
+                    </Button>
+                  </div>
+                </Card>
+              )}
+              {showFinanceUndoRow && (
+                <div className={styles.undoRow}>
+                  <Button
+                    type="button"
+                    variant="tertiary"
+                    onClick={handleUndoFinanceClear}
+                    disabled={approvingFinance}
+                  >
+                    <Icon name="undo" size={16} />
+                    {t("Pressed wrongly? Undo payment clearance")}
+                  </Button>
+                </div>
               )}
 
               {canTrackCourier &&
@@ -4142,10 +4292,10 @@ export function OrderDetail() {
             <Card className={styles.historyCard}>
               <h3 className={styles.heading}>{t("History")}</h3>
               <div className={styles.historyListScroll}>
-                {history.length === 0 && (
+                {visibleHistory.length === 0 && (
                   <p className={styles.muted}>{t("No history yet.")}</p>
                 )}
-                {history
+                {visibleHistory
                   .slice()
                   .reverse()
                   .map((h, i) => (

@@ -13,7 +13,7 @@ IPP-OrderFlow is a B2B / Horeca order-management application for **PT Inti Panga
 
 ## Core User Flow
 
-1. **Intake** — Admin fills the "New Order" form from scratch: customer, product lines, quantities, and price. A free-text line matcher (paste a line, match it against the product catalog) speeds up manual entry but there is no automated order-parsing/messaging intake anymore — that feature (in-app WhatsApp-message paste + parsing, and an automated Evolution API → n8n → Directus draft-order pipeline) was removed from the frontend on 2026-08-11 (see `progress-tracker.md`). Admin reviews the resulting lines before the order enters the pipeline.
+1. **Intake** — Admin starts a new order via "New Order" → channel select (Horeca only; Meatfellas B2C flagged "Soon") → paste a raw WhatsApp order message to auto-parse and prefill the form (or "Skip — enter manually" for a blank form), then reviews/corrects every line before the order enters the pipeline. A free-text line matcher (paste a line, match it against the product catalog) also speeds up manual entry on individual lines. The in-app paste-and-parse flow was removed from the frontend on 2026-08-11 and restored on 2026-08-14 at the user's request — only the Dashboard's automated triage panel (which read incoming messages from the separate, still-orphaned Evolution API → n8n → Directus pipeline) stays removed; see `progress-tracker.md`.
 2. **Cold Storage (Warehouse)** — Warehouse staff pull the order, perform pull & catch-weight weighing (kg/loaf), and attach photo proof. Weight lines self-satisfy; counted units (pcs/box/ekor) may be short.
 3. **Finance (parallel to Cold Storage)** — Finance reviews the order and Approves or Rejects it. This gate runs in parallel with Cold Storage.
 4. **Production** — Production receives cut instructions (e.g. steak 2cm, vacuum per pcs) and marks the order CUTTING → PACKING → READY.
@@ -28,9 +28,10 @@ IPP-OrderFlow is a B2B / Horeca order-management application for **PT Inti Panga
 
 ### Order Creation
 
-- **Admin manually creates a new order in-app** — a "New Order" CTA opens a form to enter customer, product lines, and quantities directly.
-- **Free-text line matcher** (`AddItemModal`) — Admin can paste/type a single line (e.g. `"udang 5kg"`) and it's matched against the Directus `products` table to speed up filling a line; this is local, per-line matching only, not an order-level parsing/intake pipeline.
-- **Removed (2026-08-11)**: the in-app "paste a raw WhatsApp order message and auto-fill the whole form" flow, the automated Evolution API → n8n → Directus draft-order pipeline and its dashboard triage panel, and the per-team "learned corrections" matching memory. See `progress-tracker.md` for the removal entry and `architecture.md` for the resulting backend-orphan note (n8n/Evolution API may still write to the `messages` table; nothing in the frontend reads it anymore).
+- **Admin manually creates a new order in-app** — a "New Order" CTA opens a channel-select step, then either pastes a WhatsApp order message to auto-parse and prefill the form or skips straight to a blank one.
+- **In-app WhatsApp-message paste + parse** (`ChannelSelectModal` → `IntakeModal` → `OrderNew`'s prefill/side-panel) — Admin pastes a raw order message, it's sent to the shared `/order-api/parse-order` service and the structured draft (customer, lines, delivery date, etc.) prefills the New Order form for review/correction. Matched lines that get confirmed feed a shared "learned corrections" memory (`corrections` table, reviewable/deletable in Settings' "Intake Learning" section) so future parses of the same phrasing recognize it automatically. Removed from the frontend on 2026-08-11, restored 2026-08-14 at the user's request.
+- **Free-text line matcher** (`AddItemModal`) — Admin can paste/type a single line (e.g. `"udang 5kg"`) and it's matched against the Directus `products` table to speed up filling a line; this is local, per-line matching only, independent of the message-level parse flow above.
+- **Still removed (2026-08-11)**: the Dashboard's automated draft-order triage panel and the Evolution API → n8n → Directus pipeline it read from (raw `messages` table rows). This is a separate, backend-only automation the in-app paste flow above does not depend on — see `architecture.md` for the resulting backend-orphan note.
 
 ### Order Pipeline
 
@@ -116,7 +117,7 @@ IPP-OrderFlow is a B2B / Horeca order-management application for **PT Inti Panga
 
 - Firebase (entirely dropped — replaced by Directus + Postgres)
 - Cloud Functions
-- WhatsApp-message-based order intake — both the in-app copy-paste-and-parse flow and the automated Evolution API → n8n → Directus draft pipeline, plus the per-team "learned corrections" matching memory, were built and then fully removed from the frontend on 2026-08-11 (see `progress-tracker.md`). The `AddItemModal` free-text line matcher (local, per-line, no messaging involved) is kept.
+- The automated Evolution API → n8n → Directus draft-order pipeline and its Dashboard triage panel — removed from the frontend on 2026-08-11 and, per explicit user request, kept removed on the 2026-08-14 restore of the rest of intake (see Order Creation above and `progress-tracker.md`). The backend n8n workflow itself is untouched and orphaned (see `architecture.md`).
 - Prototype's `live.js` BroadcastChannel same-browser tracking (replaced by Directus realtime)
 - Manual demo login (replaced by Directus auth)
 - Full inventory management for Warehouse (only cold storage queue in v1)

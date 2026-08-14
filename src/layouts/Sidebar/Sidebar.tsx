@@ -39,8 +39,18 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { to: "/", label: "Dashboard", icon: "dashboard" },
   { to: "/orders", label: "Orders", icon: "orders" },
-  { to: "/customers", label: "Customers", icon: "customers", cap: "browseCustomers" },
-  { to: "/products", label: "Products", icon: "products", cap: "browseProducts" },
+  {
+    to: "/customers",
+    label: "Customers",
+    icon: "customers",
+    cap: "browseCustomers",
+  },
+  {
+    to: "/products",
+    label: "Products",
+    icon: "products",
+    cap: "browseProducts",
+  },
   { to: "/reports", label: "Reports", icon: "reports", cap: "accessReports" },
   { to: "/settings", label: "Settings", icon: "settings" },
 ];
@@ -84,7 +94,9 @@ export function Sidebar() {
   const name = useCurrentUserName();
   const can = useCan();
   const { t } = useLanguage();
-  const visibleNavItems = NAV_ITEMS.filter((item) => !item.cap || can(item.cap));
+  const visibleNavItems = NAV_ITEMS.filter(
+    (item) => !item.cap || can(item.cap),
+  );
 
   async function handleLogout() {
     await logout();
@@ -136,7 +148,7 @@ export function Sidebar() {
           type="button"
           variant="tertiary"
           size="md"
-          icon={collapsed ? "chevronRight" : "chevronLeft"}
+          icon={collapsed ? "circleArrowRight" : "circleArrowLeft"}
           style={{
             backgroundColor: "transparent",
             gap: "var(--space-md)",

@@ -37,11 +37,29 @@ export function CashUp() {
     if (!canView) navigate("/", { replace: true });
   }, [canView, navigate]);
 
-  const { groups, expected, collected, remaining, confirmedIds, confirmingIds, confirm, loading, error } =
-    useCashUp();
+  const {
+    groups,
+    expected,
+    collected,
+    remaining,
+    confirmedIds,
+    confirmingIds,
+    confirm,
+    loading,
+    error,
+  } = useCashUp();
 
-  async function handleConfirm(orderId: string, customerName: string, amount: number) {
-    if (!(await confirmDialog(`Confirm ${currency.format(amount)} received from ${customerName}?`))) return;
+  async function handleConfirm(
+    orderId: string,
+    customerName: string,
+    amount: number,
+  ) {
+    if (
+      !(await confirmDialog(
+        `Confirm ${currency.format(amount)} received from ${customerName}?`,
+      ))
+    )
+      return;
     const res = await confirm(orderId);
     if (res.error) {
       alert(`Failed to confirm: ${res.error}`);
@@ -52,7 +70,12 @@ export function CashUp() {
     <div className={styles.container}>
       <header className={styles.header}>
         <div className={styles.titleSection}>
-          <Button type="button" variant="tertiary" icon="chevronLeft" onClick={() => navigate(backTo)}>
+          <Button
+            type="button"
+            variant="tertiary"
+            icon="chevronLeft"
+            onClick={() => navigate(backTo)}
+          >
             {t("Back")}
           </Button>
           <h1 className={styles.title}>{t("Cash-up")}</h1>
@@ -70,19 +93,29 @@ export function CashUp() {
       ) : error ? (
         <div className={styles.error}>{error}</div>
       ) : groups.length === 0 ? (
-        <div className={styles.muted}>{t("Nothing to reconcile — no COD orders out for delivery right now.")}</div>
+        <div className={styles.muted}>
+          {t(
+            "Nothing to reconcile — no COD orders out for delivery right now.",
+          )}
+        </div>
       ) : (
         groups.map((group) => (
           <div key={group.courier} className={styles.courierGroup}>
             <div className={styles.courierHeader}>
               <div className={styles.courierLeft}>
-                <Avatar initials={getInitials(group.courier)} label={group.courier} size="md" />
+                <Avatar
+                  initials={getInitials(group.courier)}
+                  label={group.courier}
+                  size="md"
+                />
                 <span className={styles.courierName}>{group.courier}</span>
                 <span className={styles.dropCount}>
                   {group.orders.length} {t("drop(s)")}
                 </span>
               </div>
-              <span className={styles.courierSubtotal}>{currency.format(group.subtotal)}</span>
+              <span className={styles.courierSubtotal}>
+                {currency.format(group.subtotal)}
+              </span>
             </div>
 
             <Card flush className={styles.ordersCard}>
@@ -92,22 +125,40 @@ export function CashUp() {
                 return (
                   <div
                     key={o.orderId}
-                    className={[styles.orderRow, isConfirmed ? styles.orderRowConfirmed : ""].join(" ")}
+                    className={[
+                      styles.orderRow,
+                      isConfirmed ? styles.orderRowConfirmed : "",
+                    ].join(" ")}
                   >
                     <div className={styles.orderLeft}>
-                      <span className={styles.customerName}>{o.customerName}</span>
+                      <span className={styles.customerName}>
+                        {o.customerName}
+                      </span>
                       <span className={styles.orderNo}>{o.orderNo}</span>
+                      {o.isOutstanding && (
+                        <span className={styles.outstandingBadge}>
+                          {t("Partial — balance outstanding")}
+                        </span>
+                      )}
                     </div>
-                    <span className={styles.amount}>{currency.format(o.amount)}</span>
+                    <span className={styles.amount}>
+                      {currency.format(o.amount)}
+                    </span>
                     <Button
                       type="button"
                       variant="secondary"
-                      size="sm"
+                      size="md"
                       icon="tick"
                       disabled={isConfirmed || isConfirming}
-                      onClick={() => handleConfirm(o.orderId, o.customerName, o.amount)}
+                      onClick={() =>
+                        handleConfirm(o.orderId, o.customerName, o.amount)
+                      }
                     >
-                      {isConfirmed ? t("Confirmed") : isConfirming ? t("Saving…") : t("Confirm")}
+                      {isConfirmed
+                        ? t("Confirmed")
+                        : isConfirming
+                          ? t("Saving…")
+                          : t("Confirm")}
                     </Button>
                   </div>
                 );

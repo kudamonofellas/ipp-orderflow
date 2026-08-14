@@ -31,13 +31,14 @@
   justify-content: space-between;
   gap: var(--space-lg);
   flex-wrap: wrap;
+  padding-bottom: var(--space-lg);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .welcome {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: var(--space-xs);
 }
 
 .label {
@@ -93,8 +94,6 @@
 
 /* ===== "Needs attention today" / "Done today" digest ===== */
 .digestSection {
-  padding-top: var(--space-lg);
-  border-top: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);

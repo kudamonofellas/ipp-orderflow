@@ -21,6 +21,11 @@
   border-color: var(--state-warning);
 }
 
+.tileLoud:hover {
+  background: color-mix(in srgb, var(--state-warning), transparent 80%);
+  border-color: var(--state-warning);
+}
+
 .header {
   display: flex;
   align-items: center;

@@ -97,6 +97,36 @@ export const DISPATCH_SUBSTATUS_LABELS: Record<DispatchSubStatus, string> = {
 };
 
 /**
+ * Whether an order is locked against ordinary editing — ported from the
+ * prototype's `hasLeftWarehouse()` (`Dev-domain.js:52-57`) plus its call
+ * site's extra terminal-stage check (`Dev-OrderDetail.jsx:133`): locked once
+ * delivered, OR once dispatched *and actually taken* (courier/pickup/3rd-party
+ * — not merely sitting at dispatch unassigned), OR in one of the off-pipeline
+ * terminal states (`outstanding`/`cancelled`/`returned`). Callers combine this
+ * with the `editAfterLock` capability (`!isOrderLocked(order) ||
+ * can('editAfterLock')`) so Owner (or anyone explicitly granted the override)
+ * can still edit past the lock.
+ */
+export function isOrderLocked(order: {
+  stage?: string | null;
+  taken_by?: string | null;
+  pickup?: boolean | null;
+  third_party?: boolean | null;
+}): boolean {
+  if (order.stage === 'delivered') return true;
+  if (
+    order.stage === 'dispatch' &&
+    (order.taken_by || order.pickup || order.third_party)
+  )
+    return true;
+  return (
+    order.stage === 'outstanding' ||
+    order.stage === 'cancelled' ||
+    order.stage === 'returned'
+  );
+}
+
+/**
  * Convenience wrapper for callers (StatusPill's `subLabel` prop) that just
  * want the label string, not the typed enum — still routes through the one
  * `dispatchSubStatus()` predicate above, not a second copy of the check.

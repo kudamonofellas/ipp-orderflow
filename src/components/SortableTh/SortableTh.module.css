@@ -1,0 +1,42 @@
+.th {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  transition:
+    background var(--duration-fast, 150ms) ease,
+    color var(--duration-fast, 150ms) ease;
+}
+
+.th:hover,
+.th:focus-visible {
+  background: var(--bg-surface-hover);
+  color: var(--text-primary);
+}
+
+.th:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: -2px;
+}
+
+.active {
+  color: var(--text-primary);
+}
+
+.inner {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.iconWrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent-primary);
+  transform: rotate(0deg);
+  transition: transform var(--duration-normal, 200ms) ease;
+}
+
+.iconDesc {
+  transform: rotate(180deg);
+}

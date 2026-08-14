@@ -2,7 +2,9 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { IconName } from "../../components/Icon/icons";
 import { Button } from "../../components/Button/Button";
+import { ChannelSelectModal } from "../../components/ChannelSelectModal/ChannelSelectModal";
 import { Icon } from "../../components/Icon/Icon";
+import { IntakeModal } from "../../components/IntakeModal/IntakeModal";
 import { DigestTile } from "../../components/DigestTile/DigestTile";
 import { MetricCard } from "../../components/MetricCard/MetricCard";
 import { NotificationsPopover } from "../../components/NotificationsPopover/NotificationsPopover";
@@ -15,7 +17,12 @@ import {
   useRole,
 } from "../../hooks/useAuth";
 import { useLanguage } from "../../hooks/useLanguage";
-import { PIPELINE_STAGES, ROLE_FOCUS, RETURN_STAGES, statusColor } from "../../lib/pipeline";
+import {
+  PIPELINE_STAGES,
+  ROLE_FOCUS,
+  RETURN_STAGES,
+  statusColor,
+} from "../../lib/pipeline";
 import { useAttentionItems } from "../../hooks/useAttentionItems";
 import { useCashUp } from "../../hooks/useCashUp";
 import {
@@ -30,6 +37,7 @@ import { AttentionPanel } from "./sections/AttentionPanel";
 import { OpenOrdersPanel } from "./sections/OpenOrdersPanel";
 import { ReturnWorkflowsPanel } from "./sections/ReturnWorkflowsPanel";
 import styles from "./Dashboard.module.css";
+import type { ParsedOrderDraft } from "../../lib/directus";
 
 function todayISO(): string {
   const d = new Date();
@@ -61,7 +69,7 @@ const METRIC_ICONS: Record<string, IconName> = {
 /** Admin dashboard — mirrors context/designs/Dashboard.png. */
 export function Dashboard() {
   const navigate = useNavigate();
-  const [sortBy, setSortBy] = useState("-no");
+  const [sortBy, setSortBy] = useState("no");
   const [totalRange, setTotalRange] = useState<RangeWithLabel>({
     val: { type: "today" },
     label: "Today",
@@ -167,6 +175,34 @@ export function Dashboard() {
     },
   ];
 
+  // Multi-step "Add New Order" flow:
+  // step 0: idle, step 1: channel selection, step 2: intake
+  const [orderStep, setOrderStep] = useState<0 | 1 | 2>(0);
+
+  function startNewOrder() {
+    setOrderStep(1);
+  }
+  function closeAll() {
+    setOrderStep(0);
+  }
+
+  function handleChannelSelect(_channel: "horeca") {
+    // channel stored for IntakeModal label — currently only horeca
+    void _channel;
+    setOrderStep(2);
+  }
+
+  function handleParsed(
+    draft: ParsedOrderDraft,
+    rawText: string,
+    attachments: File[],
+  ) {
+    setOrderStep(0); // close the intake modal
+    navigate("/orders/new", {
+      state: { prefill: draft, rawText, attachments, from: "/" },
+    });
+  }
+
   const isLoading = ordersLoading || countsLoading || attentionLoading;
 
   const currentPipeline = stageCounts.filter((stage) =>
@@ -190,15 +226,58 @@ export function Dashboard() {
                 <h1 className={styles.welcomeName}>{currentUserName || "—"}</h1>
               </div>
 
+              {/* Quick-action row — Deliveries / Pick list / Cash-up. Each card
+                stays gated by its capability (hidden entirely, not shown
+                empty); when the capability is present but there's nothing to
+                act on, it renders "-" rather than disappearing. */}
+              {quickActionCount > 0 && (
+                <div
+                  className={styles.quickActionsRow}
+                  style={
+                    {
+                      "--quick-action-count": quickActionCount,
+                    } as React.CSSProperties
+                  }
+                >
+                  {canViewDeliveryRun && (
+                    <QuickActionCard
+                      icon="navigation"
+                      label={t("My deliveries")}
+                      value={
+                        deliveryStops.length > 0 ? deliveryStops.length : "-"
+                      }
+                      title={t("See the delivery run-sheet")}
+                      onClick={() => navigate("/deliveries")}
+                    />
+                  )}
+                  {canViewPickList && (
+                    <QuickActionCard
+                      icon="picklist"
+                      label={t("Pick list")}
+                      value={pickListOrderCount > 0 ? pickListOrderCount : "-"}
+                      title={t("See the aggregate pick list")}
+                      onClick={() => navigate("/picklist")}
+                    />
+                  )}
+                  {canReconcileCOD && (
+                    <QuickActionCard
+                      icon="cash"
+                      label={t("Cash-up")}
+                      value={formatRupiahShort(cashUpRemaining)}
+                      title={t("Reconcile COD cash")}
+                      onClick={() => navigate("/cashup")}
+                    />
+                  )}
+                </div>
+              )}
+
               <div className={styles.topActions}>
                 <NotificationsPopover />
                 {canCreateOrders && (
                   <Button
                     variant="primary"
                     size="md"
-                    onClick={() =>
-                      navigate("/orders/new", { state: { from: "/" } })
-                    }
+                    onClick={startNewOrder}
                     title={t("Create a new order")}
                     icon="add"
                   >
@@ -208,78 +287,7 @@ export function Dashboard() {
               </div>
             </div>
 
-            {/* Metrics row — 4 cards. */}
-            <div className={styles.metricsRow}>
-              {metrics.map((metric) => (
-                <MetricCard
-                  key={metric.id}
-                  icon={METRIC_ICONS[metric.id] ?? "total"}
-                  value={metric.value}
-                  label={t(metric.label)}
-                  rangeLabel={metric.range}
-                  onRangeChange={
-                    metric.id !== "open"
-                      ? (val, label) => {
-                          if (metric.id === "total")
-                            setTotalRange({ val, label });
-                          else if (metric.id === "delivered")
-                            setDeliveredRange({ val, label });
-                          else if (metric.id === "cancelled")
-                            setCancelledRange({ val, label });
-                        }
-                      : undefined
-                  }
-                />
-              ))}
-            </div>
-
-            {/* Quick-action row — Deliveries / Pick list / Cash-up. Each card
-                stays gated by its capability (hidden entirely, not shown
-                empty); when the capability is present but there's nothing to
-                act on, it renders "-" rather than disappearing. */}
-            {quickActionCount > 0 && (
-              <div
-                className={styles.quickActionsRow}
-                style={
-                  {
-                    "--quick-action-count": quickActionCount,
-                  } as React.CSSProperties
-                }
-              >
-                {canViewDeliveryRun && (
-                  <QuickActionCard
-                    icon="navigation"
-                    label={t("My deliveries")}
-                    value={
-                      deliveryStops.length > 0 ? deliveryStops.length : "-"
-                    }
-                    suffix={t("to deliver")}
-                    title={t("See the delivery run-sheet")}
-                    onClick={() => navigate("/deliveries")}
-                  />
-                )}
-                {canViewPickList && (
-                  <QuickActionCard
-                    icon="picklist"
-                    label={t("Pick list")}
-                    value={pickListOrderCount > 0 ? pickListOrderCount : "-"}
-                    suffix={t("to pick")}
-                    title={t("See the aggregate pick list")}
-                    onClick={() => navigate("/picklist")}
-                  />
-                )}
-                {canReconcileCOD && (
-                  <QuickActionCard
-                    icon="cash"
-                    label={t("Cash-up")}
-                    value={formatRupiahShort(cashUpRemaining)}
-                    suffix={t("to reconcile")}
-                    title={t("Reconcile COD cash")}
-                    onClick={() => navigate("/cashup")}
-                  />
-                )}
-              </div>
-            )}
+            {/* Digest section (hide/show)&*/}
             {showDigest && !digest.loading && (
               <div className={styles.digestSection}>
                 <div className={styles.sectionHeading}>
@@ -311,6 +319,31 @@ export function Dashboard() {
                 </div>
               </div>
             )}
+
+            {/* Metrics row — 4 cards. */}
+            <div className={styles.metricsRow}>
+              {metrics.map((metric) => (
+                <MetricCard
+                  key={metric.id}
+                  icon={METRIC_ICONS[metric.id] ?? "total"}
+                  value={metric.value}
+                  label={t(metric.label)}
+                  rangeLabel={metric.range}
+                  onRangeChange={
+                    metric.id !== "open"
+                      ? (val, label) => {
+                          if (metric.id === "total")
+                            setTotalRange({ val, label });
+                          else if (metric.id === "delivered")
+                            setDeliveredRange({ val, label });
+                          else if (metric.id === "cancelled")
+                            setCancelledRange({ val, label });
+                        }
+                      : undefined
+                  }
+                />
+              ))}
+            </div>
 
             {/* Stage pills grid. Stages owned by the current role are highlighted. */}
             <div className={styles.pipelineRow}>
@@ -360,6 +393,19 @@ export function Dashboard() {
           </>
         )}
       </div>
+
+      <ChannelSelectModal
+        open={orderStep === 1}
+        onClose={closeAll}
+        onSelect={handleChannelSelect}
+      />
+
+      <IntakeModal
+        open={orderStep === 2}
+        channel="horeca"
+        onClose={closeAll}
+        onParsed={handleParsed}
+      />
     </div>
   );
 }

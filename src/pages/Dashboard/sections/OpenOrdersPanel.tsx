@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { Button } from "../../../components/Button/Button";
 import { Card } from "../../../components/Card/Card";
 import { OrderRows } from "../../../components/OrderRows/OrderRows";
+import { SortableTh } from "../../../components/SortableTh/SortableTh";
 import { useLanguage } from "../../../hooks/useLanguage";
 import type { OpenOrder } from "../../../types/dashboard";
 import styles from "./OpenOrdersPanel.module.css";
@@ -18,13 +19,6 @@ interface OpenOrdersPanelProps {
   onSortChange?: (sort: string) => void;
 }
 
-const SORT_OPTIONS = [
-  { key: "-no", label: "Order ID (Desc)" },
-  { key: "no", label: "Order ID (Asc)" },
-  { key: "-delivery_date", label: "Delivery Date (Desc)" },
-  { key: "delivery_date", label: "Delivery Date (Asc)" },
-];
-
 /** Open Orders panel: table of orders with expandable line rows + pagination. */
 export function OpenOrdersPanel({
   orders,
@@ -34,33 +28,33 @@ export function OpenOrdersPanel({
   page = 1,
   pageSize = 20,
   onPageChange,
-  sortBy = "-no",
+  sortBy = "no",
   onSortChange,
 }: OpenOrdersPanelProps) {
-  const [sortOpen, setSortOpen] = useState(false);
-  const sortDropdownRef = useRef<HTMLDivElement>(null);
   const { t } = useLanguage();
 
-  useEffect(() => {
-    if (!sortOpen) return;
+  // "Items" has no backing DB column (it's a joined line count) — sorting it
+  // is client-side, on just the current page, shadowing the server `sortBy`
+  // rather than being sent to it. `null` means the server sort (`sortBy`) is
+  // the active one.
+  const [itemsSort, setItemsSort] = useState<string | null>(null);
+  const activeSort = itemsSort ?? sortBy;
 
-    function handlePointerDown(event: MouseEvent) {
-      if (!sortDropdownRef.current?.contains(event.target as Node)) {
-        setSortOpen(false);
-      }
+  function handleSort(nextKey: string) {
+    if (nextKey.replace(/^-/, "") === "items") {
+      setItemsSort(nextKey);
+      return;
     }
+    setItemsSort(null);
+    onSortChange?.(nextKey);
+  }
 
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") setSortOpen(false);
-    }
-
-    document.addEventListener("mousedown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [sortOpen]);
+  const displayOrders = itemsSort
+    ? [...orders].sort((a, b) => {
+        const diff = a.lines.length - b.lines.length;
+        return itemsSort.startsWith("-") ? -diff : diff;
+      })
+    : orders;
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const currentPage = Math.min(page, totalPages);
@@ -70,55 +64,7 @@ export function OpenOrdersPanel({
   return (
     <Card>
       <div className={styles.headerWrap}>
-        <h3 className={styles.heading}>{t('Open Orders')}</h3>
-        {onSortChange && (
-          <div className={styles.sortContainer} ref={sortDropdownRef}>
-            <Button
-              type="button"
-              variant="secondary"
-              aria-expanded={sortOpen}
-              icon="chevronDown"
-              size="md"
-              iconPosition="right"
-              style={{
-                minWidth: "180px",
-                justifyContent: "space-between",
-              }}
-              isActive={sortOpen}
-              onClick={() => setSortOpen((prev) => !prev)}
-            >
-              <span>
-                {SORT_OPTIONS.find((o) => o.key === sortBy)?.label ||
-                  "Order ID (Desc)"}
-              </span>
-            </Button>
-            {sortOpen && (
-              <div
-                className={styles.sortDropdown}
-                role="dialog"
-                aria-label="Sort options"
-              >
-                {SORT_OPTIONS.map((opt) => (
-                  <Button
-                    key={opt.key}
-                    variant="ghost"
-                    type="button"
-                    className={[
-                      styles.sortDropdownItem,
-                      sortBy === opt.key ? styles.sortDropdownItemActive : "",
-                    ].join(" ")}
-                    onClick={() => {
-                      onSortChange(opt.key);
-                      setSortOpen(false);
-                    }}
-                  >
-                    {opt.label}
-                  </Button>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
+        <h3 className={styles.heading}>{t("Open Orders")}</h3>
       </div>
 
       {loading ? (
@@ -134,16 +80,16 @@ export function OpenOrdersPanel({
               <thead>
                 <tr>
                   <th className={styles.arrowHead} aria-label="Expand" />
-                  <th style={{ textAlign: "left" }}>{t('Order ID')}</th>
-                  <th style={{ textAlign: "left" }}>{t('Stage')}</th>
-                  <th style={{ textAlign: "left" }}>{t('Order Date')}</th>
-                  <th style={{ textAlign: "left" }}>{t('Delivery Date')}</th>
-                  <th style={{ textAlign: "left" }}>{t('Sales Rep')}</th>
-                  <th style={{ textAlign: "left" }}>{t('Customer')}</th>
-                  <th style={{ textAlign: "left" }}>{t('Items')}</th>
+                  <SortableTh label={t("Order ID")} sortKey="no" activeSort={activeSort} onSort={handleSort} />
+                  <SortableTh label={t("Stage")} sortKey="stage" activeSort={activeSort} onSort={handleSort} />
+                  <SortableTh label={t("Order Date")} sortKey="order_date" activeSort={activeSort} onSort={handleSort} />
+                  <SortableTh label={t("Delivery Date")} sortKey="delivery_date" activeSort={activeSort} onSort={handleSort} />
+                  <SortableTh label={t("Sales Rep")} sortKey="sales" activeSort={activeSort} onSort={handleSort} />
+                  <SortableTh label={t("Customer")} sortKey="customer_name" activeSort={activeSort} onSort={handleSort} />
+                  <SortableTh label={t("Items")} sortKey="items" activeSort={activeSort} onSort={handleSort} />
                 </tr>
               </thead>
-              {orders.map((order) => (
+              {displayOrders.map((order) => (
                 <OrderRows key={order.id} order={order} />
               ))}
             </table>

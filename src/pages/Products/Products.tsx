@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Icon } from '../../components/Icon/Icon';
 import { Card } from '../../components/Card/Card';
+import { SortableTh } from '../../components/SortableTh/SortableTh';
 import { Toggle } from '../../components/Toggle/Toggle';
 import { readProducts, updateProduct, aggregateProducts } from '../../lib/directus';
 import { useAuth } from '../../hooks/useAuth';
@@ -35,6 +36,7 @@ export function Products() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
+  const [sortBy, setSortBy] = useState('name');
   const [activeFilter, setActiveFilter] = useState<ActiveFilter>('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -82,7 +84,7 @@ export function Products() {
           filter,
           limit: PAGE_SIZE,
           offset: (page - 1) * PAGE_SIZE,
-          sort: ['name'],
+          sort: [sortBy],
           fields: ['id', 'name', 'accurate_name', 'category', 'grade', 'brand', 'form', 'pack', 'oos'],
         }),
         aggregateProducts({
@@ -114,10 +116,15 @@ export function Products() {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [search, page, activeFilter, buildFilter]);
+  }, [search, page, sortBy, activeFilter, buildFilter]);
 
   const handleSearchChange = (value: string) => {
     setSearch(value);
+    setPage(1);
+  };
+
+  const handleSort = (next: string) => {
+    setSortBy(next);
     setPage(1);
   };
 
@@ -209,10 +216,10 @@ export function Products() {
           <table className={styles.table}>
             <thead>
               <tr>
-                <th className={styles.th}>{t('Name')}</th>
-                <th className={styles.th}>{t('Category')}</th>
+                <SortableTh label={t('Name')} sortKey="name" activeSort={sortBy} onSort={handleSort} className={styles.th} />
+                <SortableTh label={t('Category')} sortKey="category" activeSort={sortBy} onSort={handleSort} className={styles.th} />
                 <th className={styles.th}>{t('Grade')}</th>
-                <th className={styles.th}>{t('Brand')}</th>
+                <SortableTh label={t('Brand')} sortKey="brand" activeSort={sortBy} onSort={handleSort} className={styles.th} />
                 <th className={styles.th}>{t('Form / Pack')}</th>
                 {canToggleOOS && (
                   <th className={styles.th}>{t('Active')}</th>

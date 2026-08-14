@@ -6,6 +6,7 @@ import { Card } from '../../components/Card/Card';
 import { useAuth } from '../../hooks/useAuth';
 import { useLanguage } from '../../hooks/useLanguage';
 import { Avatar } from '../../components/Avatar/Avatar';
+import { SortableTh } from '../../components/SortableTh/SortableTh';
 import { getInitials } from '../../lib/initials';
 import { readCustomers, aggregateCustomers } from '../../lib/directus';
 import type { CustomersCollection } from '../../types/directus';
@@ -33,6 +34,7 @@ export function Customers() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
+  const [sortBy, setSortBy] = useState('name');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -58,7 +60,7 @@ export function Customers() {
           filter,
           limit: PAGE_SIZE,
           offset: (page - 1) * PAGE_SIZE,
-          sort: ['name'],
+          sort: [sortBy],
           fields: ['id', 'name', 'company_name', 'channel', 'contact', 'area', 'pay_method', 'term_days'],
         }),
         aggregateCustomers({
@@ -90,11 +92,16 @@ export function Customers() {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [search, page]);
+  }, [search, page, sortBy]);
 
   // Reset to page 1 when search changes
   const handleSearch = (value: string) => {
     setSearch(value);
+    setPage(1);
+  };
+
+  const handleSort = (next: string) => {
+    setSortBy(next);
     setPage(1);
   };
 
@@ -140,12 +147,12 @@ export function Customers() {
         <table className={styles.table}>
           <thead>
             <tr>
-              <th className={styles.th}>{t('Name / Company')}</th>
-              <th className={styles.th}>{t('Channel')}</th>
+              <SortableTh label={t('Name / Company')} sortKey="name" activeSort={sortBy} onSort={handleSort} className={styles.th} />
+              <SortableTh label={t('Channel')} sortKey="channel" activeSort={sortBy} onSort={handleSort} className={styles.th} />
               <th className={styles.th}>{t('Contact')}</th>
-              <th className={styles.th}>{t('Area')}</th>
-              <th className={styles.th}>{t('Payment')}</th>
-              <th className={styles.th}>{t('Term')}</th>
+              <SortableTh label={t('Area')} sortKey="area" activeSort={sortBy} onSort={handleSort} className={styles.th} />
+              <SortableTh label={t('Payment')} sortKey="pay_method" activeSort={sortBy} onSort={handleSort} className={styles.th} />
+              <SortableTh label={t('Term')} sortKey="term_days" activeSort={sortBy} onSort={handleSort} className={styles.th} />
             </tr>
           </thead>
           <tbody>

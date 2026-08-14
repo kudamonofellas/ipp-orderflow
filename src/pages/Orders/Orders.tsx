@@ -3,12 +3,16 @@ import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { Card } from "../../components/Card/Card";
 import { Icon } from "../../components/Icon/Icon";
 import { Button } from "../../components/Button/Button";
+import { ChannelSelectModal } from "../../components/ChannelSelectModal/ChannelSelectModal";
+import { IntakeModal } from "../../components/IntakeModal/IntakeModal";
 import { OrderRows } from "../../components/OrderRows/OrderRows";
+import { SortableTh } from "../../components/SortableTh/SortableTh";
 import { useCan } from "../../hooks/useAuth";
 import { useLanguage } from "../../hooks/useLanguage";
 import { useOrders } from "../../hooks/useOrders";
 import { PIPELINE_STAGES, RETURN_STAGES } from "../../lib/pipeline";
 import type { OpenOrder } from "../../types/dashboard";
+import type { ParsedOrderDraft } from "../../lib/directus";
 import styles from "./Orders.module.css";
 
 const STAGE_OPTIONS = [
@@ -24,13 +28,6 @@ const STAGE_OPTIONS = [
   ...RETURN_STAGES.map((s) => ({ key: s.key, label: s.label })),
   { key: "returned", label: "Returned" },
   { key: "cancelled", label: "Cancelled" },
-];
-
-const SORT_OPTIONS = [
-  { key: "-no", label: "Order ID (Desc)" },
-  { key: "no", label: "Order ID (Asc)" },
-  { key: "-delivery_date", label: "Delivery Date (Desc)" },
-  { key: "delivery_date", label: "Delivery Date (Asc)" },
 ];
 
 /** Drives the table headline + empty-state copy based on the selected stage filter. */
@@ -121,14 +118,46 @@ export function Orders() {
     );
   }
 
-  const [sortBy, setSortBy] = useState("-no");
+  const [sortBy, setSortBy] = useState("no");
   const [stageOpen, setStageOpen] = useState(false);
-  const [sortOpen, setSortOpen] = useState(false);
   const stageDropdownRef = useRef<HTMLDivElement>(null);
-  const sortDropdownRef = useRef<HTMLDivElement>(null);
+
+  // "Items" has no backing DB column (it's a joined line count) — sorting it
+  // is client-side, on just the current page, shadowing the server `sortBy`.
+  const [itemsSort, setItemsSort] = useState<string | null>(null);
+  const activeSort = itemsSort ?? sortBy;
+
+  function handleSort(nextKey: string) {
+    if (nextKey.replace(/^-/, "") === "items") {
+      setItemsSort(nextKey);
+      return;
+    }
+    setItemsSort(null);
+    setSortBy(nextKey);
+  }
+
+  // Multi-step "Add New Order" flow: step 0: idle, step 1: channel selection, step 2: intake
+  const [orderStep, setOrderStep] = useState<0 | 1 | 2>(0);
 
   function startNewOrder() {
-    navigate("/orders/new", { state: { from: location.pathname } });
+    setOrderStep(1);
+  }
+  function closeAll() {
+    setOrderStep(0);
+  }
+  function handleChannelSelect(_channel: "horeca") {
+    void _channel;
+    setOrderStep(2);
+  }
+  function handleParsed(
+    draft: ParsedOrderDraft,
+    rawText: string,
+    attachments: File[],
+  ) {
+    setOrderStep(0);
+    navigate("/orders/new", {
+      state: { prefill: draft, rawText, attachments, from: location.pathname },
+    });
   }
 
   const {
@@ -140,6 +169,13 @@ export function Orders() {
     pageSize = 20,
     setPage,
   } = useOrders(stage, search, sortBy);
+
+  const displayOrders = itemsSort
+    ? [...orders].sort((a, b) => {
+        const diff = a.lines.length - b.lines.length;
+        return itemsSort.startsWith("-") ? -diff : diff;
+      })
+    : orders;
 
   const stageCopy = STAGE_COPY[stage] ?? STAGE_COPY.all;
 
@@ -163,27 +199,6 @@ export function Orders() {
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [stageOpen]);
-
-  useEffect(() => {
-    if (!sortOpen) return;
-
-    function handlePointerDown(event: MouseEvent) {
-      if (!sortDropdownRef.current?.contains(event.target as Node)) {
-        setSortOpen(false);
-      }
-    }
-
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") setSortOpen(false);
-    }
-
-    document.addEventListener("mousedown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [sortOpen]);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const currentPage = Math.min(page, totalPages);
@@ -273,51 +288,6 @@ export function Orders() {
           <h3 className={styles.heading}>
             {t(stageCopy.headline)} <span className={styles.count}>{total}</span>
           </h3>
-          <div className={styles.sortContainer} ref={sortDropdownRef}>
-            <Button
-              type="button"
-              variant="secondary"
-              icon="chevronDown"
-              iconPosition="right"
-              style={{
-                width: "200px",
-                justifyContent: "space-between",
-              }}
-              aria-expanded={sortOpen}
-              isActive={sortOpen}
-              onClick={() => setSortOpen((o) => !o)}
-            >
-              <span>
-                {t(SORT_OPTIONS.find((o) => o.key === sortBy)?.label ||
-                  "Order ID (Desc)")}
-              </span>
-            </Button>
-            {sortOpen && (
-              <div
-                className={styles.dropdown}
-                role="dialog"
-                aria-label={t("Sort options")}
-              >
-                {SORT_OPTIONS.map((opt) => (
-                  <Button
-                    key={opt.key}
-                    type="button"
-                    variant="ghost"
-                    className={[
-                      styles.dropdownItem,
-                      sortBy === opt.key ? styles.dropdownItemActive : "",
-                    ].join(" ")}
-                    onClick={() => {
-                      setSortBy(opt.key);
-                      setSortOpen(false);
-                    }}
-                  >
-                    {t(opt.label)}
-                  </Button>
-                ))}
-              </div>
-            )}
-          </div>
         </div>
 
         {loading ? (
@@ -333,16 +303,16 @@ export function Orders() {
                 <thead>
                   <tr>
                     <th className={styles.arrowHead} aria-label={t("Expand")} />
-                    <th style={{ textAlign: "left" }}>{t("Order ID")}</th>
-                    <th style={{ textAlign: "left" }}>{t("Stage")}</th>
-                    <th style={{ textAlign: "left" }}>{t("Order Date")}</th>
-                    <th style={{ textAlign: "left" }}>{t("Delivery Date")}</th>
-                    <th style={{ textAlign: "left" }}>{t("Sales Rep")}</th>
-                    <th style={{ textAlign: "left" }}>{t("Customer")}</th>
-                    <th style={{ textAlign: "left" }}>{t("Items")}</th>
+                    <SortableTh label={t("Order ID")} sortKey="no" activeSort={activeSort} onSort={handleSort} />
+                    <SortableTh label={t("Stage")} sortKey="stage" activeSort={activeSort} onSort={handleSort} />
+                    <SortableTh label={t("Order Date")} sortKey="order_date" activeSort={activeSort} onSort={handleSort} />
+                    <SortableTh label={t("Delivery Date")} sortKey="delivery_date" activeSort={activeSort} onSort={handleSort} />
+                    <SortableTh label={t("Sales Rep")} sortKey="sales" activeSort={activeSort} onSort={handleSort} />
+                    <SortableTh label={t("Customer")} sortKey="customer_name" activeSort={activeSort} onSort={handleSort} />
+                    <SortableTh label={t("Items")} sortKey="items" activeSort={activeSort} onSort={handleSort} />
                   </tr>
                 </thead>
-                {orders.map((order: OpenOrder) => (
+                {displayOrders.map((order: OpenOrder) => (
                   <OrderRows key={order.id} order={order} />
                 ))}
               </table>
@@ -381,6 +351,19 @@ export function Orders() {
           </>
         )}
       </Card>
+
+      <ChannelSelectModal
+        open={orderStep === 1}
+        onClose={closeAll}
+        onSelect={handleChannelSelect}
+      />
+
+      <IntakeModal
+        open={orderStep === 2}
+        channel="horeca"
+        onClose={closeAll}
+        onParsed={handleParsed}
+      />
     </div>
   );
 }
