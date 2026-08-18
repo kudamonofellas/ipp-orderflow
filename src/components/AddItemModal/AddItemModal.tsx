@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { Icon } from '../Icon/Icon';
 import { Button } from '../Button/Button';
 import { useLanguage } from '../../hooks/useLanguage';
-import type { ProductsCollection } from '../../types/directus';
+import { normalizeItemToken } from '../../lib/itemToken';
+import type { ProductsCollection, CorrectionsCollection } from '../../types/directus';
 import styles from './AddItemModal.module.css';
 
 export interface AddItemResult {
@@ -10,12 +11,25 @@ export interface AddItemResult {
     unit: string;
     name: string;
     productId: string | null;
+    /** Normalized lookup key for the `corrections` table — set only when
+     *  the result came from typed free text (the "Match" button), never
+     *  from the plain manual qty/unit/product row. Callers should persist
+     *  `upsertCorrection(rawText, productId)` on save so the same free
+     *  text auto-matches next time. */
+    rawText?: string;
+    /** True when this result came from a previously learned correction
+     *  rather than the plain substring/word-overlap heuristic. */
+    learned?: boolean;
 }
 
 interface AddItemModalProps {
     open: boolean;
     products: ProductsCollection[];
     unitOptions: string[];
+    /** Previously learned token→product corrections, consulted before the
+     *  substring/word-overlap fallback so a manually-fixed match "sticks"
+     *  for the same or similar free text next time. */
+    corrections: CorrectionsCollection[];
     onClose: () => void;
     onConfirm: (result: AddItemResult) => void;
 }
@@ -40,7 +54,7 @@ function defaultResult(products: ProductsCollection[], unitOptions: string[]): A
  * callers own their own line-draft shape; this only ever returns a
  * generic result via onConfirm.
  */
-export function AddItemModal({ open, products, unitOptions, onClose, onConfirm }: AddItemModalProps) {
+export function AddItemModal({ open, products, unitOptions, corrections, onClose, onConfirm }: AddItemModalProps) {
     const { t } = useLanguage();
     const [addItemText, setAddItemText] = useState('');
     const [matchedItem, setMatchedItem] = useState<AddItemResult>(() => defaultResult(products, unitOptions));
@@ -90,8 +104,21 @@ export function AddItemModal({ open, products, unitOptions, onClose, onConfirm }
             }
         }
 
+        // A learned correction wins outright — this is how the manual
+        // Add-Item flow gets smarter the more it's used, mirroring the
+        // WhatsApp-paste parser's own "learned correction wins" rule.
+        const key = normalizeItemToken(searchName || trimmed);
         let matchedProduct: ProductsCollection | undefined;
-        if (searchName) {
+        let learned = false;
+        if (key) {
+            const hit = corrections.find((c) => c.token_key === key);
+            if (hit) {
+                matchedProduct = productsList.find((p) => p.id === hit.product_id);
+                if (matchedProduct) learned = true;
+            }
+        }
+
+        if (!matchedProduct && searchName) {
             const sLower = searchName.toLowerCase();
             matchedProduct = productsList.find((p) => p.name.toLowerCase() === sLower);
             if (!matchedProduct) {
@@ -108,6 +135,8 @@ export function AddItemModal({ open, products, unitOptions, onClose, onConfirm }
             unit,
             name: matchedProduct ? matchedProduct.name : (searchName || trimmed),
             productId: matchedProduct ? matchedProduct.id : null,
+            rawText: key || undefined,
+            learned,
         };
     }
 
@@ -164,6 +193,11 @@ export function AddItemModal({ open, products, unitOptions, onClose, onConfirm }
                 {!isManual && <hr className={styles.matchDivider} />}
                 <div className={styles.subtitle}>
                     {isManual ? t('or add manually:') : t('Matched result — review and adjust:')}
+                    {!isManual && matchedItem.learned && (
+                        <span style={{ color: 'var(--state-success)', marginLeft: 8, fontWeight: 600 }}>
+                            ✓ {t('learned match')}
+                        </span>
+                    )}
                 </div>
                 <div className={styles.matchedResultRow}>
                     <input
@@ -181,11 +215,14 @@ export function AddItemModal({ open, products, unitOptions, onClose, onConfirm }
                         className={styles.editSelect} style={{ flex: 1, minWidth: 0 }} value={matchedItem.productId ?? '__custom__'}
                         onChange={(e) => {
                             const val = e.target.value;
+                            // A hand-picked product is no longer "the learned
+                            // result" — clear the badge so it doesn't keep
+                            // claiming credit for a manual correction.
                             if (val === '__custom__') {
-                                setMatchedItem((prev) => ({ ...prev, productId: null }));
+                                setMatchedItem((prev) => ({ ...prev, productId: null, learned: false }));
                             } else {
                                 const prod = products.find((p) => p.id === val);
-                                setMatchedItem((prev) => ({ ...prev, productId: val, name: prod?.name ?? prev.name }));
+                                setMatchedItem((prev) => ({ ...prev, productId: val, name: prod?.name ?? prev.name, learned: false }));
                             }
                         }}
                     >

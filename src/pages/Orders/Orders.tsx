@@ -118,7 +118,20 @@ export function Orders() {
     );
   }
 
-  const [sortBy, setSortBy] = useState("no");
+  // Sort lives in the URL too, same reasoning as stage/search above — so it
+  // survives OrderDetail's Back button (which navigates to the exact
+  // pathname+search captured at click time, see OrderRows.tsx).
+  const sortBy = searchParams.get("sort") || "-no";
+
+  function setSortBy(next: string) {
+    setSearchParams((prev) => {
+      const params = new URLSearchParams(prev);
+      if (next === "-no") params.delete("sort");
+      else params.set("sort", next);
+      return params;
+    });
+  }
+
   const [stageOpen, setStageOpen] = useState(false);
   const stageDropdownRef = useRef<HTMLDivElement>(null);
 

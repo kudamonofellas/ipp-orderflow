@@ -71,9 +71,17 @@ export function useNotifications(): UseNotificationsResult {
   const byDayRef = useRef<Map<string, DayBucket>>(new Map());
   const labelByOrderIdRef = useRef<Map<string, string>>(new Map());
   const offsetRef = useRef(0);
-  const cancelledRef = useRef(false);
+  // An incrementing generation counter, not a boolean — React 18 StrictMode
+  // double-invokes this hook's mount effect in dev (mount → cleanup →
+  // mount), and a plain `cancelledRef.current = true/false` boolean gets
+  // reset back to false by the *second* mount before the *first* call's
+  // async continuation resumes, so its stale results still land and
+  // duplicate every entry. Each call captures the epoch at start and only
+  // applies its results if the epoch is still current when it resumes.
+  const epochRef = useRef(0);
 
   const fetchBatch = useCallback(async () => {
+    const myEpoch = epochRef.current;
     const historyRes = await readOrderHistoryFeed({
       fields: ['id', 'order_id', 'at', 'what'],
       sort: ['-at'],
@@ -81,7 +89,7 @@ export function useNotifications(): UseNotificationsResult {
       offset: offsetRef.current,
     });
 
-    if (cancelledRef.current) return;
+    if (epochRef.current !== myEpoch) return;
 
     if (historyRes.error !== null) {
       setError(`Failed to load notifications: ${historyRes.error}`);
@@ -108,7 +116,7 @@ export function useNotifications(): UseNotificationsResult {
         fields: ['id', 'no'],
         limit: -1,
       });
-      if (cancelledRef.current) return;
+      if (epochRef.current !== myEpoch) return;
       if (ordersRes.data) {
         for (const o of ordersRes.data) {
           labelByOrderIdRef.current.set(o.id, o.no || o.id.slice(0, 8));
@@ -152,19 +160,21 @@ export function useNotifications(): UseNotificationsResult {
 
   const loadMore = useCallback(() => {
     if (loading || loadingMore || !hasMore) return;
+    const myEpoch = epochRef.current;
     setLoadingMore(true);
     fetchBatch().finally(() => {
-      if (!cancelledRef.current) setLoadingMore(false);
+      if (epochRef.current === myEpoch) setLoadingMore(false);
     });
   }, [fetchBatch, loading, loadingMore, hasMore]);
 
   useEffect(() => {
-    cancelledRef.current = false;
+    epochRef.current += 1;
+    const myEpoch = epochRef.current;
     fetchBatch().finally(() => {
-      if (!cancelledRef.current) setLoading(false);
+      if (epochRef.current === myEpoch) setLoading(false);
     });
     return () => {
-      cancelledRef.current = true;
+      epochRef.current += 1;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

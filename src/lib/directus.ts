@@ -603,8 +603,10 @@ export async function createOrderLines(
 ): Promise<DirectusResult<OrderLinesCollection[]>> {
   try {
     const cleanLines = lines.map((l) =>
+      // product_id is deliberately excluded: products.id is a slugified
+      // string ("90-cl-friboi-123"), not a UUID — sanitizeUuidFields was
+      // silently nulling out every real product_id before this fix.
       sanitizeUuidFields(l as unknown as Record<string, unknown>, [
-        "product_id",
         "order_id",
         "weigh_photo",
         "returned_weigh_photo",
@@ -1005,8 +1007,8 @@ export async function updateOrderLine(
   patch: Record<string, unknown>,
 ): Promise<DirectusResult<OrderLinesCollection>> {
   try {
+    // product_id is deliberately excluded — see createOrderLines' comment.
     const cleanPatch = sanitizeUuidFields(patch, [
-      "product_id",
       "order_id",
       "weigh_photo",
       "returned_weigh_photo",
@@ -1031,9 +1033,10 @@ export async function createOrderLine(
   input: CreateOrderLineInput,
 ): Promise<DirectusResult<OrderLinesCollection>> {
   try {
+    // product_id is deliberately excluded — see createOrderLines' comment.
     const cleanInput = sanitizeUuidFields(
       input as unknown as Record<string, unknown>,
-      ["product_id", "order_id", "weigh_photo", "returned_weigh_photo"],
+      ["order_id", "weigh_photo", "returned_weigh_photo"],
     );
     const raw = await getClient().request(
       createItem("order_lines", cleanInput as never),

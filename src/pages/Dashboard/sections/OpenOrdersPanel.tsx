@@ -28,7 +28,7 @@ export function OpenOrdersPanel({
   page = 1,
   pageSize = 20,
   onPageChange,
-  sortBy = "no",
+  sortBy = "-no",
   onSortChange,
 }: OpenOrdersPanelProps) {
   const { t } = useLanguage();

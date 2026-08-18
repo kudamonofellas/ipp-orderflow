@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import type { IconName } from "../../components/Icon/icons";
 import { Button } from "../../components/Button/Button";
 import { ChannelSelectModal } from "../../components/ChannelSelectModal/ChannelSelectModal";
@@ -69,7 +69,19 @@ const METRIC_ICONS: Record<string, IconName> = {
 /** Admin dashboard — mirrors context/designs/Dashboard.png. */
 export function Dashboard() {
   const navigate = useNavigate();
-  const [sortBy, setSortBy] = useState("no");
+  // Sort lives in the URL, same reasoning as Orders.tsx's stage/search — so
+  // it survives OrderDetail's Back button (which navigates to the exact
+  // pathname+search captured at click time, see OrderRows.tsx).
+  const [searchParams, setSearchParams] = useSearchParams();
+  const sortBy = searchParams.get("sort") || "-no";
+  function setSortBy(next: string) {
+    setSearchParams((prev) => {
+      const params = new URLSearchParams(prev);
+      if (next === "-no") params.delete("sort");
+      else params.set("sort", next);
+      return params;
+    });
+  }
   const [totalRange, setTotalRange] = useState<RangeWithLabel>({
     val: { type: "today" },
     label: "Today",

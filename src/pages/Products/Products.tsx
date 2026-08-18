@@ -149,7 +149,7 @@ export function Products() {
       setProducts((prev) =>
         prev.map((p) => (p.id === product.id ? { ...p, oos: product.oos } : p)),
       );
-      alert(res.error);
+      alert(res.error, { title: t('Stock status update failed') });
     }
     setTogglingId(null);
   };

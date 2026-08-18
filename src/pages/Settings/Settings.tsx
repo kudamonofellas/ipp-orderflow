@@ -86,7 +86,7 @@ export function Settings() {
    */
   async function handleSettingUpdate(patch: Record<string, unknown>) {
     const res = await update(patch);
-    if (res.error) alert(res.error);
+    if (res.error) alert(res.error, { title: t("Settings update failed") });
   }
 
   async function handleLogout() {
@@ -115,7 +115,7 @@ export function Settings() {
     });
     setSavingMember(false);
     if (res.error) {
-      alert(res.error);
+      alert(res.error, { title: t("Couldn't save member") });
       return;
     }
     setEditingId(null);
@@ -128,14 +128,18 @@ export function Settings() {
     if (
       !(await confirm(
         `${t("Remove")} ${fullName} — ${t("This cannot be undone.")}`,
-        { danger: true, confirmLabel: t("Remove") },
+        {
+          title: t("Remove team member"),
+          danger: true,
+          confirmLabel: t("Remove"),
+        },
       ))
     ) {
       return;
     }
     const res = await deleteTeamMember(m.id);
     if (res.error) {
-      alert(res.error);
+      alert(res.error, { title: t("Couldn't remove member") });
       return;
     }
     setEditingId(null);
@@ -146,14 +150,18 @@ export function Settings() {
     if (
       !(await confirm(
         `${t("Remove learned match")} "${tokenKey}"? ${t("This cannot be undone.")}`,
-        { danger: true, confirmLabel: t("Remove") },
+        {
+          title: t("Remove learned match"),
+          danger: true,
+          confirmLabel: t("Remove"),
+        },
       ))
     ) {
       return;
     }
     const res = await removeCorrection(id);
     if (res.error) {
-      alert(res.error);
+      alert(res.error, { title: t("Couldn't remove match") });
     }
   }
 
@@ -172,7 +180,7 @@ export function Settings() {
       setMembers((prev) =>
         prev.map((x) => (x.id === m.id ? { ...x, status: prevStatus } : x)),
       );
-      alert(res.error);
+      alert(res.error, { title: t("Couldn't update member status") });
     }
   }
 
@@ -236,7 +244,7 @@ export function Settings() {
           prev.filter((r) => r.id !== `pending-${gridRole}-${cap}`),
         );
       }
-      alert(res.error);
+      alert(res.error, { title: t("Permission update failed") });
       return;
     }
     // A newly created row's real id comes back from the write — swap it in
@@ -257,7 +265,7 @@ export function Settings() {
     if (
       !(await confirm(
         `${t("Reset all role permissions to defaults?")} ${t("This clears every override.")}`,
-        { danger: true },
+        { title: t("Reset permissions"), danger: true },
       ))
     ) {
       return;
@@ -272,7 +280,7 @@ export function Settings() {
     const res = await deleteRolePermissionRows(idsToDelete);
     if (res.error) {
       setPermRows(previousRows);
-      alert(res.error);
+      alert(res.error, { title: t("Reset failed") });
       return;
     }
     await refreshPermissions();
@@ -688,7 +696,9 @@ export function Settings() {
               buttonStyle="fullWidth"
               size="lg"
               icon="download"
-              onClick={() => alert(t(NOT_AVAILABLE))}
+              onClick={() =>
+                alert(t(NOT_AVAILABLE), { title: t("Backup unavailable") })
+              }
             >
               {t("Backup everything (Download)")}
             </Button>
@@ -701,7 +711,9 @@ export function Settings() {
                 buttonStyle="fullWidth"
                 size="lg"
                 icon="restore"
-                onClick={() => alert(t(NOT_AVAILABLE))}
+                onClick={() =>
+                  alert(t(NOT_AVAILABLE), { title: t("Restore unavailable") })
+                }
               >
                 {t("Restore from Backup")}
               </Button>
@@ -713,7 +725,9 @@ export function Settings() {
                 buttonStyle="fullWidth"
                 size="lg"
                 icon="export"
-                onClick={() => alert(t(NOT_AVAILABLE))}
+                onClick={() =>
+                  alert(t(NOT_AVAILABLE), { title: t("Export unavailable") })
+                }
               >
                 {t("Export all orders (CSV)")}
               </Button>

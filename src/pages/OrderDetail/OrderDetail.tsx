@@ -13,6 +13,7 @@ import { useSettings } from "../../hooks/useSettings";
 import { getInitials } from "../../lib/initials";
 import {
   readOrder,
+  readOrders,
   readOrderLines,
   readOrderHistory,
   readAttachments,
@@ -74,6 +75,20 @@ import { redactHistoryPrices } from "../../lib/redactHistory";
 import { dateCode } from "../../lib/orderNo";
 import { ImageDetailsModal } from "../../components/ImageDetailsModal/ImageDetailsModal";
 import styles from "./OrderDetail.module.css";
+
+/**
+ * Loaf/kg/gram lines need a scale weight at Cold Storage. Case-insensitive
+ * on purpose: `OrderNew.tsx`'s unit dropdown writes lowercase ("loaf"),
+ * `OrderEdit.tsx`'s writes capitalized ("Loaf") — a line created via New
+ * Order and never touched in Edit would otherwise silently skip weighing
+ * forever (a real bug: it flipped into "needs weighing" only once someone
+ * happened to re-save its unit through Edit's differently-cased dropdown,
+ * which read as the requirement changing on its own).
+ */
+function isWeighedUnit(unit: string | null | undefined): boolean {
+  const u = (unit ?? "").toLowerCase();
+  return u === "loaf" || u === "kg" || u === "gram";
+}
 
 /**
  * How a customer return is settled in Accurate. The choice drives whether a
@@ -423,6 +438,23 @@ export function OrderDetail() {
   const [pickupGeo, setPickupGeo] = useState<GeoStamp | null>(null);
   const [reconcilingCod, setReconcilingCod] = useState(false);
   const [approvingFinance, setApprovingFinance] = useState(false);
+  /* Finance gate form state — mirrors the prototype's `fMethod`/`fTiming`/
+   * `fPay`/`verified` (Dev-OrderDetail.jsx renderFinanceGate). "cod" timing
+   * is deliberately not an option here — the port's delivery-time COD
+   * outcome capture is COD's single source of truth. */
+  const [financeMethod, setFinanceMethod] = useState<"transfer" | "cash">(
+    "transfer",
+  );
+  const [financeTiming, setFinanceTiming] = useState<"upfront" | "terms">(
+    "upfront",
+  );
+  const [financeAmount, setFinanceAmount] = useState("");
+  const [financeBankRef, setFinanceBankRef] = useState("");
+  const [financeVerified, setFinanceVerified] = useState(false);
+  /** Sum of this customer's other non-terminal orders' value, for the
+   *  Terms-timing credit-limit check — fetched lazily (see the effect
+   *  below), not part of the initial page-load batch. */
+  const [customerExposure, setCustomerExposure] = useState(0);
   /** The current (non-archived) delivery_proofs row for this order, if any —
    *  drives the read-only post-confirm view. */
   const [activeProof, setActiveProof] =
@@ -589,6 +621,63 @@ export function OrderDetail() {
       order.taken_by === userId,
   );
 
+  // Customer exposure for the Finance gate's Terms-timing credit-limit
+  // check (Dev-OrderDetail.jsx's `customerExposure`) — fetched lazily, not
+  // part of the initial load batch, only when someone who could actually
+  // clear payment is looking at an order that still needs clearing.
+  useEffect(() => {
+    const customerId = order?.customer_id;
+    if (
+      !customerId ||
+      order?.payment_confirmed ||
+      !auth.can("approveFinance")
+    ) {
+      return;
+    }
+    let cancelled = false;
+    async function loadExposure() {
+      const ordersRes = await readOrders({
+        filter: {
+          _and: [
+            { customer_id: { _eq: customerId } },
+            { stage: { _nin: ["delivered", "cancelled", "returned"] } },
+          ],
+        },
+        fields: ["id"],
+        limit: -1,
+      });
+      if (cancelled || ordersRes.error || !ordersRes.data) return;
+      const orderIds = ordersRes.data.map((o) => o.id);
+      if (orderIds.length === 0) {
+        setCustomerExposure(0);
+        return;
+      }
+      const linesRes = await readOrderLines({
+        filter: {
+          _and: [{ order_id: { _in: orderIds } }, { removed: { _neq: true } }],
+        },
+        fields: ["order_id", "qty", "price"],
+        limit: -1,
+      });
+      if (cancelled || linesRes.error || !linesRes.data) return;
+      const total = linesRes.data.reduce((sum, l) => {
+        const qty =
+          typeof l.qty === "string" ? parseFloat(l.qty) || 0 : (l.qty ?? 0);
+        const price =
+          typeof l.price === "string"
+            ? parseFloat(l.price) || 0
+            : (l.price ?? 0);
+        return sum + qty * price;
+      }, 0);
+      setCustomerExposure(total);
+    }
+    loadExposure();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [order?.customer_id, order?.payment_confirmed]);
+
   /* ────────────── guards ── */
   if (loading)
     return <div className={styles.muted}>{t("Loading order details…")}</div>;
@@ -663,10 +752,33 @@ export function OrderDetail() {
   // across all 4 floor stages (Dev-OrderDetail.jsx:122); this port had
   // split weighing onto the bare `weighColdStorage` capability, which left
   // Admin (the floor helper) unable to weigh or attach item photos while
-  // covering someone else's cold-storage queue.
+  // covering someone else's cold-storage queue. Finance is explicitly
+  // excluded even if granted `helpOtherStages` — matches the prototype's own
+  // `role !== 'Finance' && can(role, 'helpOtherStages')` guard
+  // (Dev-OrderDetail.jsx:171): at cold, Finance's only job is ever the
+  // finance-gate card below, never the weigh controls, so the two never
+  // overlap for one role.
   const canWeighHere =
     stage === "cold" &&
+    auth.role !== "Finance" &&
     (auth.can("weighColdStorage") || auth.can("helpOtherStages"));
+  // Ported from the prototype's `ready` (Dev-OrderDetail.jsx:677) — the
+  // "Release to Finance"/"Weighed — release" button stays disabled until
+  // every catch-weight (Loaf/kg/gram) line actually has a recorded weight,
+  // same rule for every role that can reach it (Warehouse, Owner, or Admin
+  // covering as floor helper). This port has no "short" flag to hold a line
+  // exempt, so a weighed-unit line always needs weight > 0. Non-weighed
+  // lines (the "sending" qty box) never block — matches the prototype's
+  // `catchLines` scope (weight-unit lines only).
+  const coldWeighingReady = lines
+    .filter((l) => isWeighedUnit(l.unit))
+    .every((l) => {
+      const total = (l.id ? (weighingsMap[l.id] ?? []) : []).reduce(
+        (acc, w) => acc + (parseFloat(w.weight) || 0),
+        0,
+      );
+      return total > 0;
+    });
   const canReorder = auth.can("createOrders");
 
   // Hand-off mode at the dispatch stage — null until the courier/dispatcher
@@ -697,10 +809,21 @@ export function OrderDetail() {
   const canUndo =
     !!order.undo_snapshot &&
     (userId === order.undo_snapshot.who || auth.role === "Owner");
+  // Finance has a parallel job at cold/finance (the Finance gate card) even
+  // though they can't advance the *stage* itself — ported from the
+  // prototype's `canAct`, which explicitly includes Finance at
+  // `['cold', 'finance']` (Dev-OrderDetail.jsx:126) precisely so this notice
+  // doesn't show over their own action card. Without this carve-out, a
+  // Finance user viewing a cold order saw "This order is currently with
+  // Warehouse" sitting right above the Finance gate form they could actually
+  // use — correct per the *stage*-advance gate, misleading in context.
+  const hasParallelFinanceAction =
+    (stage === "cold" || stage === "finance") && auth.can("approveFinance");
   const showActorNotice =
     !!stageActor &&
     !isStageActor &&
     !canAdvance &&
+    !hasParallelFinanceAction &&
     !isCancelled &&
     !isDelivered &&
     !isReturned;
@@ -797,19 +920,60 @@ export function OrderDetail() {
     auth.can("reconcileCOD");
   const showDocsRow =
     isDelivered && !order.docs_returned && canConfirmDocsReturned;
+  /* Terms invoice — clearing at the Finance gate approved the CREDIT; the
+   * actual payment lands later. Mirrors the prototype's dedicated
+   * "Terms invoice — payment not yet received" card (Dev-OrderDetail.jsx:
+   * 1578-1589), folded into the same Follow-ups pending card as a third row
+   * rather than a standalone card, matching this port's own established
+   * grouping (`ui-registry.md`'s "grouped follow-ups" pattern). */
+  const showTermsRow =
+    isDelivered &&
+    order.payment_timing === "terms" &&
+    !order.payment_paid_at &&
+    auth.can("approveFinance");
+  const showTermsPaidNotice =
+    isDelivered && order.payment_timing === "terms" && !!order.payment_paid_at;
 
-  /* Finance gate — a parallel check alongside Cold Storage's own weighing
-   * (see the `canWeighHere` doc comment above): `stage` stays `'cold'`
-   * throughout, `payment_confirmed` is the actual signal, so this card is
-   * gated on the flag, not a stage transition. Undo is available any time
-   * afterward (not stage-restricted) — flipping the flag back is a fully
-   * self-contained, safely-repeatable write with no other state to
-   * reconcile, unlike the delivered-order Undo which has to restore a whole
+  /* Finance gate — ported from the prototype's renderFinanceGate() plus its
+   * cold/finance stage cases (Dev-OrderDetail.jsx:577-742). Cold Storage and
+   * Finance run in parallel — right up until Cold finishes weighing first.
+   * If Finance hasn't cleared by then, `handleAdvance`'s cold branch parks
+   * the order at a real `finance` stage instead of `production` until
+   * someone clears it here (see that handler). Undo is available any time
+   * afterward regardless of stage — flipping `payment_confirmed` back is a
+   * fully self-contained, safely-repeatable write with no other state to
+   * reconcile, unlike the delivered-order Undo which restores a whole
    * pre-delivery snapshot. */
   const canApproveFinance = auth.can("approveFinance");
-  const showFinanceApproveRow =
-    stage === "cold" && !order.payment_confirmed && canApproveFinance;
-  const showFinanceUndoRow = !!order.payment_confirmed && canApproveFinance;
+  const canOverrideCreditLimit = auth.can("overrideCreditLimit");
+  const financeCleared = !!order.payment_confirmed;
+  const showFinanceGateForm =
+    (stage === "cold" || stage === "finance") &&
+    !financeCleared &&
+    canApproveFinance;
+  // The person who cleared payment (or anyone else with `approveFinance`)
+  // stays able to reverse it even after the order has moved past the gate —
+  // matches the prototype's `canUndoClear` (`Dev-OrderDetail.jsx:165-166`).
+  // "Hold" in this port IS the `outstanding` stage (see `handleHold`, no
+  // separate boolean overlay like the prototype's `order.hold`), so the
+  // stage whitelist below already excludes on-hold orders without a
+  // separate check.
+  const showFinanceUndoRow =
+    financeCleared &&
+    canApproveFinance &&
+    ["cold", "finance", "production", "packing", "finalise"].includes(stage);
+  const orderIsPriced = lines.every((l) => l.price != null && l.price !== "");
+  const creditLimitNum =
+    typeof matchedCustomer?.credit_limit === "string"
+      ? parseFloat(matchedCustomer.credit_limit) || 0
+      : (matchedCustomer?.credit_limit ?? 0);
+  const overCreditLimit =
+    financeTiming === "terms" &&
+    creditLimitNum > 0 &&
+    customerExposure > creditLimitNum;
+  const showCreditBlock =
+    auth.can("seeCustomerCredit") &&
+    (financeTiming === "terms" || creditLimitNum > 0);
 
   /* Split attachments: manual doc entries vs file uploads. Excludes
    * delivery-proof photos (doc_type 'cond'/'recv'/'signed', proof_id set) —
@@ -838,7 +1002,9 @@ export function OrderDetail() {
     if (!wId.startsWith("new_")) {
       const res = await deleteLineWeighing(wId);
       if (res.error) {
-        alert(`Failed to delete weighing: ${res.error}`);
+        alert(`Failed to delete weighing: ${res.error}`, {
+          title: t("Couldn't delete weighing"),
+        });
         return;
       }
     }
@@ -873,7 +1039,9 @@ export function OrderDetail() {
         weight: parsedWeight,
       });
       if (res.error || !res.data) {
-        alert(`Failed to save weighing: ${res.error}`);
+        alert(`Failed to save weighing: ${res.error}`, {
+          title: t("Couldn't save weighing"),
+        });
         return;
       }
       setWeighingsMap((prev) => ({
@@ -884,7 +1052,10 @@ export function OrderDetail() {
       }));
     } else {
       const res = await updateLineWeighing(w.id, { weight: parsedWeight });
-      if (res.error) alert(`Failed to update weighing: ${res.error}`);
+      if (res.error)
+        alert(`Failed to update weighing: ${res.error}`, {
+          title: t("Couldn't update weighing"),
+        });
     }
   }
 
@@ -897,7 +1068,9 @@ export function OrderDetail() {
     if (!file) return;
     const uploadRes = await uploadFile(file);
     if (uploadRes.error || !uploadRes.data) {
-      alert(`Photo upload failed: ${uploadRes.error}`);
+      alert(`Photo upload failed: ${uploadRes.error}`, {
+        title: t("Photo upload failed"),
+      });
       e.target.value = "";
       return;
     }
@@ -919,7 +1092,9 @@ export function OrderDetail() {
         weight: parsedWeight,
       });
       if (res.error || !res.data) {
-        alert(`Failed to save weighing: ${res.error}`);
+        alert(`Failed to save weighing: ${res.error}`, {
+          title: t("Couldn't save weighing"),
+        });
         e.target.value = "";
         return;
       }
@@ -932,7 +1107,9 @@ export function OrderDetail() {
       sort_order: w.photos.length,
     });
     if (photoRes.error || !photoRes.data) {
-      alert(`Failed to save photo: ${photoRes.error}`);
+      alert(`Failed to save photo: ${photoRes.error}`, {
+        title: t("Couldn't save photo"),
+      });
       e.target.value = "";
       return;
     }
@@ -962,7 +1139,9 @@ export function OrderDetail() {
   ) {
     const res = await deleteLineWeighingPhoto(photoRowId);
     if (res.error) {
-      alert(`Failed to remove photo: ${res.error}`);
+      alert(`Failed to remove photo: ${res.error}`, {
+        title: t("Couldn't remove photo"),
+      });
       return;
     }
     setWeighingsMap((prev) => ({
@@ -985,7 +1164,9 @@ export function OrderDetail() {
     if (!file) return;
     const uploadRes = await uploadFile(file);
     if (uploadRes.error || !uploadRes.data) {
-      alert(`Photo upload failed: ${uploadRes.error}`);
+      alert(`Photo upload failed: ${uploadRes.error}`, {
+        title: t("Photo upload failed"),
+      });
       e.target.value = "";
       return;
     }
@@ -997,7 +1178,9 @@ export function OrderDetail() {
       sort_order: current.length,
     });
     if (createRes.error || !createRes.data) {
-      alert(`Failed to save photo: ${createRes.error}`);
+      alert(`Failed to save photo: ${createRes.error}`, {
+        title: t("Couldn't save photo"),
+      });
       e.target.value = "";
       return;
     }
@@ -1014,7 +1197,9 @@ export function OrderDetail() {
   async function handleRemoveItemPhoto(lineId: string, photoRowId: string) {
     const res = await deleteLinePhoto(photoRowId);
     if (res.error) {
-      alert(`Failed to remove photo: ${res.error}`);
+      alert(`Failed to remove photo: ${res.error}`, {
+        title: t("Couldn't remove photo"),
+      });
       return;
     }
     setItemPhotosMap((prev) => ({
@@ -1033,7 +1218,9 @@ export function OrderDetail() {
       setDocFileId(uploadRes.data.id);
       setDocFileName(file.name);
     } else {
-      alert(`Upload failed: ${uploadRes.error}`);
+      alert(`Upload failed: ${uploadRes.error}`, {
+        title: t("Upload failed"),
+      });
     }
     if (docFileInputRef.current) docFileInputRef.current.value = "";
   }
@@ -1064,18 +1251,28 @@ export function OrderDetail() {
         stage,
       });
     } else {
-      alert(`Failed to log document: ${res.error}`);
+      alert(`Failed to log document: ${res.error}`, {
+        title: t("Couldn't log document"),
+      });
     }
     setSavingDoc(false);
   }
 
   async function handleDeleteDocument(docId: number | string) {
-    if (!(await confirm(t("Delete this document?"), { danger: true }))) return;
+    if (
+      !(await confirm(t("Delete this document?"), {
+        title: t("Delete document"),
+        danger: true,
+      }))
+    )
+      return;
     const res = await deleteAttachment(docId);
     if (!res.error) {
       setAttachments((prev) => prev.filter((a) => a.id !== docId));
     } else {
-      alert(`Failed to delete document: ${res.error}`);
+      alert(`Failed to delete document: ${res.error}`, {
+        title: t("Couldn't delete document"),
+      });
     }
   }
 
@@ -1091,24 +1288,34 @@ export function OrderDetail() {
           t(
             "Attach at least one item photo before releasing from Cold Storage.",
           ),
+          { title: t("Photo required") },
         );
         return;
       }
     }
+    // Cold Storage and Finance run in parallel — but if weighing finishes
+    // before Finance clears, the order parks at a real `finance` stage
+    // (the Finance gate card above) instead of skipping straight to
+    // Production, mirroring the prototype's `normalTarget = cleared ?
+    // 'production' : 'finance'` (Dev-OrderDetail.jsx:715). Every other
+    // stage's target is unaffected.
+    const target = stage === "cold" && !financeCleared ? "finance" : flow.next;
     setAdvancing(true);
-    const res = await updateOrder(id, { stage: flow.next });
+    const res = await updateOrder(id, { stage: target });
     if (!res.error && res.data) {
       setOrder(res.data);
       await appendOrderHistory({
         order_id: id,
-        what: `Stage advanced: ${stage} → ${flow.next}`,
+        what: `Stage advanced: ${stage} → ${target}`,
         who: userId,
-        stage: flow.next,
+        stage: target,
       });
       const hRes = await readOrderHistory(id);
       if (!hRes.error) setHistory(hRes.data ?? []);
     } else {
-      alert(`Failed to advance stage: ${res.error}`);
+      alert(`Failed to advance stage: ${res.error}`, {
+        title: t("Couldn't advance stage"),
+      });
     }
     setAdvancing(false);
   }
@@ -1156,7 +1363,9 @@ export function OrderDetail() {
       const hRes = await readOrderHistory(id);
       if (!hRes.error) setHistory(hRes.data ?? []);
     } else {
-      alert(`Failed to send back: ${res.error}`);
+      alert(`Failed to send back: ${res.error}`, {
+        title: t("Couldn't send back"),
+      });
     }
     setAdvancing(false);
   }
@@ -1256,7 +1465,9 @@ export function OrderDetail() {
       resetProofState();
       setShowThirdPartyForm(false);
     } else {
-      alert(`Failed to record hand-off: ${res.error}`);
+      alert(`Failed to record hand-off: ${res.error}`, {
+        title: t("Couldn't record hand-off"),
+      });
     }
     setChoosingMode(false);
   }
@@ -1325,7 +1536,58 @@ export function OrderDetail() {
       const hRes = await readOrderHistory(id);
       if (!hRes.error) setHistory(hRes.data ?? []);
     } else {
-      alert(`Failed to confirm documents returned: ${res.error}`);
+      alert(`Failed to confirm documents returned: ${res.error}`, {
+        title: t("Couldn't confirm documents returned"),
+      });
+    }
+  }
+
+  /** Records that a Terms-timing invoice's payment came in — the actual
+   *  cash, distinct from clearing the credit at the Finance gate. Mirrors
+   *  the prototype's terms-invoice "Payment received" button
+   *  (`Dev-OrderDetail.jsx:1581`). */
+  async function handleTermsPaymentReceived() {
+    if (!id) return;
+    const res = await updateOrder(id, {
+      payment_paid_at: new Date().toISOString(),
+    });
+    if (!res.error && res.data) {
+      setOrder(res.data);
+      await appendOrderHistory({
+        order_id: id,
+        what: "Terms payment received",
+        who: userId,
+        stage,
+      });
+      const hRes = await readOrderHistory(id);
+      if (!hRes.error) setHistory(hRes.data ?? []);
+    } else {
+      alert(`Failed to record terms payment: ${res.error}`, {
+        title: t("Couldn't record terms payment"),
+      });
+    }
+  }
+
+  /** Undoes a mistaken "Payment received" tap — just flips `payment_paid_at`
+   *  back to null, mirroring the prototype's terms-payment Undo
+   *  (`Dev-OrderDetail.jsx:1587`). */
+  async function handleUndoTermsPayment() {
+    if (!id) return;
+    const res = await updateOrder(id, { payment_paid_at: null });
+    if (!res.error && res.data) {
+      setOrder(res.data);
+      await appendOrderHistory({
+        order_id: id,
+        what: "Undo — terms payment not received yet",
+        who: userId,
+        stage,
+      });
+      const hRes = await readOrderHistory(id);
+      if (!hRes.error) setHistory(hRes.data ?? []);
+    } else {
+      alert(`Failed to undo terms payment: ${res.error}`, {
+        title: t("Couldn't undo terms payment"),
+      });
     }
   }
 
@@ -1354,7 +1616,9 @@ export function OrderDetail() {
       const hRes = await readOrderHistory(id);
       if (!hRes.error) setHistory(hRes.data ?? []);
     } else {
-      alert(`Failed to reconcile COD: ${res.error}`);
+      alert(`Failed to reconcile COD: ${res.error}`, {
+        title: t("Couldn't reconcile COD"),
+      });
     }
     setReconcilingCod(false);
   }
@@ -1362,53 +1626,114 @@ export function OrderDetail() {
   /** Clears the Finance gate — the previously-missing write behind the
    *  `approveFinance` capability and the "Orders awaiting finance approval"
    *  Needs Attention bucket, which existed with nothing to actually press.
-   *  Mirrors the prototype's Finance/Owner-gated "Clear — OK to proceed"
-   *  (`Dev-OrderDetail.jsx:678-742`) — Clear-only, no reject; a Finance user
-   *  who won't clear simply leaves the order parked here. */
+   *  Writes the full payment record (method/timing/amount/bank
+   *  reference/terms due-date), mirroring the prototype's "Clear — OK to
+   *  proceed" (`Dev-OrderDetail.jsx:613-630`) — Clear-only, no reject; a
+   *  Finance user who won't clear simply leaves the order parked here.
+   *  Clearing while parked at the literal `finance` stage (Cold finished
+   *  weighing before Finance did — see `handleAdvance`'s cold branch) also
+   *  advances the order to `production`; clearing at `cold` itself doesn't
+   *  move the stage — weighing's own advance button decides that once it's
+   *  ready, exactly like the prototype's `case 'cold'`/`case 'finance'`
+   *  split. */
   async function handleApproveFinance() {
-    if (!id) return;
+    if (!id || !order) return;
+    if (financeTiming === "upfront" && !financeVerified) return;
+    if (overCreditLimit && !canOverrideCreditLimit) return;
     setApprovingFinance(true);
-    const res = await updateOrder(id, {
+    const amountNum =
+      parseFloat(financeAmount.replace(/[^\d.]/g, "")) ||
+      (orderIsPriced ? orderTotal : null);
+    const dueDate =
+      financeTiming === "terms" &&
+      matchedCustomer?.term_days &&
+      Number(matchedCustomer.term_days) > 0 &&
+      order.deliver_at
+        ? new Date(
+            new Date(order.deliver_at).getTime() +
+              Number(matchedCustomer.term_days) * 86400000,
+          )
+            .toISOString()
+            .slice(0, 10)
+        : null;
+    const patch: Record<string, unknown> = {
       payment_confirmed: true,
       payment_confirmed_at: new Date().toISOString(),
-    });
+      payment_method: financeMethod,
+      payment_timing: financeTiming,
+      payment_amount: amountNum,
+      payment_bank_ref:
+        financeMethod === "transfer" ? financeBankRef.trim() || null : null,
+      payment_due_date: dueDate,
+      payment_paid_at: null,
+    };
+    if (stage === "finance") patch.stage = "production";
+    const res = await updateOrder(id, patch);
     if (!res.error && res.data) {
       setOrder(res.data);
+      const note =
+        financeTiming === "terms"
+          ? `Terms${overCreditLimit ? " (over limit, owner-approved)" : ""} — cleared${dueDate ? `, due ${dueDate}` : ""}`
+          : `Paid${amountNum ? " " + currency.format(amountNum) : ""}${financeBankRef.trim() ? " · " + financeBankRef.trim() : ""} — cleared`;
       await appendOrderHistory({
         order_id: id,
-        what: "Payment cleared — Finance",
+        what: note,
         who: userId,
-        stage: null,
+        stage: typeof patch.stage === "string" ? patch.stage : null,
       });
       const hRes = await readOrderHistory(id);
       if (!hRes.error) setHistory(hRes.data ?? []);
     } else {
-      alert(`Failed to clear payment: ${res.error}`);
+      alert(`Failed to clear payment: ${res.error}`, {
+        title: t("Couldn't clear payment"),
+      });
     }
     setApprovingFinance(false);
   }
 
-  /** Undoes an accidental Finance clearance — just flips the flag back, no
-   *  stage or snapshot to reconcile (see the `showFinanceUndoRow` comment). */
+  /** Undoes an accidental Finance clearance — resets the payment fields and,
+   *  if the order already moved past Cold Storage (it was cleared at the
+   *  `finance` stage, which auto-advanced it), drops it back to `finance`
+   *  to be re-checked. Un-clearing while still at `cold` doesn't move the
+   *  stage — the Finance card just reappears in place. Mirrors the
+   *  prototype's `undoClearance()` (`Dev-OrderDetail.jsx:325-330`) exactly,
+   *  including reaching back across production/packing/finalise if needed. */
   async function handleUndoFinanceClear() {
-    if (!id) return;
+    if (
+      !id ||
+      !(await confirm(
+        t(
+          "Undo the payment clearance? The order goes back to the Finance gate to be re-checked.",
+        ),
+        { title: t("Undo payment clearance") },
+      ))
+    )
+      return;
     setApprovingFinance(true);
-    const res = await updateOrder(id, {
+    const patch: Record<string, unknown> = {
       payment_confirmed: false,
       payment_confirmed_at: null,
-    });
+      payment_paid_at: null,
+    };
+    if (stage !== "cold") patch.stage = "finance";
+    const res = await updateOrder(id, patch);
     if (!res.error && res.data) {
       setOrder(res.data);
       await appendOrderHistory({
         order_id: id,
-        what: "Payment clearance undone",
+        what:
+          stage === "cold"
+            ? "Payment clearance undone (still at Cold Storage)"
+            : "Payment clearance undone — back to the Finance gate",
         who: userId,
-        stage: null,
+        stage: typeof patch.stage === "string" ? patch.stage : null,
       });
       const hRes = await readOrderHistory(id);
       if (!hRes.error) setHistory(hRes.data ?? []);
     } else {
-      alert(`Failed to undo payment clearance: ${res.error}`);
+      alert(`Failed to undo payment clearance: ${res.error}`, {
+        title: t("Couldn't undo payment clearance"),
+      });
     }
     setApprovingFinance(false);
   }
@@ -1423,7 +1748,9 @@ export function OrderDetail() {
     const uploadRes = await uploadFile(file);
     setUploadingProofSlot(null);
     if (uploadRes.error || !uploadRes.data) {
-      alert(`Photo upload failed: ${uploadRes.error}`);
+      alert(`Photo upload failed: ${uploadRes.error}`, {
+        title: t("Photo upload failed"),
+      });
       e.target.value = "";
       return;
     }
@@ -1485,11 +1812,14 @@ export function OrderDetail() {
           : t(
               "Condition, receiver, and signed-invoice photos are all required before marking delivered.",
             ),
+        { title: t("Photo required") },
       );
       return;
     }
     if (!receiverName.trim()) {
-      alert(t("Enter the receiver's name."));
+      alert(t("Enter the receiver's name."), {
+        title: t("Receiver name required"),
+      });
       return;
     }
     // Cash never blocks "goods changed hands" — but a COD order does need
@@ -1501,6 +1831,7 @@ export function OrderDetail() {
         t(
           "Record whether the COD payment was collected before marking delivered.",
         ),
+        { title: t("COD outcome required") },
       );
       return;
     }
@@ -1509,6 +1840,7 @@ export function OrderDetail() {
         t(
           "Pick a reason for the outstanding balance before marking delivered.",
         ),
+        { title: t("Reason required") },
       );
       return;
     }
@@ -1529,7 +1861,9 @@ export function OrderDetail() {
       name: receiverName.trim(),
     });
     if (proofRes.error || !proofRes.data) {
-      alert(`Failed to save delivery proof: ${proofRes.error}`);
+      alert(`Failed to save delivery proof: ${proofRes.error}`, {
+        title: t("Couldn't save delivery proof"),
+      });
       setSubmittingProof(false);
       return;
     }
@@ -1554,6 +1888,7 @@ export function OrderDetail() {
     if (failedAttach > 0) {
       alert(
         `Delivery confirmed, but ${failedAttach} proof photo(s) failed to save. The primary photo per field is still recorded.`,
+        { title: t("Some proof photos didn't save") },
       );
     }
     setAttachments((prev) => [
@@ -1639,6 +1974,7 @@ export function OrderDetail() {
             "{customer}",
             matchedCustomer.name,
           ),
+          { title: t("Save delivery location?") },
         ))
       ) {
         const custRes = await updateCustomer(matchedCustomer.id, {
@@ -1651,7 +1987,9 @@ export function OrderDetail() {
         }
       }
     } else {
-      alert(`Failed to advance stage: ${res.error}`);
+      alert(`Failed to advance stage: ${res.error}`, {
+        title: t("Couldn't confirm delivery"),
+      });
     }
     setSubmittingProof(false);
   }
@@ -1671,7 +2009,7 @@ export function OrderDetail() {
         t(
           "Undo this delivery? The order goes back to dispatch exactly as it was.",
         ),
-        { danger: true },
+        { title: t("Undo delivery"), danger: true },
       ))
     )
       return;
@@ -1696,7 +2034,9 @@ export function OrderDetail() {
       const hRes = await readOrderHistory(id);
       if (!hRes.error) setHistory(hRes.data ?? []);
     } else {
-      alert(`Failed to undo: ${res.error}`);
+      alert(`Failed to undo: ${res.error}`, {
+        title: t("Couldn't undo delivery"),
+      });
     }
   }
 
@@ -1704,6 +2044,7 @@ export function OrderDetail() {
     if (
       !id ||
       !(await confirm(t("Cancel this order? This can be undone via Restore."), {
+        title: t("Cancel order"),
         danger: true,
       }))
     )
@@ -1726,7 +2067,9 @@ export function OrderDetail() {
       const hRes = await readOrderHistory(id);
       if (!hRes.error) setHistory(hRes.data ?? []);
     } else {
-      alert(`Failed to cancel order: ${res.error}`);
+      alert(`Failed to cancel order: ${res.error}`, {
+        title: t("Couldn't cancel order"),
+      });
     }
     setCancelling(false);
   }
@@ -1748,19 +2091,50 @@ export function OrderDetail() {
       const hRes = await readOrderHistory(id);
       if (!hRes.error) setHistory(hRes.data ?? []);
     } else {
-      alert(`Failed to hold order: ${res.error}`);
+      alert(`Failed to hold order: ${res.error}`, {
+        title: t("Couldn't hold order"),
+      });
     }
   }
 
   async function handleRestore() {
     if (!id || !order) return;
-    const restoreStage = order.cancelled_from ?? "intake";
+    // Outstanding orders were never cancelled — `cancelled_from` is only
+    // ever set by `handleCancel`, never by the COD-shortfall routing in
+    // `handleConfirmDelivery` — so falling back to `cancelled_from ??
+    // "intake"` for one would silently wipe an already-delivered order back
+    // to square one. An outstanding order needs a genuine redelivery/
+    // re-collection attempt, so it goes back to `dispatch` instead.
+    const restoreStage = isOutstanding
+      ? "dispatch"
+      : (order.cancelled_from ?? "intake");
+    // Landing back at dispatch needs the same hand-off reset
+    // `handleSendBack`'s reopen path already applies (delivered → dispatch)
+    // — otherwise taken_by/pickup/third_party survive and the hand-off
+    // chooser never reappears for the redelivery attempt.
+    const isDispatchReset = restoreStage === "dispatch";
+    if (isDispatchReset && activeProof) {
+      await updateDeliveryProof(activeProof.id, { archived: true });
+    }
     const res = await updateOrder(id, {
       stage: restoreStage,
       cancelled: false,
       cancelled_from: null,
+      ...(isDispatchReset
+        ? {
+            taken_by: null,
+            pickup: false,
+            third_party: false,
+            courier_service: null,
+            undo_snapshot: null,
+          }
+        : {}),
     });
     if (!res.error && res.data) {
+      if (isDispatchReset) {
+        setActiveProof(null);
+        resetProofState();
+      }
       setOrder(res.data);
       await appendOrderHistory({
         order_id: id,
@@ -1771,7 +2145,9 @@ export function OrderDetail() {
       const hRes = await readOrderHistory(id);
       if (!hRes.error) setHistory(hRes.data ?? []);
     } else {
-      alert(`Failed to restore order: ${res.error}`);
+      alert(`Failed to restore order: ${res.error}`, {
+        title: t("Couldn't restore order"),
+      });
     }
   }
 
@@ -1786,12 +2162,15 @@ export function OrderDetail() {
   async function handleReorder() {
     if (!id || !order || reordering) return;
     if (!order.customer_id) {
-      alert(t("This order has no customer on file — can't reorder."));
+      alert(t("This order has no customer on file — can't reorder."), {
+        title: t("Can't reorder"),
+      });
       return;
     }
     if (
       !(await confirm(
         t("Create a new order with the same items for this customer?"),
+        { title: t("Reorder") },
       ))
     )
       return;
@@ -1805,7 +2184,9 @@ export function OrderDetail() {
 
     const noRes = await getNextOrderNo(dateCode(deliverAt));
     if (noRes.error || !noRes.data) {
-      alert(`Failed to generate order number: ${noRes.error}`);
+      alert(`Failed to generate order number: ${noRes.error}`, {
+        title: t("Couldn't create reorder"),
+      });
       setReordering(false);
       return;
     }
@@ -1825,7 +2206,9 @@ export function OrderDetail() {
       order_date: orderDate,
     });
     if (orderRes.error || !orderRes.data) {
-      alert(`Failed to create order: ${orderRes.error}`);
+      alert(`Failed to create order: ${orderRes.error}`, {
+        title: t("Couldn't create reorder"),
+      });
       setReordering(false);
       return;
     }
@@ -1849,6 +2232,7 @@ export function OrderDetail() {
     if (linesRes.error) {
       alert(
         `Order created but lines failed: ${linesRes.error}. Order id ${newOrderId}.`,
+        { title: t("Reorder partially failed") },
       );
       setReordering(false);
       navigate(`/orders/${newOrderId}`, { state: { from: backTo } });
@@ -1908,7 +2292,9 @@ export function OrderDetail() {
     if (!file) return;
     const uploadRes = await uploadFile(file);
     if (uploadRes.error || !uploadRes.data) {
-      alert(`Photo upload failed: ${uploadRes.error}`);
+      alert(`Photo upload failed: ${uploadRes.error}`, {
+        title: t("Photo upload failed"),
+      });
       e.target.value = "";
       return;
     }
@@ -1920,7 +2306,9 @@ export function OrderDetail() {
       sort_order: current.length,
     });
     if (createRes.error || !createRes.data) {
-      alert(`Failed to save photo: ${createRes.error}`);
+      alert(`Failed to save photo: ${createRes.error}`, {
+        title: t("Couldn't save photo"),
+      });
       e.target.value = "";
       return;
     }
@@ -1941,7 +2329,9 @@ export function OrderDetail() {
       (l) => (parseFloat(refuseQtyMap[l.id] ?? "0") || 0) > 0,
     );
     if (refusedLines.length === 0) {
-      alert(t("Enter a returned quantity for at least one item."));
+      alert(t("Enter a returned quantity for at least one item."), {
+        title: t("Quantity required"),
+      });
       return;
     }
     setSubmittingRefusal(true);
@@ -1949,7 +2339,9 @@ export function OrderDetail() {
       const qty = parseFloat(refuseQtyMap[l.id] ?? "0") || 0;
       const res = await updateOrderLine(l.id, { returned: qty });
       if (res.error) {
-        alert(`Failed to record return on "${l.name}": ${res.error}`);
+        alert(`Failed to record return on "${l.name}": ${res.error}`, {
+          title: t("Couldn't record return"),
+        });
         setSubmittingRefusal(false);
         return;
       }
@@ -1977,7 +2369,9 @@ export function OrderDetail() {
       if (!hRes.error) setHistory(hRes.data ?? []);
       setShowRefuseForm(false);
     } else {
-      alert(`Failed to record the return: ${res.error}`);
+      alert(`Failed to record the return: ${res.error}`, {
+        title: t("Couldn't record return"),
+      });
     }
     setSubmittingRefusal(false);
   }
@@ -1991,7 +2385,9 @@ export function OrderDetail() {
     if (!file) return;
     const uploadRes = await uploadFile(file);
     if (uploadRes.error || !uploadRes.data) {
-      alert(`Photo upload failed: ${uploadRes.error}`);
+      alert(`Photo upload failed: ${uploadRes.error}`, {
+        title: t("Photo upload failed"),
+      });
       e.target.value = "";
       return;
     }
@@ -1999,7 +2395,9 @@ export function OrderDetail() {
       returned_weigh_photo: uploadRes.data.id,
     });
     if (res.error || !res.data) {
-      alert(`Failed to save weigh-back photo: ${res.error}`);
+      alert(`Failed to save weigh-back photo: ${res.error}`, {
+        title: t("Couldn't save photo"),
+      });
       e.target.value = "";
       return;
     }
@@ -2018,7 +2416,9 @@ export function OrderDetail() {
       if (verified === Number(l.returned)) continue;
       const res = await updateOrderLine(l.id, { returned: verified });
       if (res.error) {
-        alert(`Failed to update "${l.name}": ${res.error}`);
+        alert(`Failed to update "${l.name}": ${res.error}`, {
+          title: t("Couldn't update line"),
+        });
         setConfirmingReceive(false);
         return;
       }
@@ -2042,7 +2442,9 @@ export function OrderDetail() {
       const hRes = await readOrderHistory(id);
       if (!hRes.error) setHistory(hRes.data ?? []);
     } else {
-      alert(`Failed to confirm receipt: ${res.error}`);
+      alert(`Failed to confirm receipt: ${res.error}`, {
+        title: t("Couldn't confirm receipt"),
+      });
     }
     setConfirmingReceive(false);
   }
@@ -2059,7 +2461,9 @@ export function OrderDetail() {
       for (const l of returnedLines) {
         const res = await updateOrderLine(l.id, { returned: 0, delivered: 0 });
         if (res.error) {
-          alert(`Failed to reset "${l.name}": ${res.error}`);
+          alert(`Failed to reset "${l.name}": ${res.error}`, {
+            title: t("Couldn't reset line"),
+          });
           setConfirmingSettle(false);
           return;
         }
@@ -2085,7 +2489,9 @@ export function OrderDetail() {
         const hRes = await readOrderHistory(id);
         if (!hRes.error) setHistory(hRes.data ?? []);
       } else {
-        alert(`Failed to process the replacement: ${res.error}`);
+        alert(`Failed to process the replacement: ${res.error}`, {
+          title: t("Couldn't process replacement"),
+        });
       }
     } else if (doc.key === "revise-return") {
       const res = await updateOrder(id, {
@@ -2103,7 +2509,9 @@ export function OrderDetail() {
         const hRes = await readOrderHistory(id);
         if (!hRes.error) setHistory(hRes.data ?? []);
       } else {
-        alert(`Failed to issue the revised DO/SI: ${res.error}`);
+        alert(`Failed to issue the revised DO/SI: ${res.error}`, {
+          title: t("Couldn't issue DO/SI"),
+        });
       }
     } else {
       // return-note: nothing physical goes out — closes immediately.
@@ -2122,7 +2530,9 @@ export function OrderDetail() {
         const hRes = await readOrderHistory(id);
         if (!hRes.error) setHistory(hRes.data ?? []);
       } else {
-        alert(`Failed to close the return: ${res.error}`);
+        alert(`Failed to close the return: ${res.error}`, {
+          title: t("Couldn't close return"),
+        });
       }
     }
     setConfirmingSettle(false);
@@ -2134,7 +2544,7 @@ export function OrderDetail() {
     if (!file) return;
     const uploadRes = await uploadFile(file);
     if (uploadRes.error || !uploadRes.data) {
-      alert(`Upload failed: ${uploadRes.error}`);
+      alert(`Upload failed: ${uploadRes.error}`, { title: t("Upload failed") });
       e.target.value = "";
       return;
     }
@@ -2151,7 +2561,9 @@ export function OrderDetail() {
       photo_id: signedDocFileId,
     });
     if (docRes.error) {
-      alert(`Failed to save the signed document: ${docRes.error}`);
+      alert(`Failed to save the signed document: ${docRes.error}`, {
+        title: t("Couldn't save document"),
+      });
       setClosingSigned(false);
       return;
     }
@@ -2169,7 +2581,9 @@ export function OrderDetail() {
       if (!hRes.error) setHistory(hRes.data ?? []);
       setSignedDocFileId(null);
     } else {
-      alert(`Failed to close the return: ${res.error}`);
+      alert(`Failed to close the return: ${res.error}`, {
+        title: t("Couldn't close return"),
+      });
     }
     setClosingSigned(false);
   }
@@ -2187,7 +2601,9 @@ export function OrderDetail() {
       setHistory((prev) => [...prev, res.data!]);
       setNoteText("");
     } else {
-      alert(`Failed to add note: ${res.error}`);
+      alert(`Failed to add note: ${res.error}`, {
+        title: t("Couldn't add note"),
+      });
     }
     setSavingNote(false);
   }
@@ -2248,7 +2664,9 @@ export function OrderDetail() {
       document.execCommand("copy");
       ta.remove();
     }
-    alert(t("WhatsApp order confirmation copied to clipboard."));
+    alert(t("WhatsApp order confirmation copied to clipboard."), {
+      title: t("Copied"),
+    });
   }
 
   /* ────────────── render ── */
@@ -2535,6 +2953,14 @@ export function OrderDetail() {
             </div>
           )}
 
+          {showActorNotice && (
+            <div className={styles.actorNotice}>
+              {t("This order is currently with")}{" "}
+              <strong>{t(stageActor ?? "")}</strong>.{" "}
+              {"You can view it, but the action is theirs."}
+            </div>
+          )}
+
           {/* Customer Info Card */}
           <Card className={styles.customerCard}>
             <div
@@ -2618,10 +3044,7 @@ export function OrderDetail() {
                     ? parseFloat(line.price) || 0
                     : (line.price ?? 0);
                 const hasPrice = line.price != null && line.price !== "";
-                const isWeighedItem =
-                  line.unit === "Loaf" ||
-                  line.unit === "kg" ||
-                  line.unit === "gram";
+                const isWeighedItem = isWeighedUnit(line.unit);
 
                 const weighingLines = line.id
                   ? (weighingsMap[line.id] ?? [])
@@ -2630,6 +3053,24 @@ export function OrderDetail() {
                   (acc, w) => acc + (parseFloat(w.weight) || 0),
                   0,
                 );
+                // Gentle "does this look right?" hint, never a block — ported
+                // from the prototype's belowHint/aboveHint (Dev-OrderDetail.jsx:1350-1351).
+                // The Settings-configurable tol_below_pct/tol_above_pct (both
+                // default 10%, matching the prototype's DEFAULT_SETTINGS) were
+                // already wired up end-to-end on the Settings page and live
+                // schema — only this consuming check was missing.
+                const tolBelowPct = opsSettings?.tol_below_pct ?? 10;
+                const tolAbovePct = opsSettings?.tol_above_pct ?? 10;
+                const belowWeighHint =
+                  isWeighedItem &&
+                  totalMeasuredWeight > 0 &&
+                  qty > 0 &&
+                  totalMeasuredWeight < qty * (1 - tolBelowPct / 100);
+                const aboveWeighHint =
+                  isWeighedItem &&
+                  totalMeasuredWeight > 0 &&
+                  qty > 0 &&
+                  totalMeasuredWeight > qty * (1 + tolAbovePct / 100);
                 const itemPhotos = line.id
                   ? (itemPhotosMap[line.id] ?? [])
                   : [];
@@ -2940,11 +3381,30 @@ export function OrderDetail() {
                     {/* Item Summary line */}
                     <div className={styles.itemTotalRow}>
                       {stage !== "intake" && (
-                        <span className={styles.totalWeight}>
+                        <span
+                          className={styles.totalWeight}
+                          style={
+                            belowWeighHint || aboveWeighHint
+                              ? { color: "var(--state-warning)" }
+                              : undefined
+                          }
+                        >
                           {t("Total:")}{" "}
                           {isWeighedItem
                             ? `${totalMeasuredWeight.toFixed(2)} kg`
                             : ""}
+                          {belowWeighHint && (
+                            <span className={styles.weighHint}>
+                              {" "}
+                              · {t("below order")} {qty} kg?
+                            </span>
+                          )}
+                          {aboveWeighHint && (
+                            <span className={styles.weighHint}>
+                              {" "}
+                              · {t("over order")} {qty} kg?
+                            </span>
+                          )}
                         </span>
                       )}
                       {canSeePrices &&
@@ -2979,7 +3439,9 @@ export function OrderDetail() {
 
             {canSeePrices && (
               <div className={styles.totalRow}>
-                <span>{t("Order value · from PO")}</span>
+                <span className={styles.muted}>
+                  {t("Order value · from PO")}
+                </span>
                 <span className={styles.totalValue}>
                   {currency.format(orderTotal)}
                 </span>
@@ -3111,13 +3573,6 @@ export function OrderDetail() {
             )}
           </Card>
 
-          {showActorNotice && (
-            <div className={styles.actorNotice}>
-              {t("This order is currently with")}{" "}
-              <strong>{t(stageActor ?? "")}</strong>.
-            </div>
-          )}
-
           {/* Stage Action Controls */}
           {!isCancelled && (
             <div className={styles.stageActions}>
@@ -3127,10 +3582,16 @@ export function OrderDetail() {
                   variant="primary"
                   size="lg"
                   onClick={handleAdvance}
-                  disabled={advancing}
+                  disabled={
+                    advancing || (stage === "cold" && !coldWeighingReady)
+                  }
                   className={styles.actionBtn}
                 >
-                  {advancing ? t("Saving…") : t(flow.advanceLabel)}
+                  {advancing
+                    ? t("Saving…")
+                    : stage === "cold" && !financeCleared
+                      ? t("Release to Finance")
+                      : t(flow.advanceLabel)}
                 </Button>
               )}
 
@@ -3706,7 +4167,7 @@ export function OrderDetail() {
                 </Card>
               )}
 
-              {(showCodRow || showDocsRow) && (
+              {(showCodRow || showDocsRow || showTermsRow) && (
                 <Card className={styles.followUpsCard}>
                   <div className={styles.heading}>
                     <span>{t("Follow-ups pending")}</span>
@@ -3765,6 +4226,34 @@ export function OrderDetail() {
                       </Button>
                     </div>
                   )}
+                  {showTermsRow && (
+                    <div className={styles.followUpRow}>
+                      <Icon
+                        name="cash"
+                        size={24}
+                        className={styles.followUpIcon}
+                      />
+                      <div className={styles.followUpMain}>
+                        <span className={styles.fieldLabel}>
+                          {t("Terms invoice — payment not yet received")}
+                        </span>
+                        <span className={styles.secondary}>
+                          {order.payment_due_date
+                            ? `${t("Due")} ${formatDate(order.payment_due_date)}`
+                            : t("No due date on file")}
+                        </span>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="md"
+                        style={{ width: "140px" }}
+                        onClick={handleTermsPaymentReceived}
+                      >
+                        {t("Payment received")}
+                      </Button>
+                    </div>
+                  )}
                 </Card>
               )}
               {isDelivered && order.docs_returned && (
@@ -3785,51 +4274,241 @@ export function OrderDetail() {
                   </div>
                 </Card>
               )}
-
-              {showFinanceApproveRow && (
-                <Card className={styles.followUpsCard}>
-                  <div className={styles.heading}>
-                    <span>{t("Finance gate")}</span>
-                  </div>
-                  <div className={styles.followUpRow}>
-                    <Icon
-                      name="cash"
-                      size={24}
-                      className={styles.followUpIcon}
-                    />
-                    <div className={styles.followUpMain}>
-                      <span className={styles.fieldLabel}>
-                        {t("Awaiting payment approval")}
-                      </span>
-                      <span className={styles.secondary}>
-                        {t("Finance is clearing payment in parallel")}
-                      </span>
+              {showTermsPaidNotice && (
+                <Card
+                  style={{
+                    borderColor: "var(--accent-primary)",
+                    backgroundColor: "var(--bg-surface-hover-dark)",
+                  }}
+                >
+                  <div className={styles.proofHeaderRow}>
+                    <div
+                      className={styles.left}
+                      style={{ color: "var(--accent-primary)" }}
+                    >
+                      <Icon name="check" />
+                      <div className={styles.fieldLabel}>
+                        {t("Terms payment received")}
+                        {order.payment_paid_at
+                          ? ` · ${formatDate(order.payment_paid_at)}`
+                          : ""}
+                      </div>
                     </div>
+                    {canApproveFinance && (
+                      <Button
+                        type="button"
+                        variant="tertiary"
+                        size="sm"
+                        onClick={handleUndoTermsPayment}
+                      >
+                        <Icon name="undo" size={16} />
+                        {t("Undo")}
+                      </Button>
+                    )}
+                  </div>
+                </Card>
+              )}
+
+              {showFinanceGateForm && (
+                <Card>
+                  <div className={styles.proofHeaderRow}>
+                    <div className={styles.heading} style={{ margin: 0 }}>
+                      <span>{t("Finance gate")}</span>
+                    </div>
+                    {orderIsPriced ? (
+                      <span className={styles.fieldLabel}>
+                        {currency.format(orderTotal)}
+                      </span>
+                    ) : (
+                      <span className={styles.secondary}>
+                        {t("Priced in Accurate")}
+                      </span>
+                    )}
+                  </div>
+
+                  {showCreditBlock && (
+                    <Card
+                      style={{
+                        marginBottom: "var(--space-md)",
+                        backgroundColor: "var(--bg-surface-hover)",
+                        borderColor: overCreditLimit
+                          ? "var(--state-error)"
+                          : "var(--border-default)",
+                      }}
+                    >
+                      <div className={styles.proofHeaderRow}>
+                        <span className={styles.secondary}>
+                          {t("Account exposure (in flight)")}
+                        </span>
+                        <span className={styles.fieldLabel}>
+                          {currency.format(customerExposure)}
+                        </span>
+                      </div>
+                      <div className={styles.proofHeaderRow}>
+                        <span className={styles.secondary}>
+                          {t("Credit limit")}
+                        </span>
+                        <span className={styles.fieldLabel}>
+                          {creditLimitNum
+                            ? currency.format(creditLimitNum)
+                            : "—"}
+                        </span>
+                      </div>
+                      {overCreditLimit && (
+                        <p
+                          className={styles.secondary}
+                          style={{
+                            color: "var(--state-error)",
+                            marginTop: "var(--space-xs)",
+                            marginBottom: 0,
+                          }}
+                        >
+                          ⚠{" "}
+                          {canOverrideCreditLimit
+                            ? t(
+                                "Over credit limit — confirm with the owner before clearing.",
+                              )
+                            : t(
+                                "Over credit limit — only Finance or the owner can clear this.",
+                              )}
+                        </p>
+                      )}
+                    </Card>
+                  )}
+
+                  <div className={styles.financeGateRow}>
+                    <label className={styles.financeGateField}>
+                      <span className={styles.financeFieldLabel}>
+                        {t("Method")}
+                      </span>
+                      <select
+                        className={styles.editSelect}
+                        value={financeMethod}
+                        onChange={(e) => {
+                          setFinanceMethod(
+                            e.target.value as "transfer" | "cash",
+                          );
+                          setFinanceVerified(false);
+                        }}
+                      >
+                        <option value="transfer">{t("Transfer")}</option>
+                        <option value="cash">{t("Cash")}</option>
+                      </select>
+                    </label>
+                    <label className={styles.financeGateField}>
+                      <span className={styles.financeFieldLabel}>
+                        {t("Timing")}
+                      </span>
+                      <select
+                        className={styles.editSelect}
+                        value={financeTiming}
+                        onChange={(e) => {
+                          setFinanceTiming(
+                            e.target.value as "upfront" | "terms",
+                          );
+                          setFinanceVerified(false);
+                        }}
+                      >
+                        <option value="upfront">
+                          {t("Upfront (pay first)")}
+                        </option>
+                        <option value="terms">{t("Terms")}</option>
+                      </select>
+                    </label>
+                  </div>
+
+                  <label className={styles.financeGateField}>
+                    <span className={styles.financeFieldLabel}>
+                      {t("Amount received (Rp, optional)")}
+                    </span>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      className={styles.editInput}
+                      value={financeAmount}
+                      placeholder={orderIsPriced ? String(orderTotal) : ""}
+                      onChange={(e) => setFinanceAmount(e.target.value)}
+                    />
+                  </label>
+
+                  {financeMethod === "transfer" && (
+                    <label className={styles.financeGateField}>
+                      <span className={styles.financeFieldLabel}>
+                        {t("Bank reference (optional)")}
+                      </span>
+                      <input
+                        type="text"
+                        className={styles.editInput}
+                        value={financeBankRef}
+                        onChange={(e) => setFinanceBankRef(e.target.value)}
+                      />
+                    </label>
+                  )}
+
+                  <div className={styles.financeGateActions}>
+                    {financeTiming === "upfront" && !financeVerified && (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        buttonStyle="fullWidth"
+                        icon={
+                          financeMethod === "transfer"
+                            ? "paymentSuccess"
+                            : "cash"
+                        }
+                        onClick={() => setFinanceVerified(true)}
+                      >
+                        {financeMethod === "transfer"
+                          ? t("I verify it in our bank")
+                          : t("Cash received")}
+                      </Button>
+                    )}
+                    {financeTiming === "upfront" && financeVerified && (
+                      <div className={styles.financeVerifiedChip}>
+                        <Icon name="check" size={16} />
+                        {t("Payment confirmed")}
+                      </div>
+                    )}
+
                     <Button
                       type="button"
-                      variant="secondary"
-                      size="md"
+                      variant="primary"
+                      buttonStyle="fullWidth"
+                      icon="check"
+                      disabled={
+                        approvingFinance ||
+                        (financeTiming === "upfront" && !financeVerified) ||
+                        (overCreditLimit && !canOverrideCreditLimit)
+                      }
                       onClick={handleApproveFinance}
-                      disabled={approvingFinance}
-                      style={{ width: "140px" }}
                     >
                       {approvingFinance
                         ? t("Saving…")
-                        : t("Approve Payment")}
+                        : t("Clear — OK to proceed")}
                     </Button>
                   </div>
                 </Card>
               )}
               {showFinanceUndoRow && (
                 <div className={styles.undoRow}>
+                  <div className={styles.left}>
+                    <Icon name="infoCircle" />
+                    <p>
+                      <b>{t("Payment cleared by Finance")}</b> —{" "}
+                      {stage === "cold"
+                        ? t("cleared while still at Cold Storage.")
+                        : t("the order has moved on past the gate.")}{" "}
+                      {t("Cleared by mistake?")}
+                    </p>
+                  </div>
                   <Button
                     type="button"
-                    variant="tertiary"
+                    variant="secondary"
                     onClick={handleUndoFinanceClear}
                     disabled={approvingFinance}
                   >
                     <Icon name="undo" size={16} />
-                    {t("Pressed wrongly? Undo payment clearance")}
+                    {t("Undo payment clearance")}
                   </Button>
                 </div>
               )}

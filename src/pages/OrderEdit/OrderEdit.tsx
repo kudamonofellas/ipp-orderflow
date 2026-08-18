@@ -15,6 +15,7 @@ import {
   readOrderLines,
   readCustomers,
   readProducts,
+  readCorrections,
   readLineCuts,
   updateOrder,
   updateOrderLine,
@@ -23,6 +24,7 @@ import {
   createLineCut,
   updateLineCut,
   deleteLineCut,
+  upsertCorrection,
   appendOrderHistory,
 } from "../../lib/directus";
 import type {
@@ -30,6 +32,7 @@ import type {
   OrderLinesCollection,
   CustomersCollection,
   ProductsCollection,
+  CorrectionsCollection,
   LineCutsCollection,
 } from "../../types/directus";
 import styles from "./OrderEdit.module.css";
@@ -63,6 +66,10 @@ interface EditableLine {
   unit: string;
   price: string;
   cuts: CutItem[];
+  /** Normalized `corrections` lookup key — set only when this line came
+   *  from AddItemModal's typed "Match" flow, so the save handler below can
+   *  learn from it via upsertCorrection. */
+  rawText?: string;
 }
 
 export function OrderEdit() {
@@ -77,6 +84,7 @@ export function OrderEdit() {
   const [lines, setLines] = useState<OrderLinesCollection[]>([]);
   const [customers, setCustomers] = useState<CustomersCollection[]>([]);
   const [products, setProducts] = useState<ProductsCollection[]>([]);
+  const [corrections, setCorrections] = useState<CorrectionsCollection[]>([]);
   const [lineCutsByLine, setLineCutsByLine] = useState<
     Record<string, LineCutsCollection[]>
   >({});
@@ -131,14 +139,14 @@ export function OrderEdit() {
       setLoading(true);
       setError(null);
 
-      const [orderRes, linesRes, customersRes, productsRes] = await Promise.all(
-        [
+      const [orderRes, linesRes, customersRes, productsRes, correctionsRes] =
+        await Promise.all([
           readOrder(orderId),
           readOrderLines({ filter: { order_id: { _eq: orderId } } }),
           readCustomers(),
           readProducts(),
-        ],
-      );
+          readCorrections(),
+        ]);
 
       if (cancelled) return;
 
@@ -159,6 +167,7 @@ export function OrderEdit() {
       setLines(loadedLines);
       setCustomers(customersRes.data ?? []);
       setProducts(productsRes.data ?? []);
+      setCorrections(correctionsRes.data ?? []);
 
       // Load cuts
       const cutsRes = await readLineCuts(loadedLines.map((l) => l.id));
@@ -230,6 +239,9 @@ export function OrderEdit() {
       unit: result.unit,
       price: "0",
       cuts: [],
+      // Threaded through to Save-time so the correction-learning sweep in
+      // handleSaveAllEdits picks up manually-matched items too.
+      rawText: result.rawText,
     };
     setEditLines((prev) => [...prev, newLine]);
   }
@@ -448,25 +460,43 @@ export function OrderEdit() {
 
         for (const origCut of origCuts) {
           if (!currentCutIds.has(origCut.id)) {
-            await deleteLineCut(origCut.id);
+            const delRes = await deleteLineCut(origCut.id);
+            if (delRes.error) throw new Error(delRes.error);
           }
         }
 
         for (const cut of el.cuts) {
           if (cut.id.startsWith("cut_")) {
             if (cut.text.trim()) {
-              await createLineCut({
+              const cutRes = await createLineCut({
                 line_id: targetLineId,
                 text: cut.text.trim(),
               });
+              if (cutRes.error) throw new Error(cutRes.error);
             }
           } else {
             const orig = origCuts.find((c) => c.id === cut.id);
             if (orig && orig.text.trim() !== cut.text.trim()) {
-              await updateLineCut(cut.id, { text: cut.text.trim() });
+              const cutRes = await updateLineCut(cut.id, {
+                text: cut.text.trim(),
+              });
+              if (cutRes.error) throw new Error(cutRes.error);
             }
           }
         }
+      }
+
+      // Learn from every line added via AddItemModal's typed "Match" flow
+      // this save — mirrors OrderNew.tsx's own submit-time sweep. Best
+      // effort, same as there: a correction failing to save shouldn't
+      // block the actual order edit from completing.
+      const correctionTargets = editLines.filter(
+        (l) => l.rawText && l.productId,
+      );
+      if (correctionTargets.length > 0) {
+        await Promise.allSettled(
+          correctionTargets.map((l) => upsertCorrection(l.rawText!, l.productId!)),
+        );
       }
 
       if (summaryText !== "Order edited (no change)") {
@@ -882,6 +912,7 @@ export function OrderEdit() {
         open={isAddItemModalOpen}
         products={products}
         unitOptions={UNIT_OPTIONS}
+        corrections={corrections}
         onClose={() => setIsAddItemModalOpen(false)}
         onConfirm={handleConfirmAddItem}
       />

@@ -57,12 +57,15 @@ export function CashUp() {
     if (
       !(await confirmDialog(
         `Confirm ${currency.format(amount)} received from ${customerName}?`,
+        { title: t("Confirm cash received") },
       ))
     )
       return;
     const res = await confirm(orderId);
     if (res.error) {
-      alert(`Failed to confirm: ${res.error}`);
+      alert(`Failed to confirm: ${res.error}`, {
+        title: t("Confirmation failed"),
+      });
     }
   }
 

@@ -89,7 +89,7 @@
 }
 
 .lineName {
-  width: 320px;
+  width: 480px;
   font: var(--text-body);
   color: var(--text-primary);
 }

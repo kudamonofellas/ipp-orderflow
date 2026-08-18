@@ -542,12 +542,54 @@
 .undoRow {
   display: flex;
   flex-direction: row;
+  align-items: center;
+  gap: var(--space-sm);
 }
 
 .followUpsCard {
   border-color: var(--state-warning);
   display: flex;
   flex-direction: column;
+}
+
+/* ===== Finance gate form ===== */
+.financeGateRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-md);
+}
+
+.financeGateField {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-md);
+}
+
+.financeFieldLabel {
+  font: var(--text-label);
+  color: var(--text-muted);
+}
+
+.financeVerifiedChip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font: var(--text-label);
+  font-weight: 600;
+  color: var(--state-success);
+  background: color-mix(in srgb, var(--state-success) 13%, transparent);
+  border: 1px solid color-mix(in srgb, var(--state-success) 35%, transparent);
+  border-radius: var(--radius-md);
+  padding: var(--space-sm) var(--space-md);
+  margin-bottom: var(--space-md);
+}
+
+.financeGateActions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding-top: var(--space-lg);
 }
 
 .followUpRow {
@@ -899,6 +941,10 @@
   color: var(--text-primary);
 }
 
+.weighHint {
+  font: var(--text-body);
+}
+
 .priceCalc {
   display: flex;
   align-items: center;
@@ -1107,9 +1153,9 @@
   padding: var(--space-sm) var(--space-md);
   margin-bottom: var(--space-md);
   font: var(--text-body);
-  color: var(--text-secondary);
-  background: var(--bg-surface-hover);
-  border: 1px solid var(--border-subtle);
+  color: var(--accent-primary);
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface-hover-dark);
 }
 
 /* Notes section */

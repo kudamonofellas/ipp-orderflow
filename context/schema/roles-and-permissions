@@ -36,9 +36,9 @@ The order creator and manager. Broad access to order + customer + product data.
 | `settings` | ❌ | ✅ | ✅ | ❌ | Read + update the singleton |
 | `messages` | ❌ | ✅ | ✅ | ❌ | Reads WhatsApp intake; can edit (mark resolved) |
 | `attachments` | ❌ | ✅ | ❌ | ❌ | Read-only — sees intake attachments |
-| `line_cuts` | ❌ | ✅ | ❌ | ❌ | Read-only — sees production's cuts |
-| `line_weighings` | ❌ | ✅ | ❌ | ❌ | Read-only — sees warehouse weighings |
-| `line_photos` | ❌ | ✅ | ❌ | ❌ | Read-only |
+| `line_cuts` | ✅ | ✅ | ✅ | ✅ | Full CRUD (2026-08-18) — Admin writes/edits cutting instructions from Order Edit (`editOrderLines`); `done` stays Production's own field to toggle in practice |
+| `line_weighings` | ✅ | ✅ | ✅ | ✅ | Full CRUD (2026-08-18) — Admin covers Cold Storage weighing as floor helper (`helpOtherStages`) |
+| `line_photos` | ✅ | ✅ | ✅ | ✅ | Full CRUD (2026-08-18) — same floor-helper reason as `line_weighings` |
 | `line_return_photos` | ❌ | ✅ | ❌ | ❌ | Read-only |
 | `delivery_proofs` | ❌ | ✅ | ❌ | ❌ | Read-only — sees if delivery happened |
 | `draft_weighings` | ❌ | ✅ | ❌ | ❌ | Read-only |
@@ -112,7 +112,7 @@ Approves/rejects payment (and reconciles COD cash — Cash-up shares this role's
 
 | Collection | Create | Read | Update | Delete | Notes |
 |---|:---:|:---:|:---:|:---:|---|
-| `orders` | ❌ | ✅ | ✅ (field only) | ❌ | Reads all; can update only: `payment_confirmed`, `payment_confirmed_at` (2026-08-14, Approve Payment + Undo), `cod_reconciled`, `cod_received_at` |
+| `orders` | ❌ | ✅ | ✅ (field only) | ❌ | Reads all; can update only: `payment_confirmed`, `payment_confirmed_at`, `payment_method`, `payment_timing`, `payment_amount`, `payment_bank_ref`, `payment_due_date`, `payment_paid_at` (2026-08-14, full Finance Gate form — Method/Timing/Amount/Bank ref/Terms due-date/paid-at, Approve + Undo), `cod_reconciled`, `cod_received_at` |
 | `order_history` | ✅ | ✅ | ❌ | ❌ | Append-only — logs approve/reject |
 | `customers` | ❌ | ✅ | ❌ | ❌ | Read-only — needs credit_limit + term_days |
 | `order_lines` | ❌ | ✅ | ❌ | ❌ | Read-only |
@@ -172,9 +172,9 @@ Picks up, delivers, uploads 3 proof photos, broadcasts GPS.
 | `order_lines` | CRUD | CRUD | CRUD | R | R | R |
 | `customers` | CRUD | CRUD | R | R | R | R |
 | `products` | CRUD | CRUD | R | R | R | — |
-| `line_cuts` | CRUD | R | R + partial U | CRUD | — | — |
-| `line_weighings` | CRUD | R | CRUD | R | — | — |
-| `line_photos` | CRUD | R | CRUD | R | — | — |
+| `line_cuts` | CRUD | CRUD | R + partial U | CRUD | — | — |
+| `line_weighings` | CRUD | CRUD | CRUD | R | — | — |
+| `line_photos` | CRUD | CRUD | CRUD | R | — | — |
 | `line_return_photos` | CRUD | R | CRUD | R | — | — |
 | `order_history` | CRUD | CR | CR | CR | CR | CR |
 | `delivery_proofs` | CRUD | R | CRU | R | — | CRU |

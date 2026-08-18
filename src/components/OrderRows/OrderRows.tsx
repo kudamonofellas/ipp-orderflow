@@ -90,14 +90,14 @@ export function OrderRows({ order }: { order: OpenOrder }) {
               {lines.map((line) => (
                 <div key={line.id} className={styles.lineRow}>
                   <span className={styles.lineName}>
-                    {line.name}
                     {line.qty != null && line.qty > 0 && (
                       <span className={styles.lineQty}>
-                        {" — "}
                         {line.qty}
                         {line.unit ? ` ${line.unit}` : ""}
+                        {" — "}
                       </span>
                     )}
+                    {line.name}
                   </span>
                   {canSeePrices && line.price != null && line.price > 0 && (
                     <span className={styles.lineAmount}>

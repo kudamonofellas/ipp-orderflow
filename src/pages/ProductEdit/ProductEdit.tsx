@@ -197,10 +197,18 @@ export function ProductEdit() {
 
   const handleDelete = async () => {
     if (usedBy > 0) {
-      alert(t('Product is used by active orders and cannot be deleted.'));
+      alert(t('Product is used by active orders and cannot be deleted.'), {
+        title: t("Can't delete product"),
+      });
       return;
     }
-    if (!(await confirm(t('Are you sure you want to delete this product?'), { danger: true }))) return;
+    if (
+      !(await confirm(t('Are you sure you want to delete this product?'), {
+        title: t('Delete product'),
+        danger: true,
+      }))
+    )
+      return;
     if (!id) return;
 
     setDeleting(true);
@@ -208,7 +216,9 @@ export function ProductEdit() {
     setDeleting(false);
 
     if (res.error) {
-      alert(`Failed to delete product: ${res.error}`);
+      alert(`Failed to delete product: ${res.error}`, {
+        title: t('Delete failed'),
+      });
     } else {
       navigate('/products');
     }

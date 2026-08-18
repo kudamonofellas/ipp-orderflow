@@ -11,6 +11,11 @@
 
 import { z } from "zod";
 
+/** Directus serializes NUMERIC / INT columns as strings in JSON responses,
+ *  so numeric fields accept both string and number. z.coerce.number() would
+ *  drop nulls; this union keeps nullability intact. */
+const numeric = z.union([z.number(), z.string()]).nullable().optional();
+
 /** A single GPS fix — `orders.pickup_geo`/`deliver_geo`. Best-effort: null
  *  whenever the courier denied location permission or capture failed. */
 export const GeoStampSchema = z.object({
@@ -83,6 +88,18 @@ export const OrdersCollectionSchema = z.object({
   courier_service: z.string().nullable().optional(),
   payment_confirmed: z.boolean().nullable().optional(),
   payment_confirmed_at: z.string().nullable().optional(),
+  /** Finance-gate fields — `method`/`timing` mirror the prototype's payment
+   *  object, flattened onto `orders` per this app's convention (see
+   *  `cod_reconciled`/`cod_received_at`). `timing` is `'upfront' | 'terms'`
+   *  only — COD is deliberately excluded, the delivery-time COD outcome
+   *  capture (`delivery_proofs.cash_collected` etc.) is COD's single source
+   *  of truth. */
+  payment_method: z.string().nullable().optional(),
+  payment_timing: z.string().nullable().optional(),
+  payment_amount: numeric,
+  payment_bank_ref: z.string().nullable().optional(),
+  payment_due_date: z.string().nullable().optional(),
+  payment_paid_at: z.string().nullable().optional(),
   cod_reconciled: z.boolean().nullable().optional(),
   cod_received_at: z.string().nullable().optional(),
   pickup_geo: GeoStampSchema.nullable().optional(),
@@ -100,10 +117,6 @@ export const OrdersCollectionSchema = z.object({
   updated_at: z.string().nullable().optional(),
 });
 
-/** Directus serializes NUMERIC / INT columns as strings in JSON responses,
- *  so numeric fields accept both string and number. z.coerce.number() would
- *  drop nulls; this union keeps nullability intact. */
-const numeric = z.union([z.number(), z.string()]).nullable().optional();
 /** Directus `customers` collection row. */
 export const CustomersCollectionSchema = z.object({
   id: z.string(),

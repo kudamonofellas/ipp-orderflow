@@ -22,9 +22,11 @@ import {
   createOrderLines,
   createCustomer,
   getNextOrderNo,
+  readCorrections,
   readCustomers,
   readOrders,
   readProducts,
+  updateOrder,
   uploadFile,
   upsertCorrection,
   type CreateOrderLineInput,
@@ -33,6 +35,7 @@ import {
 } from "../../lib/directus";
 import { matchCustomer } from "../../lib/customerMatch";
 import type {
+  CorrectionsCollection,
   CustomersCollection,
   ProductsCollection,
 } from "../../types/directus";
@@ -118,10 +121,24 @@ export function OrderNew() {
 
   const [orderNoValue, setOrderNoValue] = useState("");
   const [orderNoTouched, setOrderNoTouched] = useState(false);
-  const [existingOrderNos, setExistingOrderNos] = useState<string[]>([]);
+  const [existingOrders, setExistingOrders] = useState<
+    {
+      id: string;
+      no: string;
+      customer_name: string | null;
+      stage: string | null;
+    }[]
+  >([]);
+  // The existing order this new one will supersede once created — set by
+  // tapping "Replace it" on the duplicate-number banner below. Cleared
+  // whenever the order number is edited by hand or the delivery date
+  // changes (a new date means a different set of existing orders, so a
+  // stale replaceId from before no longer means anything).
+  const [replaceId, setReplaceId] = useState<string | null>(null);
 
   const [customers, setCustomers] = useState<CustomersCollection[]>([]);
   const [products, setProducts] = useState<ProductsCollection[]>([]);
+  const [corrections, setCorrections] = useState<CorrectionsCollection[]>([]);
   const [loadingOpts, setLoadingOpts] = useState(false);
 
   const [dateGuessed, setDateGuessed] = useState(false);
@@ -146,7 +163,7 @@ export function OrderNew() {
     async function loadOptions() {
       setLoadingOpts(true);
       if (currentUserName) setSales(currentUserName);
-      const [c, p] = await Promise.all([
+      const [c, p, corr] = await Promise.all([
         readCustomers({
           fields: ["id", "name", "channel", "contact", "area"],
           limit: -1,
@@ -158,10 +175,12 @@ export function OrderNew() {
           limit: -1,
           sort: ["name"],
         }),
+        readCorrections(),
       ]);
       if (cancelled) return;
       if (c.error === null) setCustomers(c.data);
       if (p.error === null) setProducts(p.data);
+      if (corr.error === null) setCorrections(corr.data);
 
       setLoadingOpts(false);
 
@@ -218,14 +237,24 @@ export function OrderNew() {
     let cancelled = false;
     async function refresh() {
       const res = await readOrders({
-        fields: ["no"],
+        fields: ["id", "no", "customer_name", "stage"],
         filter: { no: { _starts_with: dc } },
         limit: -1,
       });
       if (cancelled) return;
-      setExistingOrderNos(
-        (res.data ?? []).map((o) => o.no).filter((n): n is string => !!n),
+      setExistingOrders(
+        (res.data ?? [])
+          .filter((o): o is typeof o & { id: string; no: string } => !!o.no)
+          .map((o) => ({
+            id: o.id,
+            no: o.no as string,
+            customer_name: o.customer_name ?? null,
+            stage: o.stage ?? null,
+          })),
       );
+      // A new date means a different set of existing orders — a replaceId
+      // chosen against the previous date's duplicate no longer applies.
+      setReplaceId(null);
       if (!orderNoTouched) {
         const noRes = await getNextOrderNo(dc);
         if (!cancelled && noRes.error === null) setOrderNoValue(noRes.data);
@@ -241,15 +270,15 @@ export function OrderNew() {
   const dcOf = deliverDate ? dateCode(deliverDate) : "";
   const parsedEntered = parseOrderNo(orderNoValue);
   const usedSeqs = new Set(
-    existingOrderNos
-      .map(parseOrderNo)
+    existingOrders
+      .map((o) => parseOrderNo(o.no))
       .filter((p): p is NonNullable<typeof p> => !!p && p.dateCode === dcOf)
       .map((p) => p.seq),
   );
   let lowestFreeSeq = 1;
   while (usedSeqs.has(lowestFreeSeq)) lowestFreeSeq++;
   const expectedNo = dcOf ? buildOrderNo(dcOf, lowestFreeSeq) : "";
-  const dupOrder = existingOrderNos.includes(orderNoValue);
+  const dupOrder = existingOrders.find((o) => o.no === orderNoValue) ?? null;
   const badNo = orderNoValue !== "" && !/^\d{9}$/.test(orderNoValue);
   const seqGap =
     !dupOrder &&
@@ -257,6 +286,17 @@ export function OrderNew() {
     dcOf &&
     parsedEntered?.dateCode === dcOf &&
     parsedEntered.seq !== lowestFreeSeq;
+  // Ported from the prototype's `deliverPast` (Dev-Intake.jsx:154) — a
+  // gentle hint only, never blocking Create, same as the prototype.
+  const today0 = new Date();
+  today0.setHours(0, 0, 0, 0);
+  const deliverPast = !!deliverDate && new Date(deliverDate) < today0;
+  const deliverDateLabel = deliverDate
+    ? new Date(deliverDate).toLocaleDateString("en-GB", {
+        day: "numeric",
+        month: "short",
+      })
+    : "";
 
   const productNameById = useMemo(() => {
     const m = new Map<string, string>();
@@ -332,6 +372,12 @@ export function OrderNew() {
         unit: result.unit,
         price: "",
         cuts: [],
+        // Threaded through to Create-time so the existing
+        // upsertCorrection sweep below learns from manually-matched
+        // items too, not just WhatsApp-paste prefill lines.
+        rawText: result.rawText,
+        learned: result.learned,
+        parseStatus: result.learned ? "recognized" : undefined,
       },
     ]);
   }
@@ -355,7 +401,7 @@ export function OrderNew() {
       setError(t("Order number format is invalid."));
       return;
     }
-    if (dupOrder) {
+    if (dupOrder && !replaceId) {
       setError(`Order #${orderNoValue} already exists.`);
       return;
     }
@@ -380,6 +426,38 @@ export function OrderNew() {
 
     setSubmitting(true);
     setError(null);
+
+    // "Replace it" was tapped on the duplicate-number banner — the old
+    // order must be renamed off #orderNoValue (its `no` field is unique in
+    // Directus, so both couldn't hold the same value even briefly) and
+    // cancelled *before* the new order is created with that number, or the
+    // create below would 409 on the same constraint. Cancel, not delete —
+    // this app has no order-delete anywhere; cancelling keeps the audit
+    // trail and stays reversible via the existing Restore flow, unlike the
+    // prototype's in-memory hard delete.
+    if (replaceId) {
+      const beingReplaced = existingOrders.find((o) => o.id === replaceId);
+      const replaceRes = await updateOrder(replaceId, {
+        no: `${orderNoValue}-REPL${Date.now().toString(36)}`,
+        cancelled: true,
+        stage: "cancelled",
+        cancelled_from: beingReplaced?.stage ?? "intake",
+        undo_snapshot: null,
+      });
+      if (replaceRes.error) {
+        setError(
+          `Failed to replace order #${orderNoValue}: ${replaceRes.error}`,
+        );
+        setSubmitting(false);
+        return;
+      }
+      await appendOrderHistory({
+        order_id: replaceId,
+        what: `Cancelled — replaced by a new order (was #${orderNoValue})`,
+        who: userId,
+        stage: "cancelled",
+      });
+    }
 
     let resolvedCustomerId: string;
     if (customerMatch.type === "exact" && customerMatch.customer) {
@@ -469,6 +547,7 @@ export function OrderNew() {
       if (failedCuts > 0) {
         alert(
           `Order created, but ${failedCuts} cutting instruction(s) failed to save. You can add them from the order page.`,
+          { title: t("Some cutting instructions didn't save") },
         );
       }
     }
@@ -499,6 +578,7 @@ export function OrderNew() {
       if (failedCount > 0) {
         alert(
           `Order created, but ${failedCount} attachment(s) failed to upload. You can add them from the order page.`,
+          { title: t("Some attachments didn't upload") },
         );
       }
     }
@@ -557,7 +637,12 @@ export function OrderNew() {
                 form="new-order-form"
                 variant="primary"
                 icon="save"
-                disabled={submitting || !allowed || loadingOpts}
+                disabled={
+                  submitting ||
+                  !allowed ||
+                  loadingOpts ||
+                  (!!dupOrder && !replaceId)
+                }
               >
                 {" "}
                 {submitting ? t("Creating…") : t("Create order")}
@@ -587,22 +672,77 @@ export function OrderNew() {
               </p>
             )}
 
+            {error && (
+              <p className={styles.error} role="alert">
+                {error}
+              </p>
+            )}
+
             <Card className={styles.customerCard}>
               {badNo && (
                 <p className={`${styles.hint} ${styles.banner}`}>
-                  {t("Order no. should look like")} {dcOf || "YYMMDD"}NNN ({t("9 digits")}).
+                  {t("Order no. should look like")} {dcOf || "YYMMDD"}NNN (
+                  {t("9 digits")}).
                 </p>
               )}
-              {dupOrder && (
-                <p className={`${styles.hint} ${styles.banner}`}>
-                  {t("Order")} #{orderNoValue} {t("already exists — duplicate?")}
-                </p>
+              {dupOrder && !replaceId && (
+                <div
+                  className={`${styles.hint} ${styles.banner} ${styles.bannerWarning}`}
+                >
+                  <Icon name="alert" size={15} />
+                  <span>
+                    {t("Order")} #{orderNoValue} {t("already exists")}
+                    {dupOrder.customer_name
+                      ? ` (${dupOrder.customer_name})`
+                      : ""}
+                    . {t("Duplicate?")}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      setOrderNoValue(expectedNo);
+                      setOrderNoTouched(true);
+                    }}
+                  >
+                    {t("Use")} #{expectedNo}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setReplaceId(dupOrder.id)}
+                  >
+                    {t("Replace it")}
+                  </Button>
+                </div>
+              )}
+              {replaceId && (
+                <div
+                  className={`${styles.hint} ${styles.banner} ${styles.bannerInfo}`}
+                >
+                  <Icon name="alert" size={15} />
+                  <span>
+                    {t("Will replace the existing")} #{orderNoValue}.
+                  </span>
+                  <Button
+                    type="button"
+                    variant="tertiary"
+                    size="sm"
+                    onClick={() => setReplaceId(null)}
+                    style={{ backgroundColor: "transparent" }}
+                  >
+                    {t("Undo")}
+                  </Button>
+                </div>
               )}
               {seqGap && (
                 <div className={`${styles.hint} ${styles.banner}`}>
                   <span>
                     {t("The next open queue number is")} #{expectedNo} —{" "}
-                    {t("but you entered")} #{orderNoValue}. {t("Typo, or keep it?")}
+                    {t("but you entered")} #{orderNoValue}.{" "}
+                    {t("Typo, or keep it?")}
                   </span>
                   <Button
                     type="button"
@@ -617,6 +757,17 @@ export function OrderNew() {
                   </Button>
                 </div>
               )}
+              {deliverPast && (
+                <div
+                  className={`${styles.hint} ${styles.banner} ${styles.bannerWarning}`}
+                >
+                  <Icon name="alert" size={15} />
+                  <span>
+                    {t("Delivery date")} {deliverDateLabel}{" "}
+                    {t("is in the past — is this a typo?")}
+                  </span>
+                </div>
+              )}
               <div className={styles.row}>
                 <label className={styles.field}>
                   <span className={styles.label}>{t("Order No.")}</span>
@@ -627,6 +778,7 @@ export function OrderNew() {
                     onChange={(e) => {
                       setOrderNoValue(e.target.value.replace(/\D/g, ""));
                       setOrderNoTouched(true);
+                      setReplaceId(null);
                     }}
                     disabled={submitting || !allowed}
                     placeholder="YYMMDDNNN"
@@ -656,7 +808,9 @@ export function OrderNew() {
               </div>
               <div className={styles.row}>
                 <label className={styles.field}>
-                  <span className={styles.label}>{t("Customer / Restaurant")} *</span>
+                  <span className={styles.label}>
+                    {t("Customer / Restaurant")} *
+                  </span>
                   <input
                     type="text"
                     className={styles.input}
@@ -672,6 +826,25 @@ export function OrderNew() {
                       <option key={c.id} value={c.name} />
                     ))}
                   </datalist>
+                  {customerMatch.type === "exact" && (
+                    <div
+                      className={styles.secondary}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "var(--space-xs)",
+                        color: "var(--state-success)",
+                      }}
+                    >
+                      <Icon name="check" /> {t("Existing customer.")}
+                    </div>
+                  )}
+                  {customerMatch.type === "new" && customerName.trim() && (
+                    <div className={styles.secondary}>
+                      {t("New customer —")} <b>{customerName.trim()}</b>{" "}
+                      {t("will be saved.")}
+                    </div>
+                  )}
                 </label>
                 <label className={styles.field}>
                   <span className={styles.label}>
@@ -717,24 +890,6 @@ export function OrderNew() {
                   >
                     {t("Use")} {customerMatch.customer.name}
                   </button>
-                </div>
-              )}
-              {customerMatch.type === "exact" && (
-                <div
-                  className={styles.secondary}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "var(--space-xs)",
-                  }}
-                >
-                  <Icon name="check" /> {t("Existing customer.")}
-                </div>
-              )}
-              {customerMatch.type === "new" && customerName.trim() && (
-                <div className={styles.secondary}>
-                  {t("New customer —")} <b>{customerName.trim()}</b>{" "}
-                  {t("will be saved.")}
                 </div>
               )}
 
@@ -783,7 +938,8 @@ export function OrderNew() {
 
               <label className={styles.field}>
                 <span className={styles.label}>
-                  {t("Notes")} <span className={styles.caption}>({t("Optional")})</span>
+                  {t("Notes")}{" "}
+                  <span className={styles.caption}>({t("Optional")})</span>
                 </span>
                 <textarea
                   className={styles.input}
@@ -802,7 +958,8 @@ export function OrderNew() {
 
             <Card>
               <div className={styles.heading}>
-                {t("Items")} <span className={styles.count}>{lines.length}</span>
+                {t("Items")}{" "}
+                <span className={styles.count}>{lines.length}</span>
               </div>
               <div className={styles.itemsList}>
                 {lines.map((l, i) => (
@@ -1022,12 +1179,6 @@ export function OrderNew() {
                 {t("Add Item")}
               </Button>
             </Card>
-
-            {error && (
-              <p className={styles.error} role="alert">
-                {error}
-              </p>
-            )}
           </form>
         </div>
 
@@ -1040,7 +1191,9 @@ export function OrderNew() {
             className={styles.panelToggleBtn}
             isActive={isPanelOpen}
             onClick={() => setIsPanelOpen((prev) => !prev)}
-            title={isPanelOpen ? t("Collapse side panel") : t("Expand side panel")}
+            title={
+              isPanelOpen ? t("Collapse side panel") : t("Expand side panel")
+            }
           />
 
           <div
@@ -1050,7 +1203,9 @@ export function OrderNew() {
             ].join(" ")}
           >
             <Card className={styles.notesCard}>
-              <h3 className={styles.heading}>{t("Original WhatsApp message")}</h3>
+              <h3 className={styles.heading}>
+                {t("Original WhatsApp message")}
+              </h3>
               {rawText && rawText.trim() ? (
                 <pre className={styles.pre}>{rawText}</pre>
               ) : (
@@ -1061,7 +1216,8 @@ export function OrderNew() {
               {attachments && attachments.length > 0 && (
                 <div className={styles.attachmentsNote}>
                   <p className={styles.muted}>
-                    {attachments.length} {t("attachment(s) will be added as PO document(s):")}
+                    {attachments.length}{" "}
+                    {t("attachment(s) will be added as PO document(s):")}
                   </p>
                   <ul>
                     {attachments.map((f, i) => (
@@ -1078,6 +1234,7 @@ export function OrderNew() {
         open={isAddItemModalOpen}
         products={products}
         unitOptions={[...UNITS]}
+        corrections={corrections}
         onClose={() => setIsAddItemModalOpen(false)}
         onConfirm={handleAddMatchedItem}
       />

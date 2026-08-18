@@ -135,7 +135,7 @@ function toOpenOrder(
   };
 }
 
-export function useOpenOrders(sort: string = "no"): UseOpenOrdersResult {
+export function useOpenOrders(sort: string = "-no"): UseOpenOrdersResult {
   const [orders, setOrders] = useState<OpenOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
