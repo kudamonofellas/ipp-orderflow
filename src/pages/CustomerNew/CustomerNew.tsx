@@ -1,44 +1,27 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { Card } from "../../components/Card/Card";
 import { Button } from "../../components/Button/Button";
 import { useAuth } from "../../hooks/useAuth";
 import { useLanguage } from "../../hooks/useLanguage";
-import {
-  readCustomers,
-  updateCustomer,
-} from "../../lib/directus";
-import { parseLatLng, formatLatLng } from "../../lib/latlng";
+import { createCustomer } from "../../lib/directus";
+import { parseLatLng } from "../../lib/latlng";
 import type { LatLng } from "../../types/directus";
-import styles from "./CustomerEdit.module.css";
+import styles from "./CustomerNew.module.css";
 
-export function CustomerEdit() {
-  const { id } = useParams<{ id: string }>();
+/** Create-a-customer form — layout ported from `CustomerEdit.tsx`, minus the
+ *  load-existing/change-detection machinery an edit needs but a fresh record
+ *  never does. */
+export function CustomerNew() {
   const navigate = useNavigate();
   const auth = useAuth();
   const { t } = useLanguage();
 
   const canEdit = auth.can("manage_customers");
 
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  // ── Loaded (original) values — used for change detection ──
-  const [origName, setOrigName] = useState("");
-  const [origCompanyName, setOrigCompanyName] = useState("");
-  const [origChannel, setOrigChannel] = useState("horeca");
-  const [origContact, setOrigContact] = useState("");
-  const [origAddress, setOrigAddress] = useState("");
-  const [origAddressGeoInput, setOrigAddressGeoInput] = useState("");
-  const [origArea, setOrigArea] = useState("");
-  const [origSales, setOrigSales] = useState("");
-  const [origPayTiming, setOrigPayTiming] = useState("upfront");
-  const [origPayMethod, setOrigPayMethod] = useState("transfer");
-  const [origCreditLimit, setOrigCreditLimit] = useState("0");
-  const [origTermDays, setOrigTermDays] = useState("0");
-
-  // ── Working copy ──
   const [name, setName] = useState("");
   const [companyName, setCompanyName] = useState("");
   const [channel, setChannel] = useState("horeca");
@@ -52,92 +35,22 @@ export function CustomerEdit() {
   const [creditLimit, setCreditLimit] = useState("0");
   const [termDays, setTermDays] = useState("0");
 
+  // Defence-in-depth — the button that reaches this page is already gated on
+  // `manage_customers` (Customers.tsx), same self-guard pattern as every
+  // other Edit/New page in this app.
   useEffect(() => {
-    let cancelled = false;
+    if (!canEdit) navigate("/customers", { replace: true });
+  }, [canEdit, navigate]);
 
-    async function loadData() {
-      setLoading(true);
-      setError(null);
-
-      const res = await readCustomers({ filter: { id: { _eq: id } } });
-      if (cancelled) return;
-
-      if (res.error || !res.data?.[0]) {
-        setError(res.error || "Customer not found.");
-        setLoading(false);
-        return;
-      }
-
-      const c = res.data[0];
-
-      // Populate originals
-      setOrigName(c.name);
-      setOrigCompanyName(c.company_name ?? "");
-      setOrigChannel(c.channel ?? "horeca");
-      setOrigContact(c.contact ?? "");
-      setOrigAddress(c.address ?? "");
-      setOrigAddressGeoInput(formatLatLng(c.address_geo));
-      setOrigArea(c.area ?? "");
-      setOrigSales(c.sales ?? "");
-      setOrigPayTiming(c.pay_timing ?? "upfront");
-      setOrigPayMethod(c.pay_method ?? "transfer");
-      setOrigCreditLimit(String(c.credit_limit ?? 0));
-      setOrigTermDays(String(c.term_days ?? 0));
-
-      // Populate working copies
-      setName(c.name);
-      setCompanyName(c.company_name ?? "");
-      setChannel(c.channel ?? "horeca");
-      setContact(c.contact ?? "");
-      setAddress(c.address ?? "");
-      setAddressGeoInput(formatLatLng(c.address_geo));
-      setArea(c.area ?? "");
-      setSales(c.sales ?? "");
-      setPayTiming(c.pay_timing ?? "upfront");
-      setPayMethod(c.pay_method ?? "transfer");
-      setCreditLimit(String(c.credit_limit ?? 0));
-      setTermDays(String(c.term_days ?? 0));
-
-      setLoading(false);
-    }
-
-    loadData();
-    return () => {
-      cancelled = true;
-    };
-  }, [id]);
-
-  // ── Redirect unauthorized users away ──
-  useEffect(() => {
-    if (!loading && !canEdit) {
-      navigate(`/customers/${id}`, { replace: true });
-    }
-  }, [loading, canEdit, navigate, id]);
-
-  // ── Change detection ──
-  const hasChanges =
-    name.trim() !== origName.trim() ||
-    companyName.trim() !== origCompanyName.trim() ||
-    channel !== origChannel ||
-    contact.trim() !== origContact.trim() ||
-    address.trim() !== origAddress.trim() ||
-    addressGeoInput.trim() !== origAddressGeoInput.trim() ||
-    area.trim() !== origArea.trim() ||
-    sales.trim() !== origSales.trim() ||
-    payTiming !== origPayTiming ||
-    payMethod !== origPayMethod ||
-    creditLimit !== origCreditLimit ||
-    termDays !== origTermDays;
-
-  const canSave = hasChanges && !!name.trim() && !saving;
+  const canSave = !!name.trim() && !saving;
 
   function handleCancel() {
-    navigate(`/customers/${id}`);
+    navigate("/customers");
   }
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!canSave || !id) return;
+    if (!canSave) return;
 
     const trimmedGeo = addressGeoInput.trim();
     let addressGeo: LatLng | null = null;
@@ -153,7 +66,13 @@ export function CustomerEdit() {
     }
 
     setSaving(true);
-    const payload = {
+    // No client-generated `id` — `customers.id` is a real Postgres `uuid`
+    // column (`default_value: gen_random_uuid()`); a non-UUID string here
+    // fails the column's type check, which Directus reports as a
+    // misleading 403 "You don't have permission to access this" rather
+    // than a validation error. Confirmed live via curl. Let the DB assign
+    // the id, matching `OrderNew.tsx`'s own inline customer-creation path.
+    const res = await createCustomer({
       name: name.trim(),
       company_name: companyName.trim() || null,
       channel,
@@ -166,26 +85,16 @@ export function CustomerEdit() {
       pay_method: payMethod,
       credit_limit: parseInt(creditLimit.replace(/[^\d]/g, ""), 10) || 0,
       term_days: parseInt(termDays, 10) || 0,
-    };
-
-    const res = await updateCustomer(id, payload);
+    });
 
     setSaving(false);
 
     if (res.error) {
-      setError(`Failed to save: ${res.error}`);
+      setError(`Failed to create customer: ${res.error}`);
     } else {
-      navigate(`/customers/${id}`);
+      navigate(res.data ? `/customers/${res.data.id}` : "/customers");
     }
   };
-
-  if (loading) return <div className={styles.container}>{t("Loading…")}</div>;
-  if (error)
-    return (
-      <div className={styles.container} style={{ color: "var(--state-error)" }}>
-        {t(error)}
-      </div>
-    );
 
   return (
     <div className={styles.container}>
@@ -199,10 +108,10 @@ export function CustomerEdit() {
               icon="chevronLeft"
               onClick={handleCancel}
             >
-              {t("Back to customer")}
+              {t("Back to customers")}
             </Button>
             <div className={styles.titleRow}>
-              <h2 className={styles.title}>{t("Edit Customer")}</h2>
+              <h2 className={styles.title}>{t("New Customer")}</h2>
             </div>
           </div>
           <div className={styles.actions}>
@@ -221,7 +130,7 @@ export function CustomerEdit() {
               disabled={!canSave}
               onClick={handleSave}
             >
-              {saving ? t("Saving…") : t("Save Changes")}
+              {saving ? t("Creating…") : t("Create Customer")}
             </Button>
           </div>
         </header>
@@ -241,6 +150,7 @@ export function CustomerEdit() {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   required
+                  autoFocus
                   placeholder="e.g. Toko Makmur"
                   disabled={saving}
                 />
@@ -333,7 +243,6 @@ export function CustomerEdit() {
         <Card>
           <h3 className={styles.heading}>{t("Finance")}</h3>
           <div className={styles.fields}>
-
             <div className={styles.row}>
               <label className={styles.field}>
                 <span className={styles.label}>{t("Sales Rep")}</span>

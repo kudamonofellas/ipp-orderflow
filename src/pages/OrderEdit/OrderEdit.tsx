@@ -385,8 +385,7 @@ export function OrderEdit() {
 
     try {
       const orderPatch: Record<string, unknown> = {};
-      if (orderNo.trim() !== (order.no ?? ""))
-        orderPatch.no = orderNo.trim();
+      if (orderNo.trim() !== (order.no ?? "")) orderPatch.no = orderNo.trim();
       if (customerName.trim() !== (order.customer_name ?? ""))
         orderPatch.customer_name = customerName.trim();
       if (customerId !== order.customer_id) orderPatch.customer_id = customerId;
@@ -495,7 +494,9 @@ export function OrderEdit() {
       );
       if (correctionTargets.length > 0) {
         await Promise.allSettled(
-          correctionTargets.map((l) => upsertCorrection(l.rawText!, l.productId!)),
+          correctionTargets.map((l) =>
+            upsertCorrection(l.rawText!, l.productId!),
+          ),
         );
       }
 
@@ -543,7 +544,9 @@ export function OrderEdit() {
               >
                 {t("Back to order")}
               </Button>
-              <h2 className={styles.title}>{t("Order")} {order.no}</h2>
+              <h2 className={styles.title}>
+                {t("Order")} {order.no}
+              </h2>
             </div>
             <div className={styles.actions}>
               <Button
@@ -557,9 +560,7 @@ export function OrderEdit() {
               <Button
                 type="button"
                 variant="primary"
-                disabled={
-                  !hasEditChanges || submitting || !canEdit
-                }
+                disabled={!hasEditChanges || submitting || !canEdit}
                 icon="save"
                 onClick={handleSaveAllEdits}
               >
@@ -597,7 +598,9 @@ export function OrderEdit() {
             </div>
             <div className={styles.row}>
               <label className={styles.field}>
-                <span className={styles.label}>{t("Customer / Restaurant")}</span>
+                <span className={styles.label}>
+                  {t("Customer / Restaurant")}
+                </span>
                 <select
                   className={styles.select}
                   value={customerId ?? ""}
@@ -744,7 +747,9 @@ export function OrderEdit() {
                             }
                           }}
                         >
-                          <option value="__custom__">{t("— Custom Product —")}</option>
+                          <option value="__custom__">
+                            {t("— Custom Product —")}
+                          </option>
                           {products.map((p) => (
                             <option key={p.id} value={p.id}>
                               {p.name}
@@ -775,11 +780,10 @@ export function OrderEdit() {
                       variant="ghost"
                       size="sm"
                       iconOnly
+                      icon="trash"
                       className={styles.deleteBtn}
                       onClick={() => handleDeleteLine(line.id)}
-                    >
-                      <Icon name="trash" size={16} />
-                    </Button>
+                    />
                   </div>
 
                   {/* Cuts */}
@@ -834,23 +838,23 @@ export function OrderEdit() {
                           type="button"
                           variant="ghost"
                           size="sm"
+                          icon="trash"
                           iconOnly
                           onClick={() =>
                             handleDeleteCutFromLine(line.id, cut.id)
                           }
-                        >
-                          <Icon name="trash" size={14} />
-                        </Button>
+                        />
                       </div>
                     ))}
                     <Button
                       type="button"
                       variant="tertiary"
                       size="sm"
+                      icon="add"
                       style={{ alignSelf: "flex-start" }}
                       onClick={() => handleAddCutToLine(line.id)}
                     >
-                      <Icon name="add" size={14} /> {t("Add cutting")}
+                      {t("Add cutting")}
                     </Button>
                   </div>
 

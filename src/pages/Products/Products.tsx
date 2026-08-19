@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Icon } from '../../components/Icon/Icon';
 import { Card } from '../../components/Card/Card';
 import { SortableTh } from '../../components/SortableTh/SortableTh';
@@ -36,7 +36,18 @@ export function Products() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
-  const [sortBy, setSortBy] = useState('name');
+  // Sort lives in the URL (?sort=...), same as Orders.tsx — so it survives
+  // Back navigation from a product's detail page.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const sortBy = searchParams.get('sort') || 'name';
+  function setSortBy(next: string) {
+    setSearchParams((prev) => {
+      const params = new URLSearchParams(prev);
+      if (next === 'name') params.delete('sort');
+      else params.set('sort', next);
+      return params;
+    });
+  }
   const [activeFilter, setActiveFilter] = useState<ActiveFilter>('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

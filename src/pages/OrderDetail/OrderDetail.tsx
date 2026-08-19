@@ -3,6 +3,7 @@ import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { Card } from "../../components/Card/Card";
 import { Icon } from "../../components/Icon/Icon";
 import { Button } from "../../components/Button/Button";
+import { Checkbox } from "../../components/Checkbox/Checkbox";
 import { Avatar } from "../../components/Avatar/Avatar";
 import { CourierLiveLocation } from "../../components/CourierLiveLocation/CourierLiveLocation";
 import { useDriverLive } from "../../components/CourierLiveLocation/useDriverLive";
@@ -48,6 +49,7 @@ import {
   createOrder,
   createOrderLines,
   createLineCut,
+  updateLineCut,
   type CreateOrderLineInput,
 } from "../../lib/directus";
 import type {
@@ -88,6 +90,19 @@ import styles from "./OrderDetail.module.css";
 function isWeighedUnit(unit: string | null | undefined): boolean {
   const u = (unit ?? "").toLowerCase();
   return u === "loaf" || u === "kg" || u === "gram";
+}
+
+/**
+ * Narrower than `isWeighedUnit` — kg/gram only, no Loaf. Matches the
+ * prototype's own split (`Dev-domain.js:32,35`: `isWeightUnit` vs
+ * `isWeighed = isWeightUnit || loaf`): the over/under-order tolerance hint
+ * only ever applied to true weight units there, since a Loaf's "ordered
+ * qty" is a piece count, not a weight — comparing a kg total against a
+ * loaf count as if they were the same measure never made sense.
+ */
+function isWeightOnlyUnit(unit: string | null | undefined): boolean {
+  const u = (unit ?? "").toLowerCase();
+  return u === "kg" || u === "gram";
 }
 
 /**
@@ -156,7 +171,7 @@ const STAGE_FLOW: Record<
     next: "production",
     prev: "intake",
     capability: "weighColdStorage",
-    advanceLabel: "Done — Send to Production",
+    advanceLabel: "Weighed — release",
   },
   finance: {
     next: null,
@@ -174,7 +189,7 @@ const STAGE_FLOW: Record<
     next: "finalise",
     prev: "production",
     capability: "packWarehouse",
-    advanceLabel: "Done — Send to Finalise",
+    advanceLabel: "Packed & Ready",
   },
   finalise: {
     next: "dispatch",
@@ -330,7 +345,7 @@ export function OrderDetail() {
   const auth = useAuth();
   const userId = useCurrentUserId();
   const { t } = useLanguage();
-  const { alert, confirm } = useDialog();
+  const { alert, confirm, prompt } = useDialog();
   const { settings: opsSettings } = useSettings();
   const proofRequired = opsSettings?.dispatch_proof_required === true;
   const requirePhoto = opsSettings?.require_photo === true;
@@ -479,6 +494,11 @@ export function OrderDetail() {
   const [sendingQtyMap, setSendingQtyMap] = useState<Record<string, number>>(
     {},
   );
+  // Local-only tick-off state for the Production "Cut · tick each cutting"
+  // card — mirrors the prototype's own local `cut` state (Dev-OrderDetail.jsx:754):
+  // ticking a box doesn't write anything until "Cutting done → to packing"
+  // is actually clicked, same as this file's other stage-action cards.
+  const [cutDoneMap, setCutDoneMap] = useState<Record<string, boolean>>({});
 
   /* ── user's name state ── */
   const [users, setUsers] = useState<UserBrief[]>([]);
@@ -550,10 +570,21 @@ export function OrderDetail() {
 
       loadedLines.forEach((line) => {
         if (line.id) {
-          initialSending[line.id] =
+          const qtyNum =
             typeof line.qty === "string"
               ? parseFloat(line.qty)
               : (line.qty ?? 1);
+          // Prefer the persisted `sent` value — falling back to the full
+          // qty (nothing short yet) only when it's never been set. Without
+          // this, every page load/every viewer reset "sending" back to the
+          // full qty regardless of what Warehouse actually entered — the
+          // real bug behind Finance seeing "3 of 3" after Warehouse saved
+          // "2 of 3": `sent` was never read from (or written to) the
+          // database at all, purely local per-tab React state.
+          const sentNum =
+            typeof line.sent === "string" ? parseFloat(line.sent) : line.sent;
+          initialSending[line.id] =
+            sentNum != null && !Number.isNaN(sentNum) ? sentNum : qtyNum;
         }
       });
       setSendingQtyMap(initialSending);
@@ -711,11 +742,33 @@ export function OrderDetail() {
     auth.can("editOrderLines") &&
     (!isOrderLocked(order) || auth.can("editAfterLock"));
   // A role can advance a stage it owns (flow.capability) OR — if granted the
-  // separate "floor helper" capability — cover any stage regardless of owner.
+  // separate "floor helper" capability — cover cold/production/packing/
+  // dispatch specifically, matching the prototype's own `canAct`
+  // (`Dev-OrderDetail.jsx:123`: `['cold','production','packing','dispatch'].includes(stage)`).
+  // `finance` is deliberately excluded from this list — clearing the Finance
+  // gate is gated by `approveFinance`/`actFinanceGate` only (`Finance` role,
+  // or Owner), never by the generic floor-helper grant. Without this
+  // exclusion, Admin (the only role with `helpOtherStages` by default) read
+  // `canAdvance` as true at the `finance` stage — not enough to see the
+  // Finance-gate form (that's separately gated on `approveFinance`), but
+  // enough to wrongly suppress the "This order is with Finance now" notice
+  // below, leaving Admin looking at a screen with no action AND no
+  // explanation why.
   const canAdvance = flow
-    ? auth.can(flow.capability) || auth.can("helpOtherStages")
+    ? auth.can(flow.capability) ||
+      (stage !== "finance" && auth.can("helpOtherStages"))
     : false;
-  const canSendBack = flow?.prev ? auth.can("sendBackStage") : false;
+  // Previously gated on the generic `sendBackStage` capability alone
+  // (Admin-only by default) — the role that actually owns the current
+  // stage (e.g. Warehouse at `cold`) had no way to correct their own
+  // mistaken advance without an Admin doing it for them. Now also allows
+  // whoever owns this stage (`flow.capability`) or is helping as floor
+  // cover (`helpOtherStages`), matching `canAdvance`'s own pattern above.
+  const canSendBack = flow?.prev
+    ? auth.can("sendBackStage") ||
+      auth.can(flow.capability) ||
+      auth.can("helpOtherStages")
+    : false;
   const canCancel =
     auth.can("cancelOrders") && !isCancelled && !isDelivered && !isReturned;
   const canHold =
@@ -766,19 +819,48 @@ export function OrderDetail() {
   // "Release to Finance"/"Weighed — release" button stays disabled until
   // every catch-weight (Loaf/kg/gram) line actually has a recorded weight,
   // same rule for every role that can reach it (Warehouse, Owner, or Admin
-  // covering as floor helper). This port has no "short" flag to hold a line
-  // exempt, so a weighed-unit line always needs weight > 0. Non-weighed
-  // lines (the "sending" qty box) never block — matches the prototype's
-  // `catchLines` scope (weight-unit lines only).
+  // covering as floor helper). Non-weighed lines (the "sending" qty box)
+  // never block — matches the prototype's `catchLines` scope (weight-unit
+  // lines only). A kg/gram line flagged `short` (genuinely out of stock —
+  // ported from the prototype's `held()`, `Dev-OrderDetail.jsx:670-671) is
+  // exempt from needing a weight — mirrors the prototype's own `held(l)`
+  // scope exactly: Loaf lines can't be exempted this way (no `short` there).
   const coldWeighingReady = lines
     .filter((l) => isWeighedUnit(l.unit))
     .every((l) => {
+      if (isWeightOnlyUnit(l.unit) && l.short) return true;
       const total = (l.id ? (weighingsMap[l.id] ?? []) : []).reduce(
         (acc, w) => acc + (parseFloat(w.weight) || 0),
         0,
       );
       return total > 0;
     });
+  // Ported from the prototype's Production card (`Dev-OrderDetail.jsx:744-766`)
+  // — "Start cutting" (freezes/flags the run as committed) + a per-cut
+  // tick-off that gates the actual advance to packing, replacing the plain
+  // generic advance button for this one stage.
+  const canCutHere =
+    stage === "production" &&
+    (auth.can("cutProduction") || auth.can("helpOtherStages"));
+  const cutTasks = lines.flatMap((l) =>
+    (l.id ? (lineCutsByLine[l.id] ?? []) : []).map((cut) => ({
+      lineName: l.name,
+      cut,
+    })),
+  );
+  function isCutDone(cut: LineCutsCollection): boolean {
+    return cutDoneMap[cut.id] ?? !!cut.done;
+  }
+  const allCutsDone = cutTasks.every((t) => isCutDone(t.cut));
+  // Packing's own "Pack the order" card (Dev-OrderDetail.jsx:769-782) —
+  // cut lines came back from Production separately and need collecting;
+  // other lines never left the warehouse.
+  const cutItems = lines.filter(
+    (l) => l.id && (lineCutsByLine[l.id]?.length ?? 0) > 0 && !l.removed,
+  );
+  const otherItems = lines.filter(
+    (l) => !(l.id && (lineCutsByLine[l.id]?.length ?? 0) > 0) && !l.removed,
+  );
   const canReorder = auth.can("createOrders");
 
   // Hand-off mode at the dispatch stage — null until the courier/dispatcher
@@ -803,12 +885,25 @@ export function OrderDetail() {
   // an action here, instead of the screen silently having no buttons.
   const stageActor = ACTOR[stage];
   const isStageActor = auth.role === "Owner" || auth.role === stageActor;
-  /** Quiet Undo link eligibility — a snapshot exists (nothing since has
-   *  superseded it, see the clearing in handleSendBack/handleHold/etc.) and
-   *  the viewer is either who confirmed the delivery or an Owner. */
+  /** Generic one-step "Pressed wrongly?" self-undo — ported from the
+   *  prototype's `canSelfUndo` (`Dev-OrderDetail.jsx:350-351`). Available
+   *  after ANY stage-changing action (handleAdvance/handleSendBack/
+   *  handleCuttingDoneAdvance/handlePackAdvance/handleConfirmDelivery all
+   *  write a fresh `undo_snapshot`), to whoever just did it (or Owner),
+   *  for as long as it's still the LAST thing that happened to the order —
+   *  the timestamp match against the newest history entry is what makes a
+   *  snapshot "go stale" the moment anyone (including the same actor) does
+   *  anything else, without needing every handler to remember to clear it.
+   *  Distinct from the Finance gate's own Undo (`showFinanceUndoRow`
+   *  below), which is deliberately NOT time-limited this way — matches the
+   *  prototype's own separate `canUndoClear`. */
+  const lastHistoryEntry = history[history.length - 1];
   const canUndo =
     !!order.undo_snapshot &&
-    (userId === order.undo_snapshot.who || auth.role === "Owner");
+    (userId === order.undo_snapshot.who || auth.role === "Owner") &&
+    !!lastHistoryEntry &&
+    lastHistoryEntry.at === order.undo_snapshot.at &&
+    stage !== "cancelled";
   // Finance has a parallel job at cold/finance (the Finance gate card) even
   // though they can't advance the *stage* itself — ported from the
   // prototype's `canAct`, which explicitly includes Finance at
@@ -986,6 +1081,55 @@ export function OrderDetail() {
       a.doc_type !== "recv" &&
       a.doc_type !== "signed",
   );
+
+  /** Persists the "sending" qty (`order_lines.sent`) on blur — mirrors the
+   *  weighing inputs' own onBlur-save pattern. Previously this was pure
+   *  local `useState`, never read from or written to the database, so a
+   *  Warehouse edit only ever existed in that one browser tab: a second
+   *  viewer (e.g. Finance) always saw the full ordered qty regardless of
+   *  what was actually entered. */
+  async function handleSendingBlur(lineId: string) {
+    const val = sendingQtyMap[lineId];
+    if (val === undefined) return;
+    const res = await updateOrderLine(lineId, { sent: val });
+    if (res.error) {
+      alert(`Failed to save sending quantity: ${res.error}`, {
+        title: t("Couldn't save sending quantity"),
+      });
+    }
+  }
+
+  /** "Short — ran out of stock" toggle for a weighed (kg/gram) cold-storage
+   *  line — ported from the prototype's `shortFlag`/`held()`
+   *  (`Dev-OrderDetail.jsx:670-671,1419-1422`). `order_lines.short` was
+   *  already live in the schema and Warehouse's write ACL — dormant, never
+   *  wired up. Marking a line short exempts it from needing a recorded
+   *  weight (`coldWeighingReady`) and a proof photo (`handleAdvance`), and
+   *  forces its "sending" qty to 0 so the existing "X to follow" hint
+   *  (`order_lines.sent`) carries the owed quantity through every later
+   *  stage/role — this port has no separate fulfillment-tracking field, so
+   *  reusing `sent` (rather than inventing one) is the most direct way to
+   *  make "customer still owed this" visible everywhere `sent` already is.
+   *  Un-marking restores the full ordered qty as "sending". */
+  async function handleToggleShort(
+    lineId: string,
+    currentShort: boolean,
+    qty: number,
+  ) {
+    const next = !currentShort;
+    const res = await updateOrderLine(lineId, {
+      short: next,
+      sent: next ? 0 : qty,
+    });
+    if (res.error || !res.data) {
+      alert(`Failed to update short flag: ${res.error}`, {
+        title: t("Couldn't update line"),
+      });
+      return;
+    }
+    setLines((prev) => prev.map((l) => (l.id === lineId ? res.data! : l)));
+    setSendingQtyMap((prev) => ({ ...prev, [lineId]: next ? 0 : qty }));
+  }
 
   /* ────────────── Weighing & Item Photo Handlers ── */
   function handleAddWeighing(lineId: string) {
@@ -1277,9 +1421,52 @@ export function OrderDetail() {
   }
 
   /* ────────────── Stage Flow Actions ── */
+  /** Builds a generic one-step "Pressed wrongly?" undo snapshot — ported
+   *  from the prototype's `advance()` (`Dev-OrderDetail.jsx:194-216`),
+   *  which stamps every stage-changing action with the exact pre-write
+   *  values of whatever fields it's about to touch. Any stage-changing
+   *  handler can call this with the same patch object it's sending to
+   *  `updateOrder`, and get back the values needed to reverse it. */
+  function snapshotFor(patch: Record<string, unknown>): UndoSnapshot {
+    const changedFields: Record<string, unknown> = {};
+    const orderRecord = order as unknown as Record<string, unknown>;
+    for (const key of Object.keys(patch)) {
+      if (key === "undo_snapshot") continue;
+      changedFields[key] = key === "stage" ? stage : (orderRecord[key] ?? null);
+    }
+    return {
+      prevStage: stage,
+      changedFields,
+      who: userId,
+      at: new Date().toISOString(),
+    };
+  }
+
+  /** "Held back, nothing leaving today" — ported from the prototype's
+   *  `held(l)` (`Dev-OrderDetail.jsx:671`): a kg/gram line flagged `short`
+   *  (ran out of stock), or any other line whose "sending" qty is 0 (a
+   *  counted/Loaf line being held back entirely this visit). Used to
+   *  suppress the cold-storage photo requirement below when there's
+   *  genuinely nothing to photograph. */
+  function isLineHeld(l: OrderLinesCollection): boolean {
+    if (isWeightOnlyUnit(l.unit)) return !!l.short;
+    const qtyNum = typeof l.qty === "string" ? parseFloat(l.qty) || 0 : (l.qty ?? 0);
+    const sendingQty = l.id ? (sendingQtyMap[l.id] ?? qtyNum) : qtyNum;
+    return sendingQty === 0;
+  }
+
   async function handleAdvance() {
     if (!id || !flow?.next || advancing) return;
-    if (stage === "cold" && requirePhoto) {
+    // Photos already SAVED on a line (a previous visit / reopen) count —
+    // only genuinely photo-less, non-held lines block the release. If
+    // EVERY line is held (nothing physically left to photograph), the
+    // requirement is skipped entirely — ported from the prototype's
+    // `photosOk` (`Dev-OrderDetail.jsx:672-674`).
+    if (
+      stage === "cold" &&
+      requirePhoto &&
+      !lines.every((l) => l.removed || isLineHeld(l))
+    ) {
       const hasAnyItemPhoto = lines.some(
         (line) => line.id && (itemPhotosMap[line.id]?.length ?? 0) > 0,
       );
@@ -1301,7 +1488,11 @@ export function OrderDetail() {
     // stage's target is unaffected.
     const target = stage === "cold" && !financeCleared ? "finance" : flow.next;
     setAdvancing(true);
-    const res = await updateOrder(id, { stage: target });
+    const patch = { stage: target };
+    const res = await updateOrder(id, {
+      ...patch,
+      undo_snapshot: snapshotFor(patch),
+    });
     if (!res.error && res.data) {
       setOrder(res.data);
       await appendOrderHistory({
@@ -1320,8 +1511,127 @@ export function OrderDetail() {
     setAdvancing(false);
   }
 
+  /** Production marks the moment cutting begins — ported from the
+   *  prototype's `startCutting()` (`Dev-OrderDetail.jsx:303`). Purely a
+   *  flag + timestamp + who; doesn't touch stage or any line. */
+  async function handleStartCutting() {
+    if (!id) return;
+    const res = await updateOrder(id, {
+      cutting_started: true,
+      cutting_started_at: new Date().toISOString(),
+      cutting_started_by: userId,
+    });
+    if (!res.error && res.data) {
+      setOrder(res.data);
+      await appendOrderHistory({
+        order_id: id,
+        what: "Started cutting",
+        who: userId,
+        stage: "production",
+      });
+      const hRes = await readOrderHistory(id);
+      if (!hRes.error) setHistory(hRes.data ?? []);
+    } else {
+      alert(`Failed to start cutting: ${res.error}`, {
+        title: t("Couldn't start cutting"),
+      });
+    }
+  }
+
+  /** Local-only toggle — ticking a cut doesn't write anything until the
+   *  final "Cutting done" click, same as the prototype's own local `cut`
+   *  state. */
+  function handleToggleCut(cut: LineCutsCollection) {
+    setCutDoneMap((prev) => ({ ...prev, [cut.id]: !isCutDone(cut) }));
+  }
+
+  /** The production stage's own advance action — replaces the generic
+   *  "Done — Send to Packing" button for this stage only. Persists every
+   *  ticked cut's `done` flag, then advances (ported from the prototype's
+   *  final "Cutting done → to packing" handler, `Dev-OrderDetail.jsx:758-764`
+   *  — minus the reweigh-detour branch, which this port doesn't have). */
+  async function handleCuttingDoneAdvance() {
+    if (!id || !flow?.next || advancing || !allCutsDone) return;
+    setAdvancing(true);
+    const newlyDone = cutTasks.filter((t) => !t.cut.done);
+    if (newlyDone.length > 0) {
+      await Promise.allSettled(
+        newlyDone.map((t) => updateLineCut(t.cut.id, { done: true })),
+      );
+      const cutsRes = await readLineCuts(lines.map((l) => l.id));
+      const grouped: Record<string, LineCutsCollection[]> = {};
+      (cutsRes.data ?? []).forEach((c) => {
+        (grouped[c.line_id] ??= []).push(c);
+      });
+      setLineCutsByLine(grouped);
+    }
+    setCutDoneMap({});
+    const cuttingPatch = { stage: flow.next };
+    const res = await updateOrder(id, {
+      ...cuttingPatch,
+      undo_snapshot: snapshotFor(cuttingPatch),
+    });
+    if (!res.error && res.data) {
+      setOrder(res.data);
+      await appendOrderHistory({
+        order_id: id,
+        what: "Cutting done — back to warehouse to pack",
+        who: userId,
+        stage: flow.next,
+      });
+      const hRes = await readOrderHistory(id);
+      if (!hRes.error) setHistory(hRes.data ?? []);
+    } else {
+      alert(`Failed to advance stage: ${res.error}`, {
+        title: t("Couldn't advance stage"),
+      });
+    }
+    setAdvancing(false);
+  }
+
+  /** Packing's own advance action — replaces the generic advance button
+   *  for this stage, same pattern as Production's card. Ported from the
+   *  prototype's "Packed & ready" button (Dev-OrderDetail.jsx:779). */
+  async function handlePackAdvance() {
+    if (!id || !flow?.next || advancing) return;
+    setAdvancing(true);
+    const patch = { stage: flow.next };
+    const res = await updateOrder(id, {
+      ...patch,
+      undo_snapshot: snapshotFor(patch),
+    });
+    if (!res.error && res.data) {
+      setOrder(res.data);
+      await appendOrderHistory({
+        order_id: id,
+        what: "Packed — whole order ready",
+        who: userId,
+        stage: flow.next,
+      });
+      const hRes = await readOrderHistory(id);
+      if (!hRes.error) setHistory(hRes.data ?? []);
+    } else {
+      alert(`Failed to advance stage: ${res.error}`, {
+        title: t("Couldn't advance stage"),
+      });
+    }
+    setAdvancing(false);
+  }
+
   async function handleSendBack() {
     if (!id || !flow?.prev || advancing) return;
+    // Ported from the prototype's sendBackStage() (Dev-OrderDetail.jsx:360)
+    // — asks why before sending back, same modal-based prompt for every
+    // role that can reach this (Admin via `sendBackStage`, Owner always,
+    // or whoever owns the current stage — see canSendBack above).
+    const targetLabel = t(
+      STAGE_LABELS[flow.prev as keyof typeof STAGE_LABELS] ?? flow.prev,
+    );
+    const reason = await prompt(
+      `${t("Send back to")} ${targetLabel} — ${t("why?")}`,
+      { title: t("Send back") },
+    );
+    if (reason === null) return;
     setAdvancing(true);
     // Sending back from dispatch (e.g. to reprint DO/SI), or reopening from
     // delivered, must also clear the hand-off fields — ported from the
@@ -1335,28 +1645,77 @@ export function OrderDetail() {
     if (stage === "delivered" && activeProof) {
       await updateDeliveryProof(activeProof.id, { archived: true });
     }
-    const patch: Record<string, unknown> = isDispatchReset
-      ? {
-          stage: flow.prev,
-          taken_by: null,
-          pickup: false,
-          third_party: false,
-          courier_service: null,
-          // Reopening is a distinct, deliberate action that supersedes any
-          // pending quiet Undo from the delivery this is reopening.
-          ...(stage === "delivered" ? { undo_snapshot: null } : {}),
-        }
-      : { stage: flow.prev };
-    const res = await updateOrder(id, patch);
+    // Ported from the prototype's CUT_RESET (Dev-OrderDetail.jsx:306) — the
+    // prototype applies it unconditionally on every send-back (a single
+    // denormalized document with no per-field ACL to worry about), but this
+    // port's roles have field-restricted Directus grants (e.g. Courier's
+    // orders.update doesn't include cutting_started* at all), so sending
+    // these fields on an unrelated transition (dispatch → finalise) would
+    // 403 the whole write. Scoped to the two transitions where it's
+    // actually meaningful: leaving `production`, or arriving back at it
+    // from a later stage (e.g. packing → production) — either way "Start
+    // cutting" should be fresh, not stuck on stale state.
+    // Deliberately diverges from the prototype's own CUT_RESET here, per
+    // explicit product decision: the prototype leaves already-ticked
+    // line_cuts.done alone ("the meat doesn't become un-cut"), but this
+    // port also un-ticks every cut on the same transitions — a send-back
+    // means something needs re-doing, so Production should re-verify each
+    // cut rather than trust a stale tick from before the order left.
+    const needsCutReset = stage === "production" || flow.prev === "production";
+    const patch: Record<string, unknown> = {
+      stage: flow.prev,
+      ...(needsCutReset
+        ? {
+            cutting_started: false,
+            cutting_started_at: null,
+            cutting_started_by: null,
+          }
+        : {}),
+      ...(isDispatchReset
+        ? {
+            taken_by: null,
+            pickup: false,
+            third_party: false,
+            courier_service: null,
+          }
+        : {}),
+    };
+    // A fresh snapshot for THIS move — supersedes whatever snapshot (if
+    // any) was left over from a prior action, including the delivered
+    // order's own pending Undo when reopening.
+    const res = await updateOrder(id, {
+      ...patch,
+      undo_snapshot: snapshotFor(patch),
+    });
     if (!res.error && res.data) {
       setOrder(res.data);
       if (stage === "delivered") {
         setActiveProof(null);
         resetProofState();
       }
+      if (needsCutReset) {
+        // Un-tick every cut to match — both the local override map (a tick
+        // made before "Cutting done" was ever clicked was never persisted
+        // in the first place) and any cuts already persisted as done from
+        // a completed run before this send-back, per the product decision
+        // above.
+        setCutDoneMap({});
+        const doneCuts = cutTasks.filter((t) => t.cut.done);
+        if (doneCuts.length > 0) {
+          await Promise.allSettled(
+            doneCuts.map((t) => updateLineCut(t.cut.id, { done: false })),
+          );
+          const cutsRes = await readLineCuts(lines.map((l) => l.id));
+          const grouped: Record<string, LineCutsCollection[]> = {};
+          (cutsRes.data ?? []).forEach((c) => {
+            (grouped[c.line_id] ??= []).push(c);
+          });
+          setLineCutsByLine(grouped);
+        }
+      }
       await appendOrderHistory({
         order_id: id,
-        what: `Stage returned: ${stage} → ${flow.prev}`,
+        what: `Stage returned: ${stage} → ${flow.prev}${reason.trim() ? ` — ${reason.trim()}` : ""}`,
         who: userId,
         stage: flow.prev,
       });
@@ -1995,21 +2354,26 @@ export function OrderDetail() {
   }
 
   /**
-   * Un-happens a mistaken "Mark delivered" — distinct from Reopen (a
-   * deliberate re-delivery that resets hand-off state and stays available
-   * indefinitely). Undo restores the exact pre-delivery field values from
-   * `undo_snapshot`, archives the delivery_proofs row the confirm created,
-   * and only stays offered while nothing else has touched the order since
-   * (every other order-mutating handler clears `undo_snapshot` itself).
+   * Generic one-step "Pressed wrongly?" self-undo — ported from the
+   * prototype's `undoMyStep()` (`Dev-OrderDetail.jsx:352-356`). Restores
+   * every field the last stage-changing action touched back to its
+   * pre-move value (captured in `undo_snapshot.changedFields`) and, when
+   * that move was a delivery confirmation, archives the `delivery_proofs`
+   * row it created. Distinct from Reopen (a deliberate re-delivery that
+   * resets hand-off state and stays available indefinitely) and from the
+   * Finance gate's own Undo (below), which also isn't time-limited.
    */
   async function handleUndo() {
-    if (!id || !order || !order.undo_snapshot) return;
+    if (!id || !order || !order.undo_snapshot || !canUndo) return;
+    const targetLabel = t(
+      STAGE_LABELS[
+        order.undo_snapshot.prevStage as keyof typeof STAGE_LABELS
+      ] ?? order.undo_snapshot.prevStage,
+    );
     if (
       !(await confirm(
-        t(
-          "Undo this delivery? The order goes back to dispatch exactly as it was.",
-        ),
-        { title: t("Undo delivery"), danger: true },
+        t("Undo your last step? The order goes back to where it was."),
+        { title: t("Undo"), danger: true },
       ))
     )
       return;
@@ -2027,7 +2391,7 @@ export function OrderDetail() {
       resetProofState();
       await appendOrderHistory({
         order_id: id,
-        what: "Undid — back to dispatch",
+        what: `Undid — back to ${targetLabel}`,
         who: userId,
         stage: snapshot.prevStage,
       });
@@ -2035,7 +2399,7 @@ export function OrderDetail() {
       if (!hRes.error) setHistory(hRes.data ?? []);
     } else {
       alert(`Failed to undo: ${res.error}`, {
-        title: t("Couldn't undo delivery"),
+        title: t("Couldn't undo"),
       });
     }
   }
@@ -2076,9 +2440,14 @@ export function OrderDetail() {
 
   async function handleHold() {
     if (!id) return;
+    // Ported from the prototype's own `advance()` call for Hold — unlike
+    // Cancel (excluded from canSelfUndo's render by its `stage !==
+    // "cancelled"` check), Hold has no such exclusion there, so it gets
+    // the same self-undo as any other stage move.
+    const holdPatch = { stage: "outstanding" };
     const res = await updateOrder(id, {
-      stage: "outstanding",
-      undo_snapshot: null,
+      ...holdPatch,
+      undo_snapshot: snapshotFor(holdPatch),
     });
     if (!res.error && res.data) {
       setOrder(res.data);
@@ -2116,7 +2485,10 @@ export function OrderDetail() {
     if (isDispatchReset && activeProof) {
       await updateDeliveryProof(activeProof.id, { archived: true });
     }
-    const res = await updateOrder(id, {
+    // Ported from the prototype's own `restoreOrder()`/`reopenOrder()`,
+    // both of which go through `advance()` unconditionally — Restore gets
+    // the same self-undo as any other stage move.
+    const restorePatch: Record<string, unknown> = {
       stage: restoreStage,
       cancelled: false,
       cancelled_from: null,
@@ -2126,9 +2498,12 @@ export function OrderDetail() {
             pickup: false,
             third_party: false,
             courier_service: null,
-            undo_snapshot: null,
           }
         : {}),
+    };
+    const res = await updateOrder(id, {
+      ...restorePatch,
+      undo_snapshot: snapshotFor(restorePatch),
     });
     if (!res.error && res.data) {
       if (isDispatchReset) {
@@ -2349,9 +2724,13 @@ export function OrderDetail() {
     const summary = refusedLines
       .map((l) => `"${l.name}" (${refuseQtyMap[l.id]} ${l.unit ?? ""})`)
       .join(", ");
-    const res = await updateOrder(id, {
+    const refusalPatch = {
       stage: "returned",
       returned_reason: refuseReason.trim() || null,
+    };
+    const res = await updateOrder(id, {
+      ...refusalPatch,
+      undo_snapshot: snapshotFor(refusalPatch),
     });
     if (!res.error && res.data) {
       setOrder(res.data);
@@ -2468,11 +2847,15 @@ export function OrderDetail() {
           return;
         }
       }
-      const res = await updateOrder(id, {
+      const replacementPatch = {
         stage: "cold",
         is_replacement: true,
         return_doc: doc.label,
         return_settle: null,
+      };
+      const res = await updateOrder(id, {
+        ...replacementPatch,
+        undo_snapshot: snapshotFor(replacementPatch),
       });
       if (!res.error && res.data) {
         setOrder(res.data);
@@ -2876,14 +3259,6 @@ export function OrderDetail() {
                   </div>
                 )}
               </Card>
-              {stage === "delivered" && canUndo && (
-                <div className={styles.undoRow}>
-                  <Button type="button" variant="tertiary" onClick={handleUndo}>
-                    <Icon name="undo" size={16} />
-                    {t("Pressed wrongly? Undo — back to dispatch")}
-                  </Button>
-                </div>
-              )}
             </div>
           ) : (
             <></>
@@ -3062,12 +3437,12 @@ export function OrderDetail() {
                 const tolBelowPct = opsSettings?.tol_below_pct ?? 10;
                 const tolAbovePct = opsSettings?.tol_above_pct ?? 10;
                 const belowWeighHint =
-                  isWeighedItem &&
+                  isWeightOnlyUnit(line.unit) &&
                   totalMeasuredWeight > 0 &&
                   qty > 0 &&
                   totalMeasuredWeight < qty * (1 - tolBelowPct / 100);
                 const aboveWeighHint =
-                  isWeighedItem &&
+                  isWeightOnlyUnit(line.unit) &&
                   totalMeasuredWeight > 0 &&
                   qty > 0 &&
                   totalMeasuredWeight > qty * (1 + tolAbovePct / 100);
@@ -3088,23 +3463,43 @@ export function OrderDetail() {
                       </div>
                       <div className={styles.sendingBadge}>
                         {t("sending")}
-                        <input
-                          type="number"
-                          className={styles.sendingInput}
-                          value={sendingQty}
-                          onChange={(e) => {
-                            const val = Math.max(
-                              0,
-                              parseInt(e.target.value) || 0,
-                            );
-                            if (line.id)
-                              setSendingQtyMap((prev) => ({
-                                ...prev,
-                                [line.id!]: val,
-                              }));
-                          }}
-                        />
+                        {canWeighHere ? (
+                          <input
+                            type="number"
+                            className={styles.sendingInput}
+                            value={sendingQty}
+                            min={0}
+                            max={qty}
+                            onChange={(e) => {
+                              // Capped at the ordered qty — sending can
+                              // never exceed what was actually ordered.
+                              const val = Math.min(
+                                qty,
+                                Math.max(0, parseInt(e.target.value) || 0),
+                              );
+                              if (line.id)
+                                setSendingQtyMap((prev) => ({
+                                  ...prev,
+                                  [line.id!]: val,
+                                }));
+                            }}
+                            onBlur={() => line.id && handleSendingBlur(line.id)}
+                          />
+                        ) : (
+                          // Only the role that owns Cold Storage picking
+                          // decides what's actually being sent — everyone
+                          // else (Finance, etc.) sees the saved figure but
+                          // can't edit it.
+                          <span className={styles.sendingValue}>
+                            {sendingQty}
+                          </span>
+                        )}
                         {t("of")} {qty}
+                        {sendingQty < qty && (
+                          <span className={styles.toFollowHint}>
+                            · {qty - sendingQty} {t("to follow")}
+                          </span>
+                        )}
                       </div>
                     </div>
 
@@ -3226,6 +3621,30 @@ export function OrderDetail() {
                         >
                           {t("Add weighing")}
                         </Button>
+
+                        {/* Ported from the prototype's `shortFlag` toggle
+                            (Dev-OrderDetail.jsx:1419-1422) — kg/gram only,
+                            never Loaf (matches `held()`'s own scope). */}
+                        {isWeightOnlyUnit(line.unit) && (
+                          <Button
+                            type="button"
+                            variant="tertiary"
+                            size="sm"
+                            icon="cancelled"
+                            style={{
+                              alignSelf: "flex-start",
+                              color: line.short
+                                ? "var(--state-warning)"
+                                : undefined,
+                            }}
+                            onClick={() =>
+                              line.id &&
+                              handleToggleShort(line.id, !!line.short, qty)
+                            }
+                          >
+                            {t("Short — ran out of stock")}
+                          </Button>
+                        )}
                       </div>
                     )}
 
@@ -3407,6 +3826,14 @@ export function OrderDetail() {
                           )}
                         </span>
                       )}
+                      {/* Persistent, every role/stage — matches the
+                          prototype's own always-shown `l.short` chip
+                          (Dev-OrderDetail.jsx:1435), not just at Cold Storage. */}
+                      {isWeightOnlyUnit(line.unit) && line.short && (
+                        <span className={styles.toFollowHint}>
+                          {t("Short — ran out of stock")}
+                        </span>
+                      )}
                       {canSeePrices &&
                         (hasPrice ? (
                           <div className={styles.priceCalc}>
@@ -3576,23 +4003,236 @@ export function OrderDetail() {
           {/* Stage Action Controls */}
           {!isCancelled && (
             <div className={styles.stageActions}>
-              {flow?.next && canAdvance && stage !== "dispatch" && (
-                <Button
-                  type="button"
-                  variant="primary"
-                  size="lg"
-                  onClick={handleAdvance}
-                  disabled={
-                    advancing || (stage === "cold" && !coldWeighingReady)
-                  }
-                  className={styles.actionBtn}
-                >
-                  {advancing
-                    ? t("Saving…")
-                    : stage === "cold" && !financeCleared
-                      ? t("Release to Finance")
-                      : t(flow.advanceLabel)}
-                </Button>
+              {flow?.next &&
+                canAdvance &&
+                stage !== "dispatch" &&
+                stage !== "production" &&
+                stage !== "packing" &&
+                stage !== "cold" && (
+                  <Button
+                    type="button"
+                    variant="primary"
+                    size="lg"
+                    onClick={handleAdvance}
+                    disabled={advancing}
+                    className={styles.actionBtn}
+                  >
+                    {advancing ? t("Saving…") : t(flow.advanceLabel)}
+                  </Button>
+                )}
+
+              {/* Cold Storage — "Pull & weigh" card, replacing the generic
+                  advance button for this stage. Ported from the prototype's
+                  own cold-stage card (Dev-OrderDetail.jsx:685-723), including
+                  its Finance-parallel-queue status line and explainer copy —
+                  both were already sitting translated, unused, in
+                  translations.ts. Gated on `canWeighHere` (not `canAdvance`)
+                  to match the prototype's own gate exactly — a Finance user
+                  granted `helpOtherStages` should never see this card, only
+                  their own Finance-gate form. */}
+              {stage === "cold" && canWeighHere && (
+                <Card>
+                  <div className={styles.heading}>{t("Pull & weigh")}</div>
+                  <div className={styles.cardContent}>
+                    <p
+                      className={styles.secondary}
+                      style={
+                        financeCleared
+                          ? { color: "var(--state-success)" }
+                          : undefined
+                      }
+                    >
+                      {financeCleared
+                        ? `✓ ${t("Payment already cleared by Finance")}`
+                        : `⏳ ${t("Finance is clearing payment in parallel")}`}
+                    </p>
+                    <p className={styles.secondary}>
+                      {t(
+                        'Weigh each item above and snap the scale — tap "+ Add weighing" to log several scale loads that total up (e.g. 80 kg as 4 × 20 kg). Short on an item? In the "Sending" box set how many you\'re sending now — the rest is kept as a later delivery. A kg item that ran out gets a "short" flag.',
+                      )}
+                    </p>
+                    {lines.filter((l) => isWeighedUnit(l.unit)).length ===
+                      0 &&
+                      lines
+                        .filter((l) => !isWeighedUnit(l.unit))
+                        .every(
+                          (l) =>
+                            (typeof l.qty === "string"
+                              ? parseFloat(l.qty) || 0
+                              : (l.qty ?? 0)) <= 1,
+                        ) && (
+                        <p className={styles.secondary}>
+                          {t("Nothing to weigh — fixed packs only.")}
+                        </p>
+                      )}
+                    <div className={styles.cardActions}>
+                      <Button
+                        type="button"
+                        variant="primary"
+                        size="lg"
+                        buttonStyle="fullWidth"
+                        onClick={handleAdvance}
+                        disabled={advancing || !coldWeighingReady}
+                      >
+                        {advancing
+                          ? t("Saving…")
+                          : financeCleared
+                            ? t(flow?.advanceLabel ?? "")
+                            : t("Release to Finance")}
+                      </Button>
+                    </div>
+                  </div>
+                </Card>
+              )}
+
+              {/* Production — Start Cutting + per-cut tick-off, replacing
+                  the generic advance button for this stage. Ported from
+                  the prototype's Production card (Dev-OrderDetail.jsx:744-766). */}
+              {stage === "production" && canCutHere && (
+                <Card>
+                  <div className={styles.heading}>{t("Production")}</div>
+                  <div className={styles.cardContent}>
+                    {cutTasks.length > 0 && (
+                      <div className={styles.cuttingRow}>
+                        {order.cutting_started ? (
+                          <p className={styles.cuttingHint}>
+                            <Icon name="progress" size={14} />{" "}
+                            {t("Cutting in progress")}
+                            {order.cutting_started_at
+                              ? ` at ${new Date(order.cutting_started_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`
+                              : ""}
+                            {order.cutting_started_by
+                              ? ` by ${displayName(order.cutting_started_by)}`
+                              : ""}
+                          </p>
+                        ) : (
+                          <>
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              icon="knife"
+                              onClick={handleStartCutting}
+                            >
+                              {t("Start cutting")}
+                            </Button>
+                            <p className={styles.muted}>
+                              {t(
+                                "Marks the order as being cut — locks these items from edits.",
+                              )}
+                            </p>
+                          </>
+                        )}
+                      </div>
+                    )}
+                    {(cutTasks.length === 0 || order.cutting_started) && (
+                      <div className={styles.cuttingRow}>
+                        {cutTasks.length > 0 && (
+                          <div className={styles.sectionHeading}>
+                            {t("Cut · tick each cutting")}
+                          </div>
+                        )}
+                        {cutTasks.length === 0 ? (
+                          <p className={styles.muted}>
+                            {t("No cutting needed.")}
+                          </p>
+                        ) : (
+                          cutTasks.map((t) => {
+                            const done = isCutDone(t.cut);
+                            const cutLabel = `${t.lineName} — ${t.cut.text}`;
+                            return (
+                              <div className={styles.cardListColumn}>
+                                <label
+                                  key={t.cut.id}
+                                  className={styles.cutTaskRow}
+                                >
+                                  <Icon name="loaf" />
+                                  <span style={{ flex: 1 }}>{cutLabel}</span>
+                                  <Checkbox
+                                    size="md"
+                                    checked={done}
+                                    onChange={() => handleToggleCut(t.cut)}
+                                    label={cutLabel}
+                                  />
+                                </label>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    )}
+                    <div className={styles.cardActions}>
+                      <Button
+                        type="button"
+                        variant="primary"
+                        size="lg"
+                        buttonStyle="fullWidth"
+                        onClick={handleCuttingDoneAdvance}
+                        disabled={advancing || !allCutsDone}
+                      >
+                        {advancing
+                          ? t("Saving…")
+                          : t("Cutting done → to packing")}
+                      </Button>
+                    </div>
+                  </div>
+                </Card>
+              )}
+
+              {/* Packing — collect the cut pieces from Production and pack
+                  them with the rest of the order, replacing the generic
+                  advance button for this stage. Ported from the prototype's
+                  "Pack the order" card (Dev-OrderDetail.jsx:769-782). */}
+              {stage === "packing" && canAdvance && (
+                <Card>
+                  <div className={styles.heading}>{t("Pack the order")}</div>
+                  <div className={styles.cardContent}>
+                    <div className={styles.cardListColumn}>
+                      <p className={styles.secondary}>
+                        {t(
+                          "Cutting is done. Collect the cut pieces from production and pack them together with the rest of the order, then mark it packed.",
+                        )}
+                      </p>
+                      {cutItems.length > 0 && (
+                        <div className={styles.packRow}>
+                          <Icon
+                            name="check"
+                            style={{ color: "var(--accent-primary" }}
+                          />
+                          <p className={styles.body}>
+                            <strong>{cutItems.length}</strong>{" "}
+                            {t("cut item(s)")}:{" "}
+                            {cutItems.map((l) => l.name).join(", ")}
+                          </p>
+                        </div>
+                      )}
+                      {otherItems.length > 0 && (
+                        <div className={styles.packRow}>
+                          <Icon
+                            name="check"
+                            style={{ color: "var(--accent-primary" }}
+                          />
+                          <p className={styles.body}>
+                            <b>{otherItems.length}</b> {t("other item(s)")}:{" "}
+                            {otherItems.map((l) => l.name).join(", ")}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                    <div className={styles.cardActions}>
+                      <Button
+                        type="button"
+                        variant="primary"
+                        size="lg"
+                        buttonStyle="fullWidth"
+                        icon="check"
+                        onClick={handlePackAdvance}
+                        disabled={advancing}
+                      >
+                        {advancing ? t("Saving…") : t("Packed & ready")}
+                      </Button>
+                    </div>
+                  </div>
+                </Card>
               )}
 
               {/* Hand-off mode chooser — dispatch stage, no mode picked yet */}
@@ -4509,6 +5149,25 @@ export function OrderDetail() {
                   >
                     <Icon name="undo" size={16} />
                     {t("Undo payment clearance")}
+                  </Button>
+                </div>
+              )}
+
+              {canUndo && order.undo_snapshot && (
+                <div className={styles.undoRow}>
+                  <div className={styles.left}>
+                    <Icon name="infoCircle" />
+                    <p className="tiny muted">{t("Pressed wrongly?")}</p>
+                  </div>
+                  <Button type="button" variant="tertiary" onClick={handleUndo}>
+                    <Icon name="undo" size={16} />
+                    {t("Undo — back to")}{" "}
+                    {t(
+                      STAGE_LABELS[
+                        order.undo_snapshot
+                          .prevStage as keyof typeof STAGE_LABELS
+                      ] ?? order.undo_snapshot.prevStage,
+                    )}
                   </Button>
                 </div>
               )}

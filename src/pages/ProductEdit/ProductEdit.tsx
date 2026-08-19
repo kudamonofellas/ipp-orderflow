@@ -9,19 +9,11 @@ import { useLanguage } from '../../hooks/useLanguage';
 import { useDialog } from '../../hooks/useDialog';
 import {
   readProducts,
-  createProduct,
   updateProduct,
   deleteProduct,
   readOrderLines,
 } from '../../lib/directus';
 import styles from './ProductEdit.module.css';
-
-const slugify = (s: string) =>
-  s
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
-    .slice(0, 40);
 
 export function ProductEdit() {
   const { id } = useParams<{ id: string }>();
@@ -30,18 +22,15 @@ export function ProductEdit() {
   const { t } = useLanguage();
   const { alert, confirm } = useDialog();
 
-  const isNew = id === 'new';
   const canManage = auth.can('manage_products');
   // Narrower than canManage — lets a Warehouse-only user reach this page to
   // flip Out of Stock without granting the rest of the form (see
   // flag_out_of_stock's doc comment in domain.ts / F-10).
   const canToggleOOS = auth.can('flag_out_of_stock');
   const canEditOtherFields = canManage;
-  // Creating a brand-new product is always a full-manage action — the OOS
-  // capability only ever applies to an existing product's flag.
-  const canAccess = isNew ? canManage : canManage || canToggleOOS;
+  const canAccess = canManage || canToggleOOS;
 
-  const [loading, setLoading] = useState(!isNew);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -68,7 +57,6 @@ export function ProductEdit() {
   const [oos, setOos] = useState(false);
 
   useEffect(() => {
-    if (isNew) return;
     let cancelled = false;
 
     async function loadData() {
@@ -128,14 +116,14 @@ export function ProductEdit() {
     return () => {
       cancelled = true;
     };
-  }, [id, isNew]);
+  }, [id]);
 
   // ── Redirect unauthorized users away ──
   useEffect(() => {
     if (!loading && !canAccess) {
-      navigate(isNew ? '/products' : `/products/${id}`, { replace: true });
+      navigate(`/products/${id}`, { replace: true });
     }
-  }, [loading, canAccess, navigate, id, isNew]);
+  }, [loading, canAccess, navigate, id]);
 
   // ── Change detection ──
   const hasChanges =
@@ -151,12 +139,12 @@ export function ProductEdit() {
   const canSave = hasChanges && !!name.trim() && !saving;
 
   function handleCancel() {
-    navigate(isNew ? '/products' : `/products/${id}`);
+    navigate(`/products/${id}`);
   }
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!canSave) return;
+    if (!canSave || !id) return;
 
     setSaving(true);
     const fullPayload = {
@@ -170,28 +158,19 @@ export function ProductEdit() {
       oos,
     };
 
-    let res;
-    if (isNew) {
-      // Creating a new product is always a full-manage action (canAccess
-      // above only allows isNew when canManage is true), so the full
-      // payload is always safe here.
-      const generatedId = `${slugify(name) || 'product'}-${Date.now().toString(36)}`;
-      res = await createProduct({ id: generatedId, ...fullPayload });
-    } else if (id) {
-      // An OOS-only user's Directus permission is scoped to the `oos` field
-      // alone — a payload naming any other field (even unchanged) gets the
-      // whole write rejected, same as every other role-scoped field mismatch
-      // fixed this session. Other fields are also disabled in the form for
-      // this user, so their values never actually changed anyway.
-      res = await updateProduct(id, canEditOtherFields ? fullPayload : { oos });
-    }
+    // An OOS-only user's Directus permission is scoped to the `oos` field
+    // alone — a payload naming any other field (even unchanged) gets the
+    // whole write rejected, same as every other role-scoped field mismatch
+    // fixed this session. Other fields are also disabled in the form for
+    // this user, so their values never actually changed anyway.
+    const res = await updateProduct(id, canEditOtherFields ? fullPayload : { oos });
 
     setSaving(false);
 
-    if (res && res.error) {
+    if (res.error) {
       setError(`Failed to save product: ${res.error}`);
     } else {
-      navigate(isNew ? '/products' : `/products/${id}`);
+      navigate(`/products/${id}`);
     }
   };
 
@@ -242,11 +221,11 @@ export function ProductEdit() {
               {t('Back to product')}
             </Button>
             <div className={styles.titleRow}>
-              <h2 className={styles.title}>{isNew ? t('New Product') : t('Edit Product')}</h2>
+              <h2 className={styles.title}>{t('Edit Product')}</h2>
             </div>
           </div>
           <div className={styles.actions}>
-            {!isNew && canManage && (
+            {canManage && (
               <Button
                 type="button"
                 variant="secondary"
@@ -285,7 +264,6 @@ export function ProductEdit() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
-                autoFocus={isNew}
                 placeholder="Aus Wagyu Striploin 8-9"
                 disabled={saving || !canEditOtherFields}
               />
@@ -376,7 +354,7 @@ export function ProductEdit() {
               </p>
             )}
 
-            {!isNew && usedBy > 0 && (
+            {usedBy > 0 && (
               <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-muted)' }}>
                 {t('Product is currently used by')} {usedBy} {t('active order(s).')}
               </p>

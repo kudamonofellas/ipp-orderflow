@@ -1021,14 +1021,10 @@ export function OrderNew() {
                             type="text"
                             className={styles.editInput}
                             placeholder={t("Item name")}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setLines((prev) =>
-                                prev.map((l) =>
-                                  l.id === l.id ? { ...l, name: val } : l,
-                                ),
-                              );
-                            }}
+                            value={l.freeText}
+                            onChange={(e) =>
+                              updateLine(l.id, { freeText: e.target.value })
+                            }
                           />
                         )}
                         {l.parseStatus && (

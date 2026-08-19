@@ -5801,6 +5801,48 @@
     },
     {
       "collection": "order_lines",
+      "field": "sent",
+      "type": "decimal",
+      "meta": {
+        "collection": "order_lines",
+        "conditions": null,
+        "display": null,
+        "display_options": null,
+        "field": "sent",
+        "group": null,
+        "hidden": false,
+        "interface": "input",
+        "note": "How much of qty is actually being sent this round (Cold Storage decides) — the rest is a later delivery. Null = defaults to the full ordered qty (nothing short).",
+        "options": null,
+        "readonly": false,
+        "required": false,
+        "sort": 17,
+        "special": null,
+        "translations": null,
+        "validation": null,
+        "validation_message": null,
+        "width": "full"
+      },
+      "schema": {
+        "name": "sent",
+        "table": "order_lines",
+        "data_type": "numeric",
+        "default_value": null,
+        "max_length": null,
+        "numeric_precision": 12,
+        "numeric_scale": 3,
+        "is_nullable": true,
+        "is_unique": false,
+        "is_primary_key": false,
+        "is_generated": false,
+        "generation_expression": null,
+        "has_auto_increment": false,
+        "foreign_key_table": null,
+        "foreign_key_column": null
+      }
+    },
+    {
+      "collection": "order_lines",
       "field": "short",
       "type": "boolean",
       "meta": {

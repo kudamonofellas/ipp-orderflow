@@ -32,12 +32,12 @@
 
 - [x] **Intake** — Admin is actor; can advance the order forward
 - [x] **Finalise (Print DO/SI)** — Admin is actor; can print/advance to dispatch
-- [ ] **Help other stages** — because `helpOtherStages`, Admin can act on cold/production/packing/dispatch when covering (verify Admin sees action buttons on a stage they don't own, e.g. can weigh at cold)
-- [ ] **Cannot** act as the finance gate unless covering — `actFinanceGate` is Finance-only; Admin at finance should _not_ clear payment (verify Admin doesn't get the finance-clear button)
+- [x] **Help other stages** — because `helpOtherStages`, Admin can act on cold/production/packing/dispatch when covering (verify Admin sees action buttons on a stage they don't own, e.g. can weigh at cold)
+- [x] **Cannot** act as the finance gate unless covering — `actFinanceGate` is Finance-only; Admin at finance should _not_ clear payment (verify Admin doesn't get the finance-clear button)
 - [x] **Hold / Resume** (`holdResume`) — can pause/resume an order
 - [x] **Send back a stage** (`sendBackStage`) — the "Send back to Print DO/SI" and other send-backs; verify label + availability
 - [x] **Cancel / Restore** (`cancelOrders`) — can cancel any order and restore it
-- [ ] **Reopen** a closed order (`reopenOrders`) — verify it resets fulfilment for redelivery
+- [x] **Reopen** a closed order (`reopenOrders`) — verify it resets fulfilment for redelivery
 
 ## 5. Outstanding / backorder / awaiting (Admin owns these)
 

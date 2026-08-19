@@ -9,6 +9,7 @@ import { DialogProvider } from './hooks/DialogProvider';
 import { useAuth, useCan } from './hooks/useAuth';
 import type { Capability } from './lib/domain';
 import { Customers } from './pages/Customers/Customers';
+import { CustomerNew } from './pages/CustomerNew/CustomerNew';
 import { CustomerDetail } from './pages/CustomerDetail/CustomerDetail';
 import { CustomerEdit } from './pages/CustomerEdit/CustomerEdit';
 import { Dashboard } from './pages/Dashboard/Dashboard';
@@ -18,6 +19,7 @@ import { OrderNew } from './pages/OrderNew/OrderNew';
 import { OrderDetail } from './pages/OrderDetail/OrderDetail';
 import { OrderEdit } from './pages/OrderEdit/OrderEdit';
 import { Products } from './pages/Products/Products';
+import { ProductNew } from './pages/ProductNew/ProductNew';
 import { ProductDetail } from './pages/ProductDetail/ProductDetail';
 import { ProductEdit } from './pages/ProductEdit/ProductEdit';
 import { PickList } from './pages/PickList/PickList';
@@ -25,6 +27,7 @@ import { CashUp } from './pages/CashUp/CashUp';
 import { Deliveries } from './pages/Deliveries/Deliveries';
 import { Reports } from './pages/Reports/Reports';
 import { Settings } from './pages/Settings/Settings';
+import { LearnedMatches } from './pages/LearnedMatches/LearnedMatches';
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
@@ -95,6 +98,14 @@ export default function App() {
               }
             />
             <Route
+              path="customers/new"
+              element={
+                <Guarded cap="browseCustomers">
+                  <CustomerNew />
+                </Guarded>
+              }
+            />
+            <Route
               path="customers/:id"
               element={
                 <Guarded cap="browseCustomers">
@@ -108,6 +119,14 @@ export default function App() {
               element={
                 <Guarded cap="browseProducts">
                   <Products />
+                </Guarded>
+              }
+            />
+            <Route
+              path="products/new"
+              element={
+                <Guarded cap="browseProducts">
+                  <ProductNew />
                 </Guarded>
               }
             />
@@ -129,6 +148,14 @@ export default function App() {
               }
             />
             <Route path="settings" element={<Settings />} />
+            <Route
+              path="settings/learned-matches"
+              element={
+                <Guarded cap="manageSettings">
+                  <LearnedMatches />
+                </Guarded>
+              }
+            />
             <Route
               path="picklist"
               element={

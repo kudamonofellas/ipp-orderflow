@@ -188,7 +188,7 @@ export function PickList() {
         </div>
       ) : groups.length > 0 ? (
         groups.map((group) => (
-          <section key={group.category}>
+          <section key={group.category} className={styles.sectionRow}>
             <h2 className={styles.categoryHeading}>{group.category}</h2>
             <div className={styles.rowList}>
               {group.rows.map((row) => (

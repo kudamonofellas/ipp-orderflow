@@ -95,6 +95,14 @@
   flex: 1;
 }
 
+.row {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
 .fieldLabel {
   font: var(--text-body);
   font-weight: 600;
@@ -241,6 +249,13 @@
   font: var(--text-h2);
   color: var(--text-primary);
   margin: 0;
+}
+
+.sectionHeading {
+  font: var(--text-label);
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
 }
 
 .body {
@@ -783,6 +798,16 @@
   background: var(--bg-surface-hover);
 }
 
+.sendingValue {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.toFollowHint {
+  color: var(--state-warning);
+  white-space: nowrap;
+}
+
 /* Weighing Section */
 .weighingSection {
   margin-left: 28px;
@@ -924,6 +949,56 @@
   flex-wrap: wrap;
   gap: var(--space-xs);
   margin-left: 28px;
+}
+
+.cuttingRow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.cuttingHint {
+  font: var(--text-body);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  color: var(--accent-primary);
+}
+
+.cutTaskRow {
+  display: flex;
+  align-items: center;
+  padding: var(--space-md);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  gap: var(--space-sm);
+  font: var(--text-body);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.packRow {
+  display: flex;
+  align-items: center;
+  padding: var(--space-md);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background-color: var(--bg-surface-hover-dark);
+  gap: var(--space-sm);
+  font: var(--text-body);
+}
+
+.cardListColumn {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.cardActions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
 }
 
 .itemTotalRow {
@@ -1086,36 +1161,10 @@
   align-items: center;
 }
 
-/* Modal Overlay for image detail */
-.modalBackdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.6);
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-lg);
-  backdrop-filter: blur(2px);
-}
-
-.modalContent {
-  border-radius: var(--radius-lg);
-  max-width: 80vw;
-  width: 100%;
+.cardContent {
   display: flex;
   flex-direction: column;
-  overflow: hidden;
-  background: #000;
-}
-
-.modalHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-md) var(--space-lg);
-  font-weight: 600;
-  color: var(--text-on-accent);
+  gap: var(--space-lg);
 }
 
 /* History logs */

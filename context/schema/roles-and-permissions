@@ -54,8 +54,8 @@ Weighs orders, attaches photos, manages packing. Does **not** create orders or t
 
 | Collection | Create | Read | Update | Delete | Notes |
 |---|:---:|:---:|:---:|:---:|---|
-| `orders` | ❌ | ✅ | ✅ (fields only) | ❌ | Reads all; can update only: `stage`, `cutting_started`, `pickup` |
-| `order_lines` | ✅ | ✅ | ✅ | ✅ | Full CRUD — adds/edits weighings, marks delivered/returned |
+| `orders` | ❌ | ✅ | ✅ (fields only) | ❌ | Reads all; can update only: `stage`, `cutting_started`, `cutting_started_at`, `cutting_started_by`, `pickup`, `undo_snapshot` (2026-08-19 — `undo_snapshot` was missing, so the new generic self-undo write on every stage advance/send-back 403'd the whole request for Warehouse) |
+| `order_lines` | ✅ | ✅ | ✅ | ✅ | Full CRUD — adds/edits weighings, marks delivered/returned. Update grant includes `sent` (the "sending" qty, 2026-08-18) and `short` (the "ran out of stock" flag — field/ACL were already live before 2026-08-19 but unused by the app until the Short-flag feature that day) |
 | `line_weighings` | ✅ | ✅ | ✅ | ✅ | Full CRUD — their core job |
 | `line_photos` | ✅ | ✅ | ✅ | ✅ | Full CRUD — weigh photo proofs |
 | `line_return_photos` | ✅ | ✅ | ✅ | ✅ | Full CRUD — return evidence photos |
@@ -83,7 +83,7 @@ Creates cut instructions, marks cutting progress.
 
 | Collection | Create | Read | Update | Delete | Notes |
 |---|:---:|:---:|:---:|:---:|---|
-| `orders` | ❌ | ✅ | ✅ (field only) | ❌ | Reads all; can update only: `cutting_started` |
+| `orders` | ❌ | ✅ | ✅ (field only) | ❌ | Reads all; can update only: `cutting_started`, `stage`, `cutting_started_at`, `cutting_started_by`, `undo_snapshot` (2026-08-19 — `stage` was missing entirely, so Production could never actually advance production→packing despite owning `cutProduction`; every stage-advance write was rejected outright. `undo_snapshot` added same day for the same reason as Warehouse's.) |
 | `order_lines` | ❌ | ✅ | ❌ | ❌ | Read-only — sees what to cut |
 | `line_cuts` | ✅ | ✅ | ✅ | ✅ | Full CRUD — their core job |
 | `order_history` | ✅ | ✅ | ❌ | ❌ | Append-only — logs cutting actions |
@@ -112,7 +112,7 @@ Approves/rejects payment (and reconciles COD cash — Cash-up shares this role's
 
 | Collection | Create | Read | Update | Delete | Notes |
 |---|:---:|:---:|:---:|:---:|---|
-| `orders` | ❌ | ✅ | ✅ (field only) | ❌ | Reads all; can update only: `payment_confirmed`, `payment_confirmed_at`, `payment_method`, `payment_timing`, `payment_amount`, `payment_bank_ref`, `payment_due_date`, `payment_paid_at` (2026-08-14, full Finance Gate form — Method/Timing/Amount/Bank ref/Terms due-date/paid-at, Approve + Undo), `cod_reconciled`, `cod_received_at` |
+| `orders` | ❌ | ✅ | ✅ (field only) | ❌ | Reads all; can update only: `payment_confirmed`, `payment_confirmed_at`, `payment_method`, `payment_timing`, `payment_amount`, `payment_bank_ref`, `payment_due_date`, `payment_paid_at` (2026-08-14, full Finance Gate form — Method/Timing/Amount/Bank ref/Terms due-date/paid-at, Approve + Undo), `cod_reconciled`, `cod_received_at`, `stage` (2026-08-19 — clearing payment while parked at the `finance` stage also advances it to `production` in the same write; Finance's field-restricted grant was rejecting the whole request without this), `undo_snapshot` (2026-08-19, same day — added proactively alongside `stage` in case Finance ever reaches the generic self-undo write path) |
 | `order_history` | ✅ | ✅ | ❌ | ❌ | Append-only — logs approve/reject |
 | `customers` | ❌ | ✅ | ❌ | ❌ | Read-only — needs credit_limit + term_days |
 | `order_lines` | ❌ | ✅ | ❌ | ❌ | Read-only |
@@ -218,6 +218,12 @@ fully removed from the Dashboard along with the rest of the in-app WhatsApp inta
 `progress-tracker.md`). The live Directus ACLs on the `messages`/`corrections` collections referenced
 elsewhere on this page were not changed by that removal — only the frontend capability and UI were
 deleted; those collections and their role permissions still exist as backend/n8n concerns.
+
+**`corrections` (learned intake matches) — 2026-08-19:** every role now has `read` access
+(`fields: ["*"]`) — Admin/Owner already did; added it for Warehouse, Production, Finance, Courier too,
+so Settings' "N learned matches" count is consistent for everyone instead of silently reading 0/erroring
+for whichever role lacked the grant. Only Admin/Owner (via `manageSettings`) can actually open the
+`/settings/learned-matches` page or delete a match — everyone else just sees the summary count.
 
 ---
 

@@ -20,7 +20,6 @@ export function ProductDetail() {
   const { t } = useLanguage();
   const { alert, confirm } = useDialog();
 
-  const isNew = id === "new";
   const canManage = auth.can("manage_products");
   const canView = auth.can("browseProducts");
 
@@ -31,7 +30,7 @@ export function ProductDetail() {
     if (!canView) navigate("/", { replace: true });
   }, [canView, navigate]);
 
-  const [loading, setLoading] = useState(!isNew);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [usedBy, setUsedBy] = useState(0);
@@ -46,7 +45,6 @@ export function ProductDetail() {
   const [oos, setOos] = useState(false);
 
   useEffect(() => {
-    if (isNew) return;
     let cancelled = false;
 
     async function loadData() {
@@ -94,7 +92,7 @@ export function ProductDetail() {
     return () => {
       cancelled = true;
     };
-  }, [id, isNew]);
+  }, [id]);
 
   const handleDelete = async () => {
     if (usedBy > 0) {
@@ -147,9 +145,9 @@ export function ProductDetail() {
             {t("Back")}
           </Button>
           <div className={styles.headingRow}>
-            <h2 className={styles.title}>{isNew ? t("New Product") : name}</h2>
+            <h2 className={styles.title}>{name}</h2>
 
-            {!isNew && accurateName && (
+            {accurateName && (
               <span>
                 <p className={styles.subtitle}>{accurateName.toUpperCase()}</p>
               </span>
@@ -175,17 +173,15 @@ export function ProductDetail() {
         </div>
         {canManage && (
           <div className={styles.actions}>
-            {!isNew && (
-              <Button
-                type="button"
-                variant="secondary"
-                icon="trash"
-                onClick={handleDelete}
-                disabled={deleting}
-              >
-                {deleting ? t("Deleting…") : t("Delete")}
-              </Button>
-            )}
+            <Button
+              type="button"
+              variant="secondary"
+              icon="trash"
+              onClick={handleDelete}
+              disabled={deleting}
+            >
+              {deleting ? t("Deleting…") : t("Delete")}
+            </Button>
             <Button
               type="button"
               variant="secondary"
@@ -221,7 +217,7 @@ export function ProductDetail() {
             </div>
           </div>
 
-          {!isNew && usedBy > 0 && (
+          {usedBy > 0 && (
             <p
               style={{
                 margin: 0,

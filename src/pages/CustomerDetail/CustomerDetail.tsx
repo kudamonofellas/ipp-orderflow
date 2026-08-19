@@ -25,7 +25,6 @@ export function CustomerDetail() {
   const auth = useAuth();
   const { t } = useLanguage();
 
-  const isNew = id === "new";
   const canEdit = auth.can("manage_customers");
   const seeCredit = auth.can("seeCustomerCredit");
   const canView = auth.can("browseCustomers");
@@ -37,7 +36,7 @@ export function CustomerDetail() {
     if (!canView) navigate("/", { replace: true });
   }, [canView, navigate]);
 
-  const [loading, setLoading] = useState(!isNew);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   // Panel State
@@ -60,7 +59,6 @@ export function CustomerDetail() {
   const [lines, setLines] = useState<OrderLinesCollection[]>([]);
 
   useEffect(() => {
-    if (isNew) return;
     let cancelled = false;
 
     async function loadData() {
@@ -119,7 +117,7 @@ export function CustomerDetail() {
     return () => {
       cancelled = true;
     };
-  }, [id, isNew]);
+  }, [id]);
 
   // Calculate order value
   const getOrderValue = (orderId: string) => {
@@ -193,9 +191,7 @@ export function CustomerDetail() {
                   size="lg"
                 />
                 <div className={styles.customerInfo}>
-                  <h3 className={styles.title}>
-                    {isNew ? t("New Customer") : name}
-                  </h3>
+                  <h3 className={styles.title}>{name}</h3>
                   <p>{channel?.toUpperCase() || "—"}</p>
                 </div>
               </div>
@@ -288,7 +284,7 @@ export function CustomerDetail() {
             </div>
           </Card>
 
-          {!isNew && seeCredit && parseInt(creditLimit, 10) > 0 && (
+          {seeCredit && parseInt(creditLimit, 10) > 0 && (
             <Card className={styles.detailsCard}>
               <h3 className={styles.heading}>{t("Credit Profile")}</h3>
               <div className={styles.row}>
@@ -332,7 +328,7 @@ export function CustomerDetail() {
             <Card className={styles.historyCard}>
               <h3 className={styles.heading}>{t("Order History")}</h3>
 
-              {!isNew && orders.length > 0 ? (
+              {orders.length > 0 ? (
                 <table className={styles.table}>
                   <thead>
                     <tr>
