@@ -1,6 +1,7 @@
 import { Card } from '../../../components/Card/Card';
 import { useLanguage } from '../../../hooks/useLanguage';
-import { statusColor, type Stage } from '../../../lib/pipeline';
+import { statusColor, ROLE_COLOR, type Stage } from '../../../lib/pipeline';
+import type { Role } from '../../../lib/domain';
 import type { StageCount } from '../../../types/dashboard';
 import styles from './ReturnWorkflowsPanel.module.css';
 
@@ -8,11 +9,19 @@ interface ReturnWorkflowsPanelProps {
   stages: StageCount[];
   /** Return-bucket keys the current role owns (from `ROLE_FOCUS`); those pills get the accent treatment. */
   focusStages?: Stage[];
+  /** The signed-in role — only needed to colour the `replacement_transit`
+   *  tile (see below); every other bucket colours itself via `statusColor()`. */
+  currentRole?: Role | null;
   onStageClick?: (stageKey: string) => void;
 }
 
 /** Return Workflows panel: vertical list of horizontal pills (count + label). */
-export function ReturnWorkflowsPanel({ stages, focusStages = [], onStageClick }: ReturnWorkflowsPanelProps) {
+export function ReturnWorkflowsPanel({
+  stages,
+  focusStages = [],
+  currentRole,
+  onStageClick,
+}: ReturnWorkflowsPanelProps) {
   const { t } = useLanguage();
   return (
     <Card style={{ width: '100%' }}>
@@ -22,17 +31,23 @@ export function ReturnWorkflowsPanel({ stages, focusStages = [], onStageClick }:
           const highlight = focusStages.includes(stage.stage);
           // `replacement_transit` spans every role (Warehouse/Production/Courier/
           // Admin can all "own" it depending on where the replacement order
-          // currently sits), so `statusColor()` deliberately can't claim a single
-          // role's colour for it (falls through to neutral) — but the tile still
-          // needs to read as urgent when it's highlighted. Danger-red here is
-          // local to this one bucket tile, not routed through `statusColor()`,
-          // so it can't affect a replacement order's own `StatusPill` (which
-          // colours by its real current stage, with a separate `isReplacement`
-          // badge — see pipeline.ts's `RETURN_BUCKET_ACTOR` doc comment).
+          // currently sits), so `statusColor()` deliberately can't claim a
+          // single fixed role's colour for it (see pipeline.ts's
+          // `RETURN_BUCKET_ACTOR` doc comment). It's only ever highlighted at
+          // all when the SIGNED-IN role is one of the ones that can own it
+          // (`ROLE_FOCUS`), so — unlike every other bucket, which is colour-
+          // keyed by its one fixed owning role — this tile colours itself by
+          // *whoever's currently looking at it*. A previous pass instead
+          // special-cased it to a flat danger-red, which read as an urgent/
+          // error state for every role even on a routine in-transit
+          // replacement — reverted per direct request in favour of this
+          // per-viewer role colour, matching how every other highlighted
+          // tile in this panel already looks (an accent colour, not a
+          // warning colour).
           const color = !highlight
             ? undefined
-            : stage.stage === 'replacement_transit'
-              ? 'var(--state-error)'
+            : stage.stage === 'replacement_transit' && currentRole
+              ? ROLE_COLOR[currentRole]
               : statusColor(stage.stage);
           const style = color
             ? ({

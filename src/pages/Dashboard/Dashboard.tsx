@@ -381,6 +381,7 @@ export function Dashboard() {
               <ReturnWorkflowsPanel
                 stages={returnsWorkflow}
                 focusStages={focusStages}
+                currentRole={role}
                 onStageClick={(key) => navigate(`/orders?stage=${key}`)}
               />
               <AttentionPanel

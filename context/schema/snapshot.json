@@ -1528,7 +1528,7 @@
     {
       "collection": "corrections",
       "field": "product_id",
-      "type": "uuid",
+      "type": "string",
       "meta": {
         "collection": "corrections",
         "conditions": null,
@@ -5424,7 +5424,7 @@
     {
       "collection": "order_lines",
       "field": "product_id",
-      "type": "uuid",
+      "type": "string",
       "meta": {
         "collection": "order_lines",
         "conditions": null,
@@ -5801,48 +5801,6 @@
     },
     {
       "collection": "order_lines",
-      "field": "sent",
-      "type": "decimal",
-      "meta": {
-        "collection": "order_lines",
-        "conditions": null,
-        "display": null,
-        "display_options": null,
-        "field": "sent",
-        "group": null,
-        "hidden": false,
-        "interface": "input",
-        "note": "How much of qty is actually being sent this round (Cold Storage decides) — the rest is a later delivery. Null = defaults to the full ordered qty (nothing short).",
-        "options": null,
-        "readonly": false,
-        "required": false,
-        "sort": 17,
-        "special": null,
-        "translations": null,
-        "validation": null,
-        "validation_message": null,
-        "width": "full"
-      },
-      "schema": {
-        "name": "sent",
-        "table": "order_lines",
-        "data_type": "numeric",
-        "default_value": null,
-        "max_length": null,
-        "numeric_precision": 12,
-        "numeric_scale": 3,
-        "is_nullable": true,
-        "is_unique": false,
-        "is_primary_key": false,
-        "is_generated": false,
-        "generation_expression": null,
-        "has_auto_increment": false,
-        "foreign_key_table": null,
-        "foreign_key_column": null
-      }
-    },
-    {
-      "collection": "order_lines",
       "field": "short",
       "type": "boolean",
       "meta": {
@@ -6041,6 +5999,48 @@
         "max_length": null,
         "numeric_precision": 32,
         "numeric_scale": 0,
+        "is_nullable": true,
+        "is_unique": false,
+        "is_primary_key": false,
+        "is_generated": false,
+        "generation_expression": null,
+        "has_auto_increment": false,
+        "foreign_key_table": null,
+        "foreign_key_column": null
+      }
+    },
+    {
+      "collection": "order_lines",
+      "field": "sent",
+      "type": "decimal",
+      "meta": {
+        "collection": "order_lines",
+        "conditions": null,
+        "display": null,
+        "display_options": null,
+        "field": "sent",
+        "group": null,
+        "hidden": false,
+        "interface": "input",
+        "note": "How much of qty is actually being sent this round (Cold Storage decides) � the rest is a later delivery. Null = defaults to the full ordered qty (nothing short).",
+        "options": null,
+        "readonly": false,
+        "required": false,
+        "sort": 17,
+        "special": null,
+        "translations": null,
+        "validation": null,
+        "validation_message": null,
+        "width": "full"
+      },
+      "schema": {
+        "name": "sent",
+        "table": "order_lines",
+        "data_type": "numeric",
+        "default_value": null,
+        "max_length": null,
+        "numeric_precision": 12,
+        "numeric_scale": 3,
         "is_nullable": true,
         "is_unique": false,
         "is_primary_key": false,
@@ -8084,7 +8084,7 @@
         "group": null,
         "hidden": false,
         "interface": "select-dropdown",
-        "note": "Finance-gate payment timing: upfront | terms. COD is deliberately excluded — the port's delivery-time COD outcome capture (delivery_proofs.cash_collected etc.) is the single source of truth for COD, not this field.",
+        "note": "Finance-gate payment timing: upfront | terms. COD is deliberately excluded � the port's delivery-time COD outcome capture (delivery_proofs.cash_collected etc.) is the single source of truth for COD, not this field.",
         "options": null,
         "readonly": false,
         "required": false,
@@ -8126,7 +8126,7 @@
         "group": null,
         "hidden": false,
         "interface": "input",
-        "note": "Rupiah amount received, as recorded at the Finance gate (optional — falls back to the order total when blank).",
+        "note": "Rupiah amount received, as recorded at the Finance gate (optional � falls back to the order total when blank).",
         "options": null,
         "readonly": false,
         "required": false,
@@ -8252,7 +8252,7 @@
         "group": null,
         "hidden": false,
         "interface": "datetime",
-        "note": "Terms-timing invoice payment date — set when Finance marks a delivered order's outstanding terms invoice as paid.",
+        "note": "Terms-timing invoice payment date � set when Finance marks a delivered order's outstanding terms invoice as paid.",
         "options": null,
         "readonly": false,
         "required": false,
@@ -8279,6 +8279,92 @@
         "has_auto_increment": false,
         "foreign_key_table": null,
         "foreign_key_column": null
+      }
+    },
+    {
+      "collection": "orders",
+      "field": "cutting_started_at",
+      "type": "timestamp",
+      "meta": {
+        "collection": "orders",
+        "conditions": null,
+        "display": null,
+        "display_options": null,
+        "field": "cutting_started_at",
+        "group": null,
+        "hidden": false,
+        "interface": "datetime",
+        "note": "When Production tapped Start Cutting. Reset to null whenever the order is sent back from production (a fresh cutting run).",
+        "options": null,
+        "readonly": false,
+        "required": false,
+        "sort": 55,
+        "special": null,
+        "translations": null,
+        "validation": null,
+        "validation_message": null,
+        "width": "full"
+      },
+      "schema": {
+        "name": "cutting_started_at",
+        "table": "orders",
+        "data_type": "timestamp with time zone",
+        "default_value": null,
+        "max_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null,
+        "is_nullable": true,
+        "is_unique": false,
+        "is_primary_key": false,
+        "is_generated": false,
+        "generation_expression": null,
+        "has_auto_increment": false,
+        "foreign_key_table": null,
+        "foreign_key_column": null
+      }
+    },
+    {
+      "collection": "orders",
+      "field": "cutting_started_by",
+      "type": "uuid",
+      "meta": {
+        "collection": "orders",
+        "conditions": null,
+        "display": null,
+        "display_options": null,
+        "field": "cutting_started_by",
+        "group": null,
+        "hidden": false,
+        "interface": "select-dropdown-m2o",
+        "note": "Who tapped Start Cutting.",
+        "options": null,
+        "readonly": false,
+        "required": false,
+        "sort": 56,
+        "special": [
+          "m2o"
+        ],
+        "translations": null,
+        "validation": null,
+        "validation_message": null,
+        "width": "full"
+      },
+      "schema": {
+        "name": "cutting_started_by",
+        "table": "orders",
+        "data_type": "uuid",
+        "default_value": null,
+        "max_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null,
+        "is_nullable": true,
+        "is_unique": false,
+        "is_primary_key": false,
+        "is_generated": false,
+        "generation_expression": null,
+        "has_auto_increment": false,
+        "foreign_key_table": "directus_users",
+        "foreign_key_column": "id"
       }
     },
     {
@@ -10317,6 +10403,31 @@
         "constraint_name": "order_lines_order_id_foreign",
         "on_update": "NO ACTION",
         "on_delete": "CASCADE"
+      }
+    },
+    {
+      "collection": "orders",
+      "field": "cutting_started_by",
+      "related_collection": "directus_users",
+      "meta": {
+        "junction_field": null,
+        "many_collection": "orders",
+        "many_field": "cutting_started_by",
+        "one_allowed_collections": null,
+        "one_collection": "directus_users",
+        "one_collection_field": null,
+        "one_deselect_action": "nullify",
+        "one_field": null,
+        "sort_field": null
+      },
+      "schema": {
+        "table": "orders",
+        "column": "cutting_started_by",
+        "foreign_key_table": "directus_users",
+        "foreign_key_column": "id",
+        "constraint_name": "orders_cutting_started_by_foreign",
+        "on_update": "NO ACTION",
+        "on_delete": "SET NULL"
       }
     },
     {

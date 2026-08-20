@@ -143,8 +143,8 @@ export function OrderEdit() {
         await Promise.all([
           readOrder(orderId),
           readOrderLines({ filter: { order_id: { _eq: orderId } } }),
-          readCustomers(),
-          readProducts(),
+          readCustomers({ limit: -1 }),
+          readProducts({ limit: -1, sort: ["name"] }),
           readCorrections(),
         ]);
 

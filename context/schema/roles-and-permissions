@@ -39,6 +39,7 @@ The order creator and manager. Broad access to order + customer + product data.
 | `line_cuts` | ✅ | ✅ | ✅ | ✅ | Full CRUD (2026-08-18) — Admin writes/edits cutting instructions from Order Edit (`editOrderLines`); `done` stays Production's own field to toggle in practice |
 | `line_weighings` | ✅ | ✅ | ✅ | ✅ | Full CRUD (2026-08-18) — Admin covers Cold Storage weighing as floor helper (`helpOtherStages`) |
 | `line_photos` | ✅ | ✅ | ✅ | ✅ | Full CRUD (2026-08-18) — same floor-helper reason as `line_weighings` |
+| `line_weighing_photos` | ✅ | ✅ | ✅ | ✅ | Full CRUD — same floor-helper reason as `line_weighings` |
 | `line_return_photos` | ❌ | ✅ | ❌ | ❌ | Read-only |
 | `delivery_proofs` | ❌ | ✅ | ❌ | ❌ | Read-only — sees if delivery happened |
 | `draft_weighings` | ❌ | ✅ | ❌ | ❌ | Read-only |
@@ -58,6 +59,7 @@ Weighs orders, attaches photos, manages packing. Does **not** create orders or t
 | `order_lines` | ✅ | ✅ | ✅ | ✅ | Full CRUD — adds/edits weighings, marks delivered/returned. Update grant includes `sent` (the "sending" qty, 2026-08-18) and `short` (the "ran out of stock" flag — field/ACL were already live before 2026-08-19 but unused by the app until the Short-flag feature that day) |
 | `line_weighings` | ✅ | ✅ | ✅ | ✅ | Full CRUD — their core job |
 | `line_photos` | ✅ | ✅ | ✅ | ✅ | Full CRUD — weigh photo proofs |
+| `line_weighing_photos` | ✅ | ✅ | ✅ | ✅ | Full CRUD (2026-08-20) — was missing entirely (only Admin had any grant at all), so "Failed to save photo: You don't have permission to access this" fired on every weighing-photo upload, even though the underlying `directus_files` upload itself already worked |
 | `line_return_photos` | ✅ | ✅ | ✅ | ✅ | Full CRUD — return evidence photos |
 | `draft_weighings` | ✅ | ✅ | ✅ | ✅ | Full CRUD — in-progress weighings |
 | `delivery_proofs` | ✅ | ✅ | ✅ | ❌ | Creates + updates their half (cond/recv photos) |
@@ -93,6 +95,7 @@ Creates cut instructions, marks cutting progress.
 | `attachments` | ❌ | ✅ | ❌ | ❌ | Read-only |
 | `line_weighings` | ❌ | ✅ | ❌ | ❌ | Read-only |
 | `line_photos` | ❌ | ✅ | ❌ | ❌ | Read-only |
+| `line_weighing_photos` | ❌ | ✅ | ❌ | ❌ | Read-only (2026-08-20 — was previously undocumented/ungranted entirely) |
 | `line_return_photos` | ❌ | ✅ | ❌ | ❌ | Read-only |
 | `delivery_proofs` | ❌ | ✅ | ❌ | ❌ | Read-only |
 | `draft_weighings` | ❌ | ✅ | ❌ | ❌ | Read-only |
@@ -126,7 +129,8 @@ Approves/rejects payment (and reconciles COD cash — Cash-up shares this role's
 | `courier_locations` | ❌ | ❌ | ❌ | ❌ | No access |
 | `line_cuts` | ❌ | ❌ | ❌ | ❌ | No access |
 | `line_weighings` | ❌ | ❌ | ❌ | ❌ | No access |
-| `line_photos` | ❌ | ❌ | ❌ | ❌ | No access |
+| `line_photos` | ❌ | ✅ | ❌ | ❌ | Read-only — corrected here (2026-08-20); Finance was actually granted this earlier (QA batch #2, 2026-08-19, "Finance can see item photo attachments") but this doc row was never updated to match |
+| `line_weighing_photos` | ❌ | ✅ | ❌ | ❌ | Read-only (2026-08-20) — same reasoning as `line_photos` above |
 | `line_return_photos` | ❌ | ❌ | ❌ | ❌ | No access |
 | `delivery_proofs` | ❌ | ❌ | ❌ | ❌ | No access |
 | `draft_weighings` | ❌ | ❌ | ❌ | ❌ | No access |
@@ -160,7 +164,10 @@ Picks up, delivers, uploads 3 proof photos, broadcasts GPS.
 | `line_return_photos` | ❌ | ❌ | ❌ | ❌ | No access |
 | `draft_weighings` | ❌ | ❌ | ❌ | ❌ | No access |
 
-**Field-level:** ❌ **Cannot see `order_lines.price`**. ✅ **Can see `orders.customer_contact` / `customer_email` / `customer_address` / `sales` / `sales_rep` / `sales_phone_number`** — Courier needs the delivery contact/address to complete drop-offs (matches the app's `seeCustomerContact` capability default for Courier).
+**Field-level:** ✅ **Can see `order_lines.price`** (2026-08-20 — narrow exception, see below). ✅ **Can see `orders.customer_contact` / `customer_email` / `customer_address` / `sales` / `sales_rep` / `sales_phone_number`** — Courier needs the delivery contact/address to complete drop-offs (matches the app's `seeCustomerContact` capability default for Courier).
+
+**`order_lines.price` exception (2026-08-20)**: reported directly — "My deliveries" 403'd outright for Courier (`Failed to load deliveries: You don't have permission to access this`). Root cause: `useDeliveries.ts`'s `readOrderLines()` call names `price` in its explicit `fields` array (needed to compute each COD stop's collection amount, `qty × price` — the same calc `useCashUp.ts`/`useTodayDigest.ts` use) — Directus rejects the *entire* request when a field-restricted role's query names a field outside its allow-list (same bug class fixed in `useOrders.ts`/`useOpenOrders.ts` back on 2026-08-11, just never applied here). Unlike those two pages — where price is a pure UI/business-sensitivity choice with no functional need — a courier genuinely needs the COD amount to know how much cash to collect; `Deliveries.tsx` has always rendered it unconditionally for COD stops, so hiding the field would have broken the feature outright rather than just hiding a number. Granted the field live rather than made it conditional. The app's `seePrices` **capability** is still `false` for Courier — every other price display in the app (`OrderDetail.tsx`'s per-line/total rows, Orders/Products pages, etc.) stays gated by `canSeePrices` regardless of this raw-field grant; only `Deliveries.tsx`'s aggregate COD total (and, as a side effect of the same live field, `useTodayDigest.ts`'s "COD collected today" dashboard metric, which had the identical latent bug — silently under-counted to 0 for Courier rather than erroring, since it swallows `readOrderLines` errors) actually surface it.
+- **Not fixed, flagged rather than silently expanded further**: `useTodayDigest.ts`'s same COD-amount calc has the identical unconditional `price` request, and Warehouse/Production also lack `seePrices`/`order_lines.price` — so their Dashboard "COD collected today" figure is likely silently wrong (stuck at 0) whenever it should be nonzero for either role. Not fixed here since it wasn't reported and — unlike Courier's collection-amount need — there's no equally clear-cut functional justification for granting Warehouse/Production line-item price visibility; worth a decision from the user rather than assumed.
 
 ---
 
@@ -174,7 +181,8 @@ Picks up, delivers, uploads 3 proof photos, broadcasts GPS.
 | `products` | CRUD | CRUD | R | R | R | — |
 | `line_cuts` | CRUD | CRUD | R + partial U | CRUD | — | — |
 | `line_weighings` | CRUD | CRUD | CRUD | R | — | — |
-| `line_photos` | CRUD | CRUD | CRUD | R | — | — |
+| `line_photos` | CRUD | CRUD | CRUD | R | R | — |
+| `line_weighing_photos` | CRUD | CRUD | CRUD | R | R | — |
 | `line_return_photos` | CRUD | R | CRUD | R | — | — |
 | `order_history` | CRUD | CR | CR | CR | CR | CR |
 | `delivery_proofs` | CRUD | R | CRU | R | — | CRU |

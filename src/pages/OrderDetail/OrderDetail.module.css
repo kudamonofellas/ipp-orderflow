@@ -136,6 +136,7 @@
   gap: var(--space-sm);
   flex-shrink: 0;
   margin-left: 28px;
+  padding-bottom: var(--space-sm);
 }
 
 .codSegments {
@@ -143,75 +144,10 @@
   gap: var(--space-sm);
 }
 
-.codSegment {
-  font: var(--text-label);
-  font-weight: 600;
-  padding: 6px 14px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-default);
-  background: var(--bg-surface);
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition:
-    background-color var(--duration-fast) var(--ease-default),
-    border-color var(--duration-fast) var(--ease-default),
-    color var(--duration-fast) var(--ease-default);
-}
-
-.codSegment:hover {
-  border-color: var(--accent-primary);
-}
-
-.codSegmentSuccess {
-  color: var(--state-success);
-  background: color-mix(in srgb, var(--state-success) 13%, transparent);
-  border-color: var(--state-success);
-}
-
-.codSegmentWarning {
-  color: var(--state-warning);
-  background: color-mix(in srgb, var(--state-warning) 13%, transparent);
-  border-color: var(--state-warning);
-}
-
-.codOutcomeLine {
-  font: var(--text-caption);
-  font-variant-numeric: tabular-nums;
-  color: var(--text-secondary);
-}
-
-.codOutcomeLineSuccess {
-  color: var(--state-success);
-}
-
-.codOutcomeLineWarning {
-  color: var(--state-warning);
-}
-
 .codReasonRow {
   display: flex;
   gap: var(--space-xs);
   flex-wrap: wrap;
-}
-
-.codReasonChip {
-  font: var(--text-caption);
-  padding: 3px 10px;
-  border-radius: var(--radius-xl);
-  border: 1px solid var(--border-default);
-  background: var(--bg-surface);
-  color: var(--text-secondary);
-  cursor: pointer;
-}
-
-.codReasonChip:hover {
-  border-color: var(--accent-primary);
-}
-
-.codReasonChipActive {
-  color: var(--state-warning);
-  background: color-mix(in srgb, var(--state-warning) 13%, transparent);
-  border-color: var(--state-warning);
 }
 
 .proofActions {
@@ -531,26 +467,23 @@
 }
 
 .dropLocationText {
+  font: var(--text-body);
+  color: var(--text-secondary);
   display: inline-flex;
   align-items: center;
   gap: var(--space-xs);
 }
 
-.mapLink {
-  flex-shrink: 0;
-  border: none;
-  background: none;
-  padding: 0;
-  font: var(--text-caption);
-  font-weight: 600;
-  color: var(--accent-primary);
-  cursor: pointer;
-  text-decoration: underline;
+.mapButton {
+  padding: 0 !important;
+  background: none !important;
+  height: auto !important;
+  min-height: 0 !important;
+  line-height: 1 !important;
 }
 
 .receivedByRow {
   font: var(--text-body);
-  padding-top: var(--space-md);
   color: var(--text-primary);
 }
 
@@ -605,6 +538,16 @@
   flex-direction: column;
   gap: var(--space-md);
   padding-top: var(--space-lg);
+}
+
+.financeClearRow {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm);
+  border-radius: var(--radius-md);
 }
 
 .followUpRow {
@@ -873,7 +816,9 @@
 /* Thumbnails list */
 .thumbnailsContainer {
   display: flex;
-  align-items: stretch;
+  flex: 1;
+  justify-content: flex-end;
+  align-items: center;
   gap: var(--space-sm);
   flex-wrap: wrap;
 }
@@ -1006,8 +951,7 @@
   align-items: center;
   justify-content: space-between;
   margin-left: 28px;
-  padding-top: 6px;
-  font-size: 0.9rem;
+  font: var(--text-body);
   color: var(--text-secondary);
 }
 

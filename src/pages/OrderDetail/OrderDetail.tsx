@@ -105,6 +105,27 @@ function isWeightOnlyUnit(unit: string | null | undefined): boolean {
   return u === "kg" || u === "gram";
 }
 
+/** A line's price as a number, `0` for anything unparseable. Only for
+ *  *computing* totals — presence checks must go through `lineHasPrice`
+ *  below, not compare this against `null`/`""`. */
+function linePriceValue(p: unknown): number {
+  return typeof p === "string"
+    ? parseFloat(p) || 0
+    : typeof p === "number"
+      ? p
+      : 0;
+}
+
+/** Whether a line has a REAL price — a positive number. Ported from the
+ *  prototype's truthy `l.price` check (`Dev-OrderDetail.jsx`): `null`,
+ *  `undefined`, `""`, AND `0` all count as "no price, invoiced in Accurate."
+ *  The port previously tested `price != null && price !== ""`, which reads
+ *  a `0` price as "priced" — rendering a "Rp 0" chip the prototype never
+ *  shows. */
+function lineHasPrice(l: { price?: unknown }): boolean {
+  return linePriceValue(l.price) > 0;
+}
+
 /**
  * How a customer return is settled in Accurate. The choice drives whether a
  * replacement re-enters the pipeline (→ Cold Storage) or the return simply
@@ -483,6 +504,12 @@ export function OrderDetail() {
   const [docFileName, setDocFileName] = useState<string | null>(null);
   const [savingDoc, setSavingDoc] = useState(false);
   const docFileInputRef = useRef<HTMLInputElement>(null);
+  /* ── Finalise stage's own "DO/SI printed" quick action — separate from
+   *  the general Documents-card form above, matching the prototype's own
+   *  `relDoc` (Dev-OrderDetail.jsx:101,784-798): a single optional number
+   *  field, logging is a side-effect of the "printed" action, not a
+   *  separate manual step. */
+  const [finaliseDocNumber, setFinaliseDocNumber] = useState("");
 
   /* ── weighing lines & item photos local state ── */
   const [weighingsMap, setWeighingsMap] = useState<
@@ -527,7 +554,7 @@ export function OrderDetail() {
         readOrderLines({ filter: { order_id: { _eq: orderId } } }),
         readOrderHistory(orderId),
         readAttachments(orderId),
-        readCustomers(),
+        readCustomers({ limit: -1 }),
         readAllUsers(),
         readReturnDocuments(orderId),
         readDeliveryProofs([orderId]),
@@ -743,20 +770,24 @@ export function OrderDetail() {
     (!isOrderLocked(order) || auth.can("editAfterLock"));
   // A role can advance a stage it owns (flow.capability) OR — if granted the
   // separate "floor helper" capability — cover cold/production/packing/
-  // dispatch specifically, matching the prototype's own `canAct`
+  // dispatch SPECIFICALLY, matching the prototype's own `canAct` exactly
   // (`Dev-OrderDetail.jsx:123`: `['cold','production','packing','dispatch'].includes(stage)`).
-  // `finance` is deliberately excluded from this list — clearing the Finance
-  // gate is gated by `approveFinance`/`actFinanceGate` only (`Finance` role,
-  // or Owner), never by the generic floor-helper grant. Without this
-  // exclusion, Admin (the only role with `helpOtherStages` by default) read
-  // `canAdvance` as true at the `finance` stage — not enough to see the
-  // Finance-gate form (that's separately gated on `approveFinance`), but
-  // enough to wrongly suppress the "This order is with Finance now" notice
-  // below, leaving Admin looking at a screen with no action AND no
-  // explanation why.
+  // Every other stage (`finance`, `intake`, `finalise`) is deliberately
+  // excluded from floor-helper coverage — those are each a single named
+  // actor's job (Finance/Admin) with no "anyone covering" option in the
+  // prototype, ever. Without this exclusion, Admin (the only role with
+  // `helpOtherStages` by default) read `canAdvance` as true at `finance` —
+  // not enough to see the Finance-gate form (separately gated on
+  // `approveFinance`), but enough to wrongly suppress the "This order is
+  // with Finance now" notice below. `intake`/`finalise` share this same
+  // exclusion for the same reason: printing the DO/SI ("Ready — Send to
+  // Dispatch") is Admin's (and Owner's) job alone — a Warehouse/Courier
+  // session should never see this button, matching `ACTOR['finalise'] ===
+  // 'Admin'` with no floor-helper carve-out.
+  const HELP_OTHER_STAGES = ["cold", "production", "packing", "dispatch"];
   const canAdvance = flow
     ? auth.can(flow.capability) ||
-      (stage !== "finance" && auth.can("helpOtherStages"))
+      (HELP_OTHER_STAGES.includes(stage) && auth.can("helpOtherStages"))
     : false;
   // Previously gated on the generic `sendBackStage` capability alone
   // (Admin-only by default) — the role that actually owns the current
@@ -815,20 +846,34 @@ export function OrderDetail() {
     stage === "cold" &&
     auth.role !== "Finance" &&
     (auth.can("weighColdStorage") || auth.can("helpOtherStages"));
+  /** "Held back, nothing leaving today" — ported from the prototype's
+   *  `held(l)` (`Dev-OrderDetail.jsx:671`), which has two mutually exclusive
+   *  branches by unit: a kg/gram line is held via its `short` flag; every
+   *  OTHER weighed unit (Loaf included) is held via its "sending" qty being
+   *  0 — Loaf has no `short` flag of its own in the prototype, it's held
+   *  back the same way a counted line is. Used both to exempt a held line
+   *  from needing a recorded weight (`coldWeighingReady` below) and from
+   *  the cold-storage photo requirement (`handleAdvance`). */
+  function isLineHeld(l: OrderLinesCollection): boolean {
+    if (isWeightOnlyUnit(l.unit)) return !!l.short;
+    const qtyNum =
+      typeof l.qty === "string" ? parseFloat(l.qty) || 0 : (l.qty ?? 0);
+    const sendingQty = l.id ? (sendingQtyMap[l.id] ?? qtyNum) : qtyNum;
+    return sendingQty === 0;
+  }
   // Ported from the prototype's `ready` (Dev-OrderDetail.jsx:677) — the
   // "Release to Finance"/"Weighed — release" button stays disabled until
   // every catch-weight (Loaf/kg/gram) line actually has a recorded weight,
   // same rule for every role that can reach it (Warehouse, Owner, or Admin
   // covering as floor helper). Non-weighed lines (the "sending" qty box)
   // never block — matches the prototype's `catchLines` scope (weight-unit
-  // lines only). A kg/gram line flagged `short` (genuinely out of stock —
-  // ported from the prototype's `held()`, `Dev-OrderDetail.jsx:670-671) is
-  // exempt from needing a weight — mirrors the prototype's own `held(l)`
-  // scope exactly: Loaf lines can't be exempted this way (no `short` there).
+  // lines only). A held line (`isLineHeld` above — short-flagged kg/gram,
+  // or a Loaf line with Sending zeroed) is exempt from needing a weight,
+  // mirroring the prototype's own `held(l)` exemption in `ready` exactly.
   const coldWeighingReady = lines
     .filter((l) => isWeighedUnit(l.unit))
     .every((l) => {
-      if (isWeightOnlyUnit(l.unit) && l.short) return true;
+      if (isLineHeld(l)) return true;
       const total = (l.id ? (weighingsMap[l.id] ?? []) : []).reduce(
         (acc, w) => acc + (parseFloat(w.weight) || 0),
         0,
@@ -1057,7 +1102,14 @@ export function OrderDetail() {
     financeCleared &&
     canApproveFinance &&
     ["cold", "finance", "production", "packing", "finalise"].includes(stage);
-  const orderIsPriced = lines.every((l) => l.price != null && l.price !== "");
+  // Ported from the prototype's `orderPriced` (`Dev-domain.js`): true the
+  // moment ANY line has a real (positive) price — was previously `.every()`
+  // with a `!= null` presence check, which (a) mis-classified a mixed order
+  // as "not priced" the instant just one line lacked a price, even with
+  // every other line correctly priced, and (b) read a `0` price as
+  // "priced." Drives both this Finance-amount fallback below and the
+  // order-level price summary after the item list.
+  const orderIsPriced = lines.some(lineHasPrice);
   const creditLimitNum =
     typeof matchedCustomer?.credit_limit === "string"
       ? parseFloat(matchedCustomer.credit_limit) || 0
@@ -1104,23 +1156,15 @@ export function OrderDetail() {
    *  (`Dev-OrderDetail.jsx:670-671,1419-1422`). `order_lines.short` was
    *  already live in the schema and Warehouse's write ACL — dormant, never
    *  wired up. Marking a line short exempts it from needing a recorded
-   *  weight (`coldWeighingReady`) and a proof photo (`handleAdvance`), and
-   *  forces its "sending" qty to 0 so the existing "X to follow" hint
-   *  (`order_lines.sent`) carries the owed quantity through every later
-   *  stage/role — this port has no separate fulfillment-tracking field, so
-   *  reusing `sent` (rather than inventing one) is the most direct way to
-   *  make "customer still owed this" visible everywhere `sent` already is.
-   *  Un-marking restores the full ordered qty as "sending". */
-  async function handleToggleShort(
-    lineId: string,
-    currentShort: boolean,
-    qty: number,
-  ) {
+   *  weight (`coldWeighingReady`) and a proof photo (`handleAdvance`); the
+   *  persistent "Short — ran out of stock" chip on the line (Item Summary
+   *  row) is what carries "customer still owed this" through every later
+   *  stage/role. Only writes `short` — kg/gram lines never touch `sent`
+   *  (they have no Sending box at all, matching the prototype's own scope
+   *  exactly: `sent`/Sending is a counted-unit-only concept there). */
+  async function handleToggleShort(lineId: string, currentShort: boolean) {
     const next = !currentShort;
-    const res = await updateOrderLine(lineId, {
-      short: next,
-      sent: next ? 0 : qty,
-    });
+    const res = await updateOrderLine(lineId, { short: next });
     if (res.error || !res.data) {
       alert(`Failed to update short flag: ${res.error}`, {
         title: t("Couldn't update line"),
@@ -1128,7 +1172,6 @@ export function OrderDetail() {
       return;
     }
     setLines((prev) => prev.map((l) => (l.id === lineId ? res.data! : l)));
-    setSendingQtyMap((prev) => ({ ...prev, [lineId]: next ? 0 : qty }));
   }
 
   /* ────────────── Weighing & Item Photo Handlers ── */
@@ -1426,8 +1469,20 @@ export function OrderDetail() {
    *  which stamps every stage-changing action with the exact pre-write
    *  values of whatever fields it's about to touch. Any stage-changing
    *  handler can call this with the same patch object it's sending to
-   *  `updateOrder`, and get back the values needed to reverse it. */
-  function snapshotFor(patch: Record<string, unknown>): UndoSnapshot {
+   *  `updateOrder`, and get back the values needed to reverse it.
+   *
+   *  `at` is passed in rather than generated here — it MUST be the exact
+   *  same string the paired `appendOrderHistory` call writes as that
+   *  history row's own `at`. `canUndo` (below) gates visibility on
+   *  `lastHistoryEntry.at === order.undo_snapshot.at`; two independently
+   *  generated `new Date().toISOString()` calls (one here, one wherever
+   *  Directus would otherwise default the history row's timestamp) are
+   *  never equal, so the undo button silently never appeared for ANY
+   *  role at ANY stage until this was fixed — reported directly. */
+  function snapshotFor(
+    patch: Record<string, unknown>,
+    at: string,
+  ): UndoSnapshot {
     const changedFields: Record<string, unknown> = {};
     const orderRecord = order as unknown as Record<string, unknown>;
     for (const key of Object.keys(patch)) {
@@ -1438,21 +1493,8 @@ export function OrderDetail() {
       prevStage: stage,
       changedFields,
       who: userId,
-      at: new Date().toISOString(),
+      at,
     };
-  }
-
-  /** "Held back, nothing leaving today" — ported from the prototype's
-   *  `held(l)` (`Dev-OrderDetail.jsx:671`): a kg/gram line flagged `short`
-   *  (ran out of stock), or any other line whose "sending" qty is 0 (a
-   *  counted/Loaf line being held back entirely this visit). Used to
-   *  suppress the cold-storage photo requirement below when there's
-   *  genuinely nothing to photograph. */
-  function isLineHeld(l: OrderLinesCollection): boolean {
-    if (isWeightOnlyUnit(l.unit)) return !!l.short;
-    const qtyNum = typeof l.qty === "string" ? parseFloat(l.qty) || 0 : (l.qty ?? 0);
-    const sendingQty = l.id ? (sendingQtyMap[l.id] ?? qtyNum) : qtyNum;
-    return sendingQty === 0;
   }
 
   async function handleAdvance() {
@@ -1488,10 +1530,11 @@ export function OrderDetail() {
     // stage's target is unaffected.
     const target = stage === "cold" && !financeCleared ? "finance" : flow.next;
     setAdvancing(true);
+    const actionAt = new Date().toISOString();
     const patch = { stage: target };
     const res = await updateOrder(id, {
       ...patch,
-      undo_snapshot: snapshotFor(patch),
+      undo_snapshot: snapshotFor(patch, actionAt),
     });
     if (!res.error && res.data) {
       setOrder(res.data);
@@ -1500,6 +1543,7 @@ export function OrderDetail() {
         what: `Stage advanced: ${stage} → ${target}`,
         who: userId,
         stage: target,
+        at: actionAt,
       });
       const hRes = await readOrderHistory(id);
       if (!hRes.error) setHistory(hRes.data ?? []);
@@ -1566,10 +1610,11 @@ export function OrderDetail() {
       setLineCutsByLine(grouped);
     }
     setCutDoneMap({});
+    const actionAt = new Date().toISOString();
     const cuttingPatch = { stage: flow.next };
     const res = await updateOrder(id, {
       ...cuttingPatch,
-      undo_snapshot: snapshotFor(cuttingPatch),
+      undo_snapshot: snapshotFor(cuttingPatch, actionAt),
     });
     if (!res.error && res.data) {
       setOrder(res.data);
@@ -1578,6 +1623,7 @@ export function OrderDetail() {
         what: "Cutting done — back to warehouse to pack",
         who: userId,
         stage: flow.next,
+        at: actionAt,
       });
       const hRes = await readOrderHistory(id);
       if (!hRes.error) setHistory(hRes.data ?? []);
@@ -1595,10 +1641,11 @@ export function OrderDetail() {
   async function handlePackAdvance() {
     if (!id || !flow?.next || advancing) return;
     setAdvancing(true);
+    const actionAt = new Date().toISOString();
     const patch = { stage: flow.next };
     const res = await updateOrder(id, {
       ...patch,
-      undo_snapshot: snapshotFor(patch),
+      undo_snapshot: snapshotFor(patch, actionAt),
     });
     if (!res.error && res.data) {
       setOrder(res.data);
@@ -1607,9 +1654,63 @@ export function OrderDetail() {
         what: "Packed — whole order ready",
         who: userId,
         stage: flow.next,
+        at: actionAt,
       });
       const hRes = await readOrderHistory(id);
       if (!hRes.error) setHistory(hRes.data ?? []);
+    } else {
+      alert(`Failed to advance stage: ${res.error}`, {
+        title: t("Couldn't advance stage"),
+      });
+    }
+    setAdvancing(false);
+  }
+
+  /** Finalise → dispatch — ported from the prototype's own `finalise` card
+   *  (`Dev-OrderDetail.jsx:784-798`): printing the DO/SI both confirms and
+   *  releases in one action. A typed number logs a document entry
+   *  (reusing the same `createAttachment` write the general Documents card
+   *  uses); leaving it blank just advances with no document logged —
+   *  matches the prototype's own optional-`relDoc` behavior exactly. */
+  async function handleFinaliseAdvance() {
+    if (!id || !flow?.next || advancing) return;
+    setAdvancing(true);
+    const number = finaliseDocNumber.trim();
+    if (number) {
+      const docRes = await createAttachment({
+        order_uuid: id,
+        doc_type: "DO/SI",
+        number,
+        note: order?.is_replacement
+          ? "replacement delivery"
+          : "original delivery",
+        label: `DO/SI ${number}`,
+        created_by: userId ?? undefined,
+      });
+      if (!docRes.error && docRes.data) {
+        setAttachments((prev) => [docRes.data!, ...prev]);
+      }
+    }
+    const actionAt = new Date().toISOString();
+    const patch = { stage: flow.next };
+    const res = await updateOrder(id, {
+      ...patch,
+      undo_snapshot: snapshotFor(patch, actionAt),
+    });
+    if (!res.error && res.data) {
+      setOrder(res.data);
+      await appendOrderHistory({
+        order_id: id,
+        what: number
+          ? `DO/SI printed (${number}) — released to dispatch`
+          : "Document printed — released to dispatch",
+        who: userId,
+        stage: flow.next,
+        at: actionAt,
+      });
+      const hRes = await readOrderHistory(id);
+      if (!hRes.error) setHistory(hRes.data ?? []);
+      setFinaliseDocNumber("");
     } else {
       alert(`Failed to advance stage: ${res.error}`, {
         title: t("Couldn't advance stage"),
@@ -1683,9 +1784,10 @@ export function OrderDetail() {
     // A fresh snapshot for THIS move — supersedes whatever snapshot (if
     // any) was left over from a prior action, including the delivered
     // order's own pending Undo when reopening.
+    const actionAt = new Date().toISOString();
     const res = await updateOrder(id, {
       ...patch,
-      undo_snapshot: snapshotFor(patch),
+      undo_snapshot: snapshotFor(patch, actionAt),
     });
     if (!res.error && res.data) {
       setOrder(res.data);
@@ -1718,6 +1820,7 @@ export function OrderDetail() {
         what: `Stage returned: ${stage} → ${flow.prev}${reason.trim() ? ` — ${reason.trim()}` : ""}`,
         who: userId,
         stage: flow.prev,
+        at: actionAt,
       });
       const hRes = await readOrderHistory(id);
       if (!hRes.error) setHistory(hRes.data ?? []);
@@ -2285,7 +2388,13 @@ export function OrderDetail() {
 
     // Pre-delivery snapshot for the quiet "Undo" link — the exact values
     // this action is about to overwrite, plus the proof row it creates (so
-    // Undo can archive it, not just reset the order fields).
+    // Undo can archive it, not just reset the order fields). `at` MUST
+    // match the paired `appendOrderHistory` call's own `at` below — this
+    // handler builds its snapshot by hand rather than through the shared
+    // `snapshotFor()` helper (it has extra fields — `proofId` — that
+    // helper doesn't produce), so it needs the same one-shared-timestamp
+    // treatment applied there, not `snapshotFor`'s fix itself.
+    const actionAt = new Date().toISOString();
     const undoSnapshot: UndoSnapshot = {
       prevStage: stage,
       changedFields: {
@@ -2296,7 +2405,7 @@ export function OrderDetail() {
       },
       proofId,
       who: userId,
-      at: new Date().toISOString(),
+      at: actionAt,
     };
 
     const res = await updateOrder(id, {
@@ -2313,6 +2422,7 @@ export function OrderDetail() {
         what: historyWhat,
         who: userId,
         stage: nextStage,
+        at: actionAt,
       });
       const hRes = await readOrderHistory(id);
       if (!hRes.error) setHistory(hRes.data ?? []);
@@ -2445,9 +2555,10 @@ export function OrderDetail() {
     // "cancelled"` check), Hold has no such exclusion there, so it gets
     // the same self-undo as any other stage move.
     const holdPatch = { stage: "outstanding" };
+    const actionAt = new Date().toISOString();
     const res = await updateOrder(id, {
       ...holdPatch,
-      undo_snapshot: snapshotFor(holdPatch),
+      undo_snapshot: snapshotFor(holdPatch, actionAt),
     });
     if (!res.error && res.data) {
       setOrder(res.data);
@@ -2456,6 +2567,7 @@ export function OrderDetail() {
         what: "Order put on hold (outstanding)",
         who: userId,
         stage: "outstanding",
+        at: actionAt,
       });
       const hRes = await readOrderHistory(id);
       if (!hRes.error) setHistory(hRes.data ?? []);
@@ -2501,9 +2613,10 @@ export function OrderDetail() {
           }
         : {}),
     };
+    const actionAt = new Date().toISOString();
     const res = await updateOrder(id, {
       ...restorePatch,
-      undo_snapshot: snapshotFor(restorePatch),
+      undo_snapshot: snapshotFor(restorePatch, actionAt),
     });
     if (!res.error && res.data) {
       if (isDispatchReset) {
@@ -2516,6 +2629,7 @@ export function OrderDetail() {
         what: `Order restored to ${restoreStage}`,
         who: userId,
         stage: restoreStage,
+        at: actionAt,
       });
       const hRes = await readOrderHistory(id);
       if (!hRes.error) setHistory(hRes.data ?? []);
@@ -2728,9 +2842,10 @@ export function OrderDetail() {
       stage: "returned",
       returned_reason: refuseReason.trim() || null,
     };
+    const actionAt = new Date().toISOString();
     const res = await updateOrder(id, {
       ...refusalPatch,
-      undo_snapshot: snapshotFor(refusalPatch),
+      undo_snapshot: snapshotFor(refusalPatch, actionAt),
     });
     if (!res.error && res.data) {
       setOrder(res.data);
@@ -2743,6 +2858,7 @@ export function OrderDetail() {
         what: `Return — ${summary} coming back to warehouse${refuseReason.trim() ? ` (${refuseReason.trim()})` : ""}`,
         who: userId,
         stage: "returned",
+        at: actionAt,
       });
       const hRes = await readOrderHistory(id);
       if (!hRes.error) setHistory(hRes.data ?? []);
@@ -2853,9 +2969,10 @@ export function OrderDetail() {
         return_doc: doc.label,
         return_settle: null,
       };
+      const actionAt = new Date().toISOString();
       const res = await updateOrder(id, {
         ...replacementPatch,
-        undo_snapshot: snapshotFor(replacementPatch),
+        undo_snapshot: snapshotFor(replacementPatch, actionAt),
       });
       if (!res.error && res.data) {
         setOrder(res.data);
@@ -2868,6 +2985,7 @@ export function OrderDetail() {
           what: `Return + replacement (${doc.label}) — back to Cold Storage`,
           who: userId,
           stage: "cold",
+          at: actionAt,
         });
         const hRes = await readOrderHistory(id);
         if (!hRes.error) setHistory(hRes.data ?? []);
@@ -3161,13 +3279,13 @@ export function OrderDetail() {
               prominent "done" banner instead of a stepper with nothing left
               to step through. */}
           {stage === "delivered" ? (
-            <div className={styles.deliveredBanner}>
-              <Card
-                style={{
-                  backgroundColor: "var(--bg-surface-hover-dark)",
-                  borderColor: "var(--accent-primary)",
-                }}
-              >
+            <Card
+              style={{
+                backgroundColor: "var(--bg-surface-hover-dark)",
+                borderColor: "var(--accent-primary)",
+              }}
+            >
+              <div className={styles.cardContent}>
                 <div className={styles.deliveredBannerHeader}>
                   <div
                     className={styles.left}
@@ -3238,9 +3356,10 @@ export function OrderDetail() {
                         : t("Delivery location captured")}{" "}
                       · {formatClock(order.deliver_geo.at)}
                     </span>
-                    <button
+                    <Button
                       type="button"
-                      className={styles.mapLink}
+                      variant="tertiary"
+                      className={styles.mapButton}
                       onClick={() =>
                         window.open(
                           `https://www.google.com/maps/search/?api=1&query=${order.deliver_geo!.lat},${order.deliver_geo!.lng}`,
@@ -3250,7 +3369,7 @@ export function OrderDetail() {
                       }
                     >
                       {t("Map")}
-                    </button>
+                    </Button>
                   </div>
                 )}
                 {activeProof?.name && (
@@ -3258,8 +3377,8 @@ export function OrderDetail() {
                     {t("Received by")} <strong>{activeProof.name}</strong>
                   </div>
                 )}
-              </Card>
-            </div>
+              </div>
+            </Card>
           ) : (
             <></>
           )}
@@ -3418,7 +3537,7 @@ export function OrderDetail() {
                   typeof line.price === "string"
                     ? parseFloat(line.price) || 0
                     : (line.price ?? 0);
-                const hasPrice = line.price != null && line.price !== "";
+                const hasPrice = lineHasPrice(line);
                 const isWeighedItem = isWeighedUnit(line.unit);
 
                 const weighingLines = line.id
@@ -3452,6 +3571,16 @@ export function OrderDetail() {
                 const sendingQty = line.id
                   ? (sendingQtyMap[line.id] ?? qty)
                   : qty;
+                // Ported from the prototype's line-detail gate
+                // (`Dev-OrderDetail.jsx:1425`) — only render the summary
+                // row when it actually has something to show. Previously
+                // unconditional past `intake`, so a plain counted line with
+                // no price and no weight (nothing worth totaling) still
+                // rendered a bare "Total:" with nothing after it.
+                const showLineDetail =
+                  (stage !== "intake" && isWeighedItem) ||
+                  (isWeightOnlyUnit(line.unit) && !!line.short) ||
+                  (canSeePrices && hasPrice);
 
                 return (
                   <div key={line.id} className={styles.itemRow}>
@@ -3461,46 +3590,58 @@ export function OrderDetail() {
                         <span className={styles.unitTag}>{line.unit}</span>
                         <span className={styles.itemName}>{line.name}</span>
                       </div>
-                      <div className={styles.sendingBadge}>
-                        {t("sending")}
-                        {canWeighHere ? (
-                          <input
-                            type="number"
-                            className={styles.sendingInput}
-                            value={sendingQty}
-                            min={0}
-                            max={qty}
-                            onChange={(e) => {
-                              // Capped at the ordered qty — sending can
-                              // never exceed what was actually ordered.
-                              const val = Math.min(
-                                qty,
-                                Math.max(0, parseInt(e.target.value) || 0),
-                              );
-                              if (line.id)
-                                setSendingQtyMap((prev) => ({
-                                  ...prev,
-                                  [line.id!]: val,
-                                }));
-                            }}
-                            onBlur={() => line.id && handleSendingBlur(line.id)}
-                          />
-                        ) : (
-                          // Only the role that owns Cold Storage picking
-                          // decides what's actually being sent — everyone
-                          // else (Finance, etc.) sees the saved figure but
-                          // can't edit it.
-                          <span className={styles.sendingValue}>
-                            {sendingQty}
-                          </span>
-                        )}
-                        {t("of")} {qty}
-                        {sendingQty < qty && (
-                          <span className={styles.toFollowHint}>
-                            · {qty - sendingQty} {t("to follow")}
-                          </span>
-                        )}
-                      </div>
+                      {/* kg/gram lines never get a Sending box — they're
+                          held back via the Short flag instead, matching the
+                          prototype's own scope exactly (`counted =
+                          !isWeightUnit`, `Dev-OrderDetail.jsx:1364`: the
+                          Sending box only ever renders for counted units,
+                          and Loaf falls into that same "counted" branch for
+                          hold purposes even though it also gets weight
+                          inputs). */}
+                      {!isWeightOnlyUnit(line.unit) && qty >= 1 && (
+                        <div className={styles.sendingBadge}>
+                          {t("sending")}
+                          {canWeighHere ? (
+                            <input
+                              type="number"
+                              className={styles.sendingInput}
+                              value={sendingQty}
+                              min={0}
+                              max={qty}
+                              onChange={(e) => {
+                                // Capped at the ordered qty — sending can
+                                // never exceed what was actually ordered.
+                                const val = Math.min(
+                                  qty,
+                                  Math.max(0, parseInt(e.target.value) || 0),
+                                );
+                                if (line.id)
+                                  setSendingQtyMap((prev) => ({
+                                    ...prev,
+                                    [line.id!]: val,
+                                  }));
+                              }}
+                              onBlur={() =>
+                                line.id && handleSendingBlur(line.id)
+                              }
+                            />
+                          ) : (
+                            // Only the role that owns Cold Storage picking
+                            // decides what's actually being sent — everyone
+                            // else (Finance, etc.) sees the saved figure but
+                            // can't edit it.
+                            <span className={styles.sendingValue}>
+                              {sendingQty}
+                            </span>
+                          )}
+                          {t("of")} {qty}
+                          {sendingQty < qty && (
+                            <span className={styles.toFollowHint}>
+                              · {qty - sendingQty} {t("to follow")}
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     {/* Weighing Lines for Loaf/kg items — cold storage's job only */}
@@ -3628,8 +3769,8 @@ export function OrderDetail() {
                         {isWeightOnlyUnit(line.unit) && (
                           <Button
                             type="button"
-                            variant="tertiary"
-                            size="sm"
+                            variant="ghost"
+                            size="md"
                             icon="cancelled"
                             style={{
                               alignSelf: "flex-start",
@@ -3639,7 +3780,7 @@ export function OrderDetail() {
                             }}
                             onClick={() =>
                               line.id &&
-                              handleToggleShort(line.id, !!line.short, qty)
+                              handleToggleShort(line.id, !!line.short)
                             }
                           >
                             {t("Short — ran out of stock")}
@@ -3706,8 +3847,8 @@ export function OrderDetail() {
                       </div>
                     )}
 
-                    <div className={styles.linePhotos}>
-                      {canWeighHere && (
+                    {canWeighHere && (
+                      <div className={styles.linePhotos}>
                         <label
                           style={{
                             display: "inline-flex",
@@ -3717,17 +3858,18 @@ export function OrderDetail() {
                         >
                           <Button
                             type="button"
-                            variant="secondary"
-                            size="sm"
+                            variant="tertiary"
+                            size="md"
                             icon="camera"
-                            iconOnly
                             title={t("Upload item photo")}
                             onClick={(e) => {
                               const inputElem = (e.currentTarget as HTMLElement)
                                 .nextElementSibling as HTMLInputElement;
                               inputElem?.click();
                             }}
-                          />
+                          >
+                            Add photo
+                          </Button>
                           <input
                             type="file"
                             accept="image/*"
@@ -3735,107 +3877,114 @@ export function OrderDetail() {
                             onChange={(e) => handleUploadItemPhoto(line.id, e)}
                           />
                         </label>
-                      )}
-                      {stage === "cold" &&
-                        requirePhoto &&
-                        itemPhotos.length === 0 && (
-                          <span
-                            className="tiny"
-                            style={{
-                              color: "var(--state-warning)",
-                              marginLeft: "0.5rem",
-                            }}
+                        {stage === "cold" &&
+                          requirePhoto &&
+                          itemPhotos.length === 0 && (
+                            <span
+                              className="tiny"
+                              style={{
+                                color: "var(--state-warning)",
+                                marginLeft: "0.5rem",
+                              }}
+                            >
+                              {t("Needs photo")}
+                            </span>
+                          )}
+                        {itemPhotos.length > 0 && (
+                          <div
+                            className={styles.thumbnailsContainer}
+                            style={{ marginLeft: 28 }}
                           >
-                            {t("Needs photo")}
+                            {itemPhotos.map((img) => (
+                              <div
+                                key={img.id}
+                                className={styles.thumbnailItem}
+                                onClick={() =>
+                                  setActiveImageModal(
+                                    canWeighHere
+                                      ? {
+                                          url: img.url,
+                                          title: `${t("Attachment for")} ${line.name}`,
+                                          photoId: img.id,
+                                          lineId: line.id,
+                                        }
+                                      : {
+                                          url: img.url,
+                                          title: `${t("Attachment for")} ${line.name}`,
+                                        },
+                                  )
+                                }
+                              >
+                                <img
+                                  src={img.url}
+                                  alt="thumbnail"
+                                  className={styles.thumbnailImg}
+                                />
+                                {/* Delete only available during the same
+                                  window as the upload button itself
+                                  (`canWeighHere` — Cold Storage, weighing
+                                  role) — previously gated on `stage !==
+                                  "delivered"` alone, which let a photo be
+                                  deleted at every stage up to delivery
+                                  (production, packing, finalise, dispatch,
+                                  outstanding), not just at Cold Storage.
+                                  Reported directly. */}
+                                {canWeighHere && (
+                                  <div
+                                    className={styles.thumbnailHoverTrash}
+                                    title={t("Delete image")}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleRemoveItemPhoto(line.id, img.id);
+                                    }}
+                                  >
+                                    <Icon name="trash" size={14} />
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Item Summary line — only when there's something to show */}
+                    {showLineDetail && (
+                      <div className={styles.itemTotalRow}>
+                        {stage !== "intake" && isWeighedItem && (
+                          <span
+                            className={styles.totalWeight}
+                            style={
+                              belowWeighHint || aboveWeighHint
+                                ? { color: "var(--state-warning)" }
+                                : undefined
+                            }
+                          >
+                            {t("Total:")}{" "}
+                            {`${totalMeasuredWeight.toFixed(2)} kg`}
+                            {belowWeighHint && (
+                              <span className={styles.weighHint}>
+                                {" "}
+                                · {t("below order")} {qty} kg?
+                              </span>
+                            )}
+                            {aboveWeighHint && (
+                              <span className={styles.weighHint}>
+                                {" "}
+                                · {t("over order")} {qty} kg?
+                              </span>
+                            )}
                           </span>
                         )}
-                      {itemPhotos.length > 0 && (
-                        <div
-                          className={styles.thumbnailsContainer}
-                          style={{ marginLeft: 28 }}
-                        >
-                          {itemPhotos.map((img) => (
-                            <div
-                              key={img.id}
-                              className={styles.thumbnailItem}
-                              onClick={() =>
-                                setActiveImageModal(
-                                  stage === "delivered"
-                                    ? {
-                                        url: img.url,
-                                        title: `${t("Attachment for")} ${line.name}`,
-                                      }
-                                    : {
-                                        url: img.url,
-                                        title: `${t("Attachment for")} ${line.name}`,
-                                        photoId: img.id,
-                                        lineId: line.id,
-                                      },
-                                )
-                              }
-                            >
-                              <img
-                                src={img.url}
-                                alt="thumbnail"
-                                className={styles.thumbnailImg}
-                              />
-                              {stage !== "delivered" && (
-                                <div
-                                  className={styles.thumbnailHoverTrash}
-                                  title={t("Delete image")}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleRemoveItemPhoto(line.id, img.id);
-                                  }}
-                                >
-                                  <Icon name="trash" size={14} />
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Item Summary line */}
-                    <div className={styles.itemTotalRow}>
-                      {stage !== "intake" && (
-                        <span
-                          className={styles.totalWeight}
-                          style={
-                            belowWeighHint || aboveWeighHint
-                              ? { color: "var(--state-warning)" }
-                              : undefined
-                          }
-                        >
-                          {t("Total:")}{" "}
-                          {isWeighedItem
-                            ? `${totalMeasuredWeight.toFixed(2)} kg`
-                            : ""}
-                          {belowWeighHint && (
-                            <span className={styles.weighHint}>
-                              {" "}
-                              · {t("below order")} {qty} kg?
-                            </span>
-                          )}
-                          {aboveWeighHint && (
-                            <span className={styles.weighHint}>
-                              {" "}
-                              · {t("over order")} {qty} kg?
-                            </span>
-                          )}
-                        </span>
-                      )}
-                      {/* Persistent, every role/stage — matches the
-                          prototype's own always-shown `l.short` chip
-                          (Dev-OrderDetail.jsx:1435), not just at Cold Storage. */}
-                      {isWeightOnlyUnit(line.unit) && line.short && (
-                        <span className={styles.toFollowHint}>
-                          {t("Short — ran out of stock")}
-                        </span>
-                      )}
-                      {canSeePrices &&
-                        (hasPrice ? (
+                        {/* Persistent, every role/stage — matches the
+                            prototype's own always-shown `l.short` chip
+                            (Dev-OrderDetail.jsx:1435), not just at Cold Storage. */}
+                        {isWeightOnlyUnit(line.unit) && line.short && (
+                          <span className={styles.toFollowHint}>
+                            {t("Short — ran out of stock")}
+                          </span>
+                        )}
+                        {canSeePrices && hasPrice && (
                           <div className={styles.priceCalc}>
                             <span>{currency.format(price)}</span>
                             <span>x {qty}</span>
@@ -3843,12 +3992,9 @@ export function OrderDetail() {
                               {currency.format(price * qty)}
                             </span>
                           </div>
-                        ) : (
-                          <div className={styles.priceCalc}>
-                            {t("No price on the order — invoiced in Accurate.")}
-                          </div>
-                        ))}
-                    </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -3864,16 +4010,23 @@ export function OrderDetail() {
               </div>
             )}
 
-            {canSeePrices && (
-              <div className={styles.totalRow}>
-                <span className={styles.muted}>
-                  {t("Order value · from PO")}
-                </span>
-                <span className={styles.totalValue}>
-                  {currency.format(orderTotal)}
-                </span>
-              </div>
-            )}
+            {canSeePrices &&
+              (orderIsPriced ? (
+                <div className={styles.totalRow}>
+                  <span className={styles.muted}>
+                    {t("Order value · from PO")}
+                  </span>
+                  <span className={styles.totalValue}>
+                    {currency.format(orderTotal)}
+                  </span>
+                </div>
+              ) : (
+                <div className={styles.totalRow}>
+                  <span className={styles.muted}>
+                    {t("No price on the order — invoiced in Accurate.")}
+                  </span>
+                </div>
+              ))}
           </Card>
 
           {/* Documents Section */}
@@ -4008,7 +4161,8 @@ export function OrderDetail() {
                 stage !== "dispatch" &&
                 stage !== "production" &&
                 stage !== "packing" &&
-                stage !== "cold" && (
+                stage !== "cold" &&
+                stage !== "finalise" && (
                   <Button
                     type="button"
                     variant="primary"
@@ -4034,25 +4188,46 @@ export function OrderDetail() {
                 <Card>
                   <div className={styles.heading}>{t("Pull & weigh")}</div>
                   <div className={styles.cardContent}>
-                    <p
-                      className={styles.secondary}
+                    <div
+                      className={styles.financeClearRow}
                       style={
                         financeCleared
-                          ? { color: "var(--state-success)" }
-                          : undefined
+                          ? {
+                              border: "1px solid var(--accent-primary)",
+                              backgroundColor: "var(--bg-surface-hover-dark)",
+                            }
+                          : {
+                              border: "1px solid var(--border-default)",
+                              backgroundColor: "none",
+                            }
                       }
                     >
-                      {financeCleared
-                        ? `✓ ${t("Payment already cleared by Finance")}`
-                        : `⏳ ${t("Finance is clearing payment in parallel")}`}
-                    </p>
+                      <Icon
+                        name={financeCleared ? "check" : "hourglass"}
+                        style={
+                          financeCleared
+                            ? { color: "var(--accent-primary)" }
+                            : { color: "var(--text-muted)" }
+                        }
+                      />
+                      <p
+                        style={
+                          financeCleared
+                            ? { color: "var(--accent-primary)" }
+                            : { color: "var(--text-muted)" }
+                        }
+                      >
+                        {financeCleared
+                          ? t("Payment already cleared by Finance")
+                          : t("Finance is clearing payment in parallel")}
+                      </p>
+                    </div>
                     <p className={styles.secondary}>
                       {t(
                         'Weigh each item above and snap the scale — tap "+ Add weighing" to log several scale loads that total up (e.g. 80 kg as 4 × 20 kg). Short on an item? In the "Sending" box set how many you\'re sending now — the rest is kept as a later delivery. A kg item that ran out gets a "short" flag.',
                       )}
                     </p>
-                    {lines.filter((l) => isWeighedUnit(l.unit)).length ===
-                      0 &&
+                    {lines.filter((l) => isWeighedUnit(l.unit)).length === 0 &&
                       lines
                         .filter((l) => !isWeighedUnit(l.unit))
                         .every(
@@ -4111,6 +4286,7 @@ export function OrderDetail() {
                               type="button"
                               variant="secondary"
                               icon="knife"
+                              size="lg"
                               onClick={handleStartCutting}
                             >
                               {t("Start cutting")}
@@ -4235,6 +4411,45 @@ export function OrderDetail() {
                 </Card>
               )}
 
+              {/* Finalise — "Print DO/SI", replacing the generic advance
+                  button for this stage. Ported from the prototype's own
+                  `finalise` card (Dev-OrderDetail.jsx:784-798): one optional
+                  number field, one button that both logs the document (if a
+                  number was typed) and releases to dispatch. Reported
+                  directly with a screenshot of the prototype's Admin view —
+                  content ported, not layout (this port's own Card style,
+                  not the prototype's raw `<input>`/`<button>`). */}
+              {stage === "finalise" && canAdvance && (
+                <Card>
+                  <div className={styles.cardContent}>
+                    <input
+                      type="text"
+                      className={styles.editInput}
+                      placeholder={t("DO / SI number (optional)")}
+                      value={finaliseDocNumber}
+                      onChange={(e) => setFinaliseDocNumber(e.target.value)}
+                      disabled={advancing}
+                    />
+                    <div className={styles.cardActions}>
+                      <Button
+                        type="button"
+                        variant="primary"
+                        size="lg"
+                        buttonStyle="fullWidth"
+                        onClick={handleFinaliseAdvance}
+                        disabled={advancing}
+                      >
+                        {advancing
+                          ? t("Saving…")
+                          : t(
+                              "Delivery Order (Surat Jalan) or Sales Invoice (Faktur Penjualan) Printed",
+                            )}
+                      </Button>
+                    </div>
+                  </div>
+                </Card>
+              )}
+
               {/* Hand-off mode chooser — dispatch stage, no mode picked yet */}
               {stage === "dispatch" && canAdvance && !handoffMode && (
                 <Card>
@@ -4244,6 +4459,7 @@ export function OrderDetail() {
                       type="button"
                       variant="primary"
                       icon="navigation"
+                      size="lg"
                       buttonStyle="fullWidth"
                       onClick={handleChooseOwnCourier}
                       disabled={choosingMode}
@@ -4254,6 +4470,7 @@ export function OrderDetail() {
                       type="button"
                       variant="secondary"
                       buttonStyle="fullWidth"
+                      size="lg"
                       onClick={handleChoosePickup}
                       disabled={choosingMode}
                     >
@@ -4263,6 +4480,7 @@ export function OrderDetail() {
                       type="button"
                       variant="secondary"
                       buttonStyle="fullWidth"
+                      size="lg"
                       isActive={showThirdPartyForm}
                       onClick={() => setShowThirdPartyForm((v) => !v)}
                       disabled={choosingMode}
@@ -4658,14 +4876,10 @@ export function OrderDetail() {
                         </div>
                         <div className={styles.codOutcome}>
                           <div className={styles.codSegments}>
-                            <button
+                            <Button
                               type="button"
-                              className={[
-                                styles.codSegment,
-                                codOutcome === "full"
-                                  ? styles.codSegmentSuccess
-                                  : "",
-                              ].join(" ")}
+                              variant="secondary"
+                              isActive={codOutcome === "full"}
                               onClick={() => {
                                 setCodOutcome("full");
                                 setPartialAmountInput("");
@@ -4673,34 +4887,26 @@ export function OrderDetail() {
                               }}
                             >
                               {t("Full")}
-                            </button>
-                            <button
+                            </Button>
+                            <Button
                               type="button"
-                              className={[
-                                styles.codSegment,
-                                codOutcome === "partial"
-                                  ? styles.codSegmentWarning
-                                  : "",
-                              ].join(" ")}
+                              variant="secondary"
+                              isActive={codOutcome === "partial"}
                               onClick={() => setCodOutcome("partial")}
                             >
                               {t("Partial")}
-                            </button>
-                            <button
+                            </Button>
+                            <Button
                               type="button"
-                              className={[
-                                styles.codSegment,
-                                codOutcome === "none"
-                                  ? styles.codSegmentWarning
-                                  : "",
-                              ].join(" ")}
+                              variant="secondary"
+                              isActive={codOutcome === "none"}
                               onClick={() => {
                                 setCodOutcome("none");
                                 setPartialAmountInput("");
                               }}
                             >
                               {t("None")}
-                            </button>
+                            </Button>
                           </div>
                           {codOutcome === "partial" && (
                             <input
@@ -4711,18 +4917,11 @@ export function OrderDetail() {
                               onChange={(e) =>
                                 setPartialAmountInput(e.target.value)
                               }
-                              style={{ width: 180 }}
+                              style={{ width: 240 }}
                             />
                           )}
                           {codOutcome && (
-                            <div
-                              className={[
-                                styles.codOutcomeLine,
-                                codOutcome === "full"
-                                  ? styles.codOutcomeLineSuccess
-                                  : styles.codOutcomeLineWarning,
-                              ].join(" ")}
-                            >
+                            <div className={styles.secondary}>
                               {t("Collected")}{" "}
                               {currency.format(cashCollected ?? 0)} {t("of")}{" "}
                               {currency.format(codAmount)}
@@ -4731,19 +4930,19 @@ export function OrderDetail() {
                           {codOutcome && codOutcome !== "full" && (
                             <div className={styles.codReasonRow}>
                               {OUTSTANDING_REASONS.map((r) => (
-                                <button
+                                <Button
                                   key={r.key}
+                                  variant="secondary"
                                   type="button"
-                                  className={[
-                                    styles.codReasonChip,
-                                    outstandingReason === r.key
-                                      ? styles.codReasonChipActive
-                                      : "",
-                                  ].join(" ")}
+                                  size="sm"
+                                  style={{
+                                    borderRadius: "var(--radius-xl)",
+                                  }}
+                                  isActive={outstandingReason === r.key}
                                   onClick={() => setOutstandingReason(r.key)}
                                 >
                                   {t(r.label)}
-                                </button>
+                                </Button>
                               ))}
                             </div>
                           )}
@@ -4757,7 +4956,7 @@ export function OrderDetail() {
                       <Button
                         type="button"
                         variant="primary"
-                        size="md"
+                        size="lg"
                         buttonStyle="fullWidth"
                         icon="tick"
                         onClick={handleConfirmDelivery}
@@ -4782,7 +4981,7 @@ export function OrderDetail() {
                         <Button
                           type="button"
                           variant="secondary"
-                          size="md"
+                          size="lg"
                           buttonStyle="fullWidth"
                           icon="returned"
                           onClick={openRefuseForm}
@@ -4793,7 +4992,7 @@ export function OrderDetail() {
                         <Button
                           type="button"
                           variant="secondary"
-                          size="md"
+                          size="lg"
                           buttonStyle="fullWidth"
                           icon="cancelled"
                           onClick={handleDeliveryFailed}
@@ -5091,6 +5290,7 @@ export function OrderDetail() {
                         type="button"
                         variant="secondary"
                         buttonStyle="fullWidth"
+                        size="lg"
                         icon={
                           financeMethod === "transfer"
                             ? "paymentSuccess"

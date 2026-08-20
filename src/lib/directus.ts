@@ -634,6 +634,12 @@ export interface CreateOrderHistoryInput {
   what: string;
   who: string | null;
   stage: string | null;
+  /** Explicit timestamp — omit to let Directus default it to `now()`.
+   *  Callers pairing this row with an `orders.undo_snapshot` write MUST
+   *  pass the exact same string used for that snapshot's own `at`, or the
+   *  self-undo visibility check (`lastHistoryEntry.at ===
+   *  order.undo_snapshot.at`) can never match. */
+  at?: string;
 }
 
 /** Append one row to order_history. Never UPDATE or DELETE (architecture.md). */

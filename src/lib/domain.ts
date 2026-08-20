@@ -91,6 +91,16 @@ export const ALLOW: Record<Exclude<Role, 'Owner'>, Partial<Record<Capability, bo
   Admin: {
     createOrders: true,
     editOrderLines: true,
+    // Every other pipeline stage has its own dedicated capability
+    // (weighColdStorage/cutProduction/packWarehouse/dispatch/approveFinance)
+    // — `advanceStage` is only ever consumed by `intake` and `finalise`
+    // (`OrderDetail.tsx`'s `STAGE_FLOW`), both `Admin`-only per the
+    // prototype's `ACTOR` map with no floor-helper carve-out (matches
+    // `helpOtherStages`'s own scope there too — `Dev-OrderDetail.jsx:123`
+    // only ever covers `['cold','production','packing','dispatch']`).
+    // Previously also granted to Warehouse/Production/Courier — let anyone
+    // with that stale grant print the DO/SI and release straight to
+    // dispatch, which is Admin's (and Owner's) job alone. Reported directly.
     advanceStage: true,
     printDocuments: true,
     processReturns: true,
@@ -120,7 +130,6 @@ export const ALLOW: Record<Exclude<Role, 'Owner'>, Partial<Record<Capability, bo
   Warehouse: {
     weighColdStorage: true,
     packWarehouse: true,
-    advanceStage: true,
     // NOT manage_products (see F-10 / the flag_out_of_stock doc comment
     // above) — Settings-Owner.png shows Warehouse unchecked for full
     // create/edit/delete. Warehouse only gets the narrower OOS-flip grant.
@@ -138,7 +147,6 @@ export const ALLOW: Record<Exclude<Role, 'Owner'>, Partial<Record<Capability, bo
   },
   Production: {
     cutProduction: true,
-    advanceStage: true,
     browseProducts: true,
     // Per Settings-Owner.png: Production sees order value (needed to judge
     // what's being cut).
@@ -161,7 +169,6 @@ export const ALLOW: Record<Exclude<Role, 'Owner'>, Partial<Record<Capability, bo
   Courier: {
     dispatch: true,
     uploadDeliveryProof: true,
-    advanceStage: true,
     // Courier needs the delivery contact/address to complete the drop-off —
     // matches the prototype's default (Dev-domain.js ALLOW.Courier.seeCustomerContact).
     seeCustomerContact: true,
