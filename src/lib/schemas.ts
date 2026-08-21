@@ -85,6 +85,10 @@ export const OrdersCollectionSchema = z.object({
   cutting_started: z.boolean().nullable().optional(),
   cutting_started_at: z.string().nullable().optional(),
   cutting_started_by: z.string().nullable().optional(),
+  /** Set when a weighed-unit line is added/changed after Cold Storage and
+   *  the order is sent back to weigh it — the stage to return to once
+   *  re-weighed, so the order doesn't re-run stages it already passed. */
+  reweigh_from: z.string().nullable().optional(),
   pickup: z.boolean().nullable().optional(),
   third_party: z.boolean().nullable().optional(),
   courier_service: z.string().nullable().optional(),

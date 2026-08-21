@@ -474,7 +474,7 @@
   gap: var(--space-xs);
 }
 
-.mapButton {
+.inlineButton {
   padding: 0 !important;
   background: none !important;
   height: auto !important;
@@ -1151,6 +1151,26 @@
   background: var(--bg-surface-hover-dark);
 }
 
+.needsWeighingBanner {
+  border-radius: var(--radius-md);
+  padding: var(--space-sm) var(--space-md);
+  margin-bottom: var(--space-md);
+  border: 1px solid var(--state-warning);
+  background: color-mix(in srgb, var(--state-warning) 10%, var(--bg-surface));
+}
+
+.needsWeighingRow {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+}
+
+.needsWeighingText {
+  font: var(--text-body);
+  color: var(--state-warning);
+  flex: 1;
+}
+
 /* Notes section */
 .noteItem {
   border-radius: var(--radius-md);
@@ -1244,4 +1264,37 @@
   .layoutGridFull {
     grid-template-columns: 1fr !important;
   }
+}
+
+/* On hold card banner */
+.onHoldCard {
+  border: 1.5px solid var(--state-warning, #d97706) !important;
+  background: color-mix(in srgb, var(--state-warning, #f59e0b) 6%, var(--bg-surface)) !important;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-lg);
+}
+
+.onHoldHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  color: var(--state-warning-text, #b45309);
+}
+
+.onHoldIcon {
+  color: var(--state-warning-text, #b45309);
+}
+
+.onHoldTitle {
+  font: var(--text-h4);
+  font-weight: 700;
+  color: var(--state-warning-text, #b45309);
+}
+
+.onHoldText {
+  font: var(--text-body);
+  color: var(--text-secondary);
+  margin: 0;
 }

@@ -1,6 +1,8 @@
 # Memory — OrderDetails Page Enhancement & UI Refinements
 
-Last updated: 2026-07-23T11:33 WIB
+# Memory — OrderDetails Page Enhancement & UI Refinements
+
+Last updated: 2026-08-21T16:40 WIB
 
 ## What was built
 
@@ -30,14 +32,22 @@ Last updated: 2026-07-23T11:33 WIB
 **5. Doc Type Selection Width**
 - `.docSelect` adjusted to a compact `100px` width.
 
+**6. QA Feedback Fixes (2026-08-21)**
+- **Total text at intake**: Rendered `{t("Total:")}` label in item line at intake (new order) stage (`OrderDetail.tsx`).
+- **Replacement subStatusBadge alignment**: Aligned replacement and pending docs subStatusBadge to the right of `td` in `OrderRow.module.css`.
+- **Signed DO/SI not returned badge**: Added `pendingDocs` badge on order rows (`StatusPill.tsx`, `OrderRow.tsx`, `useOrders.ts`, `dashboard.ts`).
+- **On Hold / Resume fix**: Fixed `handleHold` to store pre-hold stage in `cancelled_from` so `handleRestore` resumes to original stage.
+- **On Hold card banner**: Added prominent amber On Hold card banner with "Resume order" button in `OrderDetail.tsx` and `.onHoldCard` styles.
+
 ## Current state
 
-- ✅ TypeScript (`npx tsc --noEmit`) — **0 errors**
-- ✅ Production build (`npm run build`) — **Clean build in 1.10s**
-- ✅ All 6 UI refinement requests from the user are implemented and verified
+- ✅ TypeScript (`npx tsc -b` / `tsc --noEmit`) — **0 errors**
+- ✅ Production build (`npm run build`) — **Clean build in 1.34s**
+- ✅ All order row and on hold UI fixes implemented and verified
 
 ## Next session starts with
 
 Proceed to address function/backend integration items if needed:
-1. Cutting instructions persistence schema (JSON column vs join table)
-2. Weighing photo auto-saving to Directus `attachments`
+1. Audit per-field permissions
+2. Mobile version responsiveness
+

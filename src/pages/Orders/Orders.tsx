@@ -5,7 +5,7 @@ import { Icon } from "../../components/Icon/Icon";
 import { Button } from "../../components/Button/Button";
 import { ChannelSelectModal } from "../../components/ChannelSelectModal/ChannelSelectModal";
 import { IntakeModal } from "../../components/IntakeModal/IntakeModal";
-import { OrderRows } from "../../components/OrderRows/OrderRows";
+import { OrderRow } from "../../components/OrderRow/OrderRow";
 import { SortableTh } from "../../components/SortableTh/SortableTh";
 import { useCan } from "../../hooks/useAuth";
 import { useLanguage } from "../../hooks/useLanguage";
@@ -326,7 +326,7 @@ export function Orders() {
                   </tr>
                 </thead>
                 {displayOrders.map((order: OpenOrder) => (
-                  <OrderRows key={order.id} order={order} />
+                  <OrderRow key={order.id} order={order} />
                 ))}
               </table>
             </div>

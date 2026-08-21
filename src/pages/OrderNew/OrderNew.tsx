@@ -1124,7 +1124,7 @@ export function OrderNew() {
 
                     {/* Price & Qty Row */}
                     <div className={styles.itemPriceRow}>
-                      <span>{t("Total:")}</span>
+                      <span>{t("Total")}</span>
                       <div className={styles.priceCalc}>
                         <input
                           type="number"

@@ -69,6 +69,7 @@ import {
   ACTOR,
   returnBucketsForOrder,
   STAGE_LABELS,
+  PIPELINE_STAGES,
   dispatchSubStatus,
   isOrderLocked,
   type ReturnStage,
@@ -156,29 +157,18 @@ const RETURN_DOC_OPTIONS = [
 
 /* ─────────────────────────────────────── pipeline definition ── */
 
-const PIPELINE_STAGES = [
-  { key: "intake", label: "New Order" },
-  { key: "cold", label: "Cold Storage" },
-  { key: "finance", label: "Finance" },
-  { key: "production", label: "Production" },
-  { key: "packing", label: "Packing" },
-  { key: "finalise", label: "Finalise" },
-  { key: "dispatch", label: "Dispatch" },
-  { key: "delivered", label: "Delivered" },
-];
-
 const STAGE_FLOW: Record<
   string,
   {
     next: string | null;
     prev: string | null;
     capability:
-      | "advanceStage"
-      | "approveFinance"
-      | "weighColdStorage"
-      | "cutProduction"
-      | "packWarehouse"
-      | "dispatch";
+    | "advanceStage"
+    | "approveFinance"
+    | "weighColdStorage"
+    | "cutProduction"
+    | "packWarehouse"
+    | "dispatch";
     advanceLabel: string;
   }
 > = {
@@ -675,8 +665,8 @@ export function OrderDetail() {
   // every field access is optional-chained.
   useDriverLive(
     order?.stage === "dispatch" &&
-      !!order?.taken_by &&
-      order.taken_by === userId,
+    !!order?.taken_by &&
+    order.taken_by === userId,
   );
 
   // Customer exposure for the Finance gate's Terms-timing credit-limit
@@ -768,6 +758,47 @@ export function OrderDetail() {
   const canEdit =
     auth.can("editOrderLines") &&
     (!isOrderLocked(order) || auth.can("editAfterLock"));
+  // Safety net for a weighed-unit line added (or unit-changed) AFTER Cold
+  // Storage — ported from the prototype's `unweighedAdded`/`needsWeighing`
+  // (`Dev-OrderDetail.jsx:137-146`). The port's edit lock doesn't engage
+  // until dispatch (`isOrderLocked`), so an order at finance/production/
+  // packing/finalise/dispatch is still editable — someone can add a kg/
+  // gram/loaf line that then ships and gets invoiced with no weight at all.
+  // A kg/gram line already flagged `short` is legitimately weightless (ran
+  // out of stock) and is excluded, same as the Short-flag work.
+  const pastCold = [
+    "finance",
+    "production",
+    "packing",
+    "finalise",
+    "dispatch",
+  ].includes(stage);
+  const unweighedAdded = lines.filter((l) => {
+    if (l.removed || !isWeighedUnit(l.unit)) return false;
+    const total = (l.id ? (weighingsMap[l.id] ?? []) : []).reduce(
+      (acc, w) => acc + (parseFloat(w.weight) || 0),
+      0,
+    );
+    if (total > 0) return false;
+    if (isWeightOnlyUnit(l.unit) && l.short) return false;
+    return true;
+  });
+  // `isOrderLocked` is used here in place of the prototype's narrower
+  // `hasLeftWarehouse` — within `pastCold`'s own stage set the two are
+  // equivalent (`pastCold` already excludes outstanding/cancelled/returned/
+  // delivered, the only stages where `isOrderLocked` is broader), so no
+  // separate helper is needed.
+  const needsWeighing =
+    pastCold && !isOrderLocked(order) && unweighedAdded.length > 0;
+  // Who can act on the "isn't weighed yet" banner — matches the
+  // prototype's own hardcoded set (`Dev-OrderDetail.jsx:146`), not the
+  // Owner-configurable `sendBackStage` grant alone: Admin/Owner/Warehouse
+  // always can, on top of anyone else explicitly granted `sendBackStage`.
+  const canWeighFix =
+    auth.role === "Admin" ||
+    auth.role === "Owner" ||
+    auth.role === "Warehouse" ||
+    auth.can("sendBackStage");
   // A role can advance a stage it owns (flow.capability) OR — if granted the
   // separate "floor helper" capability — cover cold/production/packing/
   // dispatch SPECIFICALLY, matching the prototype's own `canAct` exactly
@@ -787,7 +818,7 @@ export function OrderDetail() {
   const HELP_OTHER_STAGES = ["cold", "production", "packing", "dispatch"];
   const canAdvance = flow
     ? auth.can(flow.capability) ||
-      (HELP_OTHER_STAGES.includes(stage) && auth.can("helpOtherStages"))
+    (HELP_OTHER_STAGES.includes(stage) && auth.can("helpOtherStages"))
     : false;
   // Previously gated on the generic `sendBackStage` capability alone
   // (Admin-only by default) — the role that actually owns the current
@@ -797,8 +828,8 @@ export function OrderDetail() {
   // cover (`helpOtherStages`), matching `canAdvance`'s own pattern above.
   const canSendBack = flow?.prev
     ? auth.can("sendBackStage") ||
-      auth.can(flow.capability) ||
-      auth.can("helpOtherStages")
+    auth.can(flow.capability) ||
+    auth.can("helpOtherStages")
     : false;
   const canCancel =
     auth.can("cancelOrders") && !isCancelled && !isDelivered && !isReturned;
@@ -809,7 +840,16 @@ export function OrderDetail() {
     !isDelivered &&
     !isReturned;
   const canRestore = (isCancelled || isOutstanding) && auth.can("reopenOrders");
-  const canAddDocs = auth.can("printDocuments");
+  // Sees the Documents section AND its add-form — one gate for both, per the
+  // prototype's own hardcoded `['Admin','Finance','Owner'].includes(role)`
+  // (`Dev-OrderDetail.jsx:1615`, add-form at 1626-1635 with no extra gate of
+  // its own). Distinct from `printDocuments` (Finalise's "Print DO/SI"
+  // stage-advance action, Admin/Owner only) — Finance sees/adds documents
+  // here but doesn't get that action. Previously this whole section had no
+  // gate at all (visible to every role) and the add-form was gated on
+  // `printDocuments`, which excluded Finance. Reported directly.
+  const canSeeDocuments = auth.can("seeDocuments");
+  const canAddDocs = canSeeDocuments;
   const canProcessReturns = auth.can("processReturns");
   const canSeePrices = auth.can("seePrices");
   // History card render — same treatment as the Notifications feed
@@ -819,9 +859,9 @@ export function OrderDetail() {
   const visibleHistory: typeof history = canSeePrices
     ? history
     : history.flatMap((h) => {
-        const redacted = redactHistoryPrices(h.what);
-        return redacted === null ? [] : [{ ...h, what: redacted }];
-      });
+      const redacted = redactHistoryPrices(h.what);
+      return redacted === null ? [] : [{ ...h, what: redacted }];
+    });
   const canSeeCustomerContact = auth.can("seeCustomerContact");
   const canConfirmDocsReturned = auth.can("confirmDocsReturned");
   const canTrackCourier = auth.can("trackCourier");
@@ -1008,8 +1048,8 @@ export function OrderDetail() {
   const dropDistanceM =
     order.deliver_geo && matchedCustomer?.address_geo
       ? Math.round(
-          haversineMeters(order.deliver_geo, matchedCustomer.address_geo),
-        )
+        haversineMeters(order.deliver_geo, matchedCustomer.address_geo),
+      )
       : null;
 
   /* Calculate order total value */
@@ -1306,13 +1346,13 @@ export function OrderDetail() {
       [lineId]: (prev[lineId] ?? []).map((x) =>
         x.id === wId
           ? {
-              ...x,
-              id: weighingId,
-              photos: [
-                ...x.photos,
-                { id: photoRes.data!.id, fileId, url: photoUrl },
-              ],
-            }
+            ...x,
+            id: weighingId,
+            photos: [
+              ...x.photos,
+              { id: photoRes.data!.id, fileId, url: photoUrl },
+            ],
+          }
           : x,
       ),
     }));
@@ -1498,7 +1538,7 @@ export function OrderDetail() {
   }
 
   async function handleAdvance() {
-    if (!id || !flow?.next || advancing) return;
+    if (!id || !order || !flow?.next || advancing) return;
     // Photos already SAVED on a line (a previous visit / reopen) count —
     // only genuinely photo-less, non-held lines block the release. If
     // EVERY line is held (nothing physically left to photograph), the
@@ -1528,19 +1568,51 @@ export function OrderDetail() {
     // Production, mirroring the prototype's `normalTarget = cleared ?
     // 'production' : 'finance'` (Dev-OrderDetail.jsx:715). Every other
     // stage's target is unaffected.
-    const target = stage === "cold" && !financeCleared ? "finance" : flow.next;
+    // A re-weigh detour (`order.reweigh_from` set — see the "isn't weighed
+    // yet" banner below) returns straight to wherever the order came from,
+    // skipping stages it already passed — UNLESS something still needs
+    // cutting and the origin was past Production, in which case it routes
+    // through Production first so the new item's cut isn't skipped.
+    // Ported from the prototype's own release-target logic
+    // (`Dev-OrderDetail.jsx:712-719`).
+    const needsCut = lines.some(
+      (l) =>
+        !l.removed &&
+        (l.id ? (lineCutsByLine[l.id] ?? []) : []).some((c) => !isCutDone(c)),
+    );
+    const originPastProd = order.reweigh_from
+      ? ["packing", "finalise", "dispatch"].includes(order.reweigh_from)
+      : false;
+    const target =
+      stage === "cold"
+        ? order.reweigh_from
+          ? needsCut && originPastProd
+            ? "production"
+            : order.reweigh_from
+          : !financeCleared
+            ? "finance"
+            : flow.next
+        : flow.next;
+    const reachedReweighOrigin =
+      !!order.reweigh_from && target === order.reweigh_from;
     setAdvancing(true);
     const actionAt = new Date().toISOString();
-    const patch = { stage: target };
+    const patch: Record<string, unknown> = { stage: target };
+    if (reachedReweighOrigin) patch.reweigh_from = null;
     const res = await updateOrder(id, {
       ...patch,
       undo_snapshot: snapshotFor(patch, actionAt),
     });
     if (!res.error && res.data) {
       setOrder(res.data);
+      const historyWhat = reachedReweighOrigin
+        ? `Re-weighed — back to ${t(STAGE_LABELS[target as keyof typeof STAGE_LABELS] ?? target)}`
+        : order.reweigh_from
+          ? "Weighed — to Production for the new cut"
+          : `Stage advanced: ${stage} → ${target}`;
       await appendOrderHistory({
         order_id: id,
-        what: `Stage advanced: ${stage} → ${target}`,
+        what: historyWhat,
         who: userId,
         stage: target,
         at: actionAt,
@@ -1595,7 +1667,7 @@ export function OrderDetail() {
    *  final "Cutting done → to packing" handler, `Dev-OrderDetail.jsx:758-764`
    *  — minus the reweigh-detour branch, which this port doesn't have). */
   async function handleCuttingDoneAdvance() {
-    if (!id || !flow?.next || advancing || !allCutsDone) return;
+    if (!id || !order || !flow?.next || advancing || !allCutsDone) return;
     setAdvancing(true);
     const newlyDone = cutTasks.filter((t) => !t.cut.done);
     if (newlyDone.length > 0) {
@@ -1611,7 +1683,14 @@ export function OrderDetail() {
     }
     setCutDoneMap({});
     const actionAt = new Date().toISOString();
-    const cuttingPatch = { stage: flow.next };
+    // A re-weigh detour that routed through Production for the new item's
+    // cut (see `handleAdvance`'s `needsCut && originPastProd` branch)
+    // returns straight to where it came from here, skipping Packing —
+    // ported from the prototype's own `back = order.reweighFrom`
+    // (`Dev-OrderDetail.jsx:760-764`).
+    const target = order.reweigh_from || flow.next;
+    const cuttingPatch: Record<string, unknown> = { stage: target };
+    if (order.reweigh_from) cuttingPatch.reweigh_from = null;
     const res = await updateOrder(id, {
       ...cuttingPatch,
       undo_snapshot: snapshotFor(cuttingPatch, actionAt),
@@ -1620,9 +1699,11 @@ export function OrderDetail() {
       setOrder(res.data);
       await appendOrderHistory({
         order_id: id,
-        what: "Cutting done — back to warehouse to pack",
+        what: order.reweigh_from
+          ? `Cut done — back to ${t(STAGE_LABELS[target as keyof typeof STAGE_LABELS] ?? target)}`
+          : "Cutting done — back to warehouse to pack",
         who: userId,
-        stage: flow.next,
+        stage: target,
         at: actionAt,
       });
       const hRes = await readOrderHistory(id);
@@ -1719,6 +1800,48 @@ export function OrderDetail() {
     setAdvancing(false);
   }
 
+  /** "Send to Cold Storage to weigh" — the fix action on the "isn't weighed
+   *  yet" banner above. Ported from the prototype's `sendToColdToWeigh()`
+   *  (`Dev-OrderDetail.jsx:314`, using its `CUT_RESET`): sends the order
+   *  back to `cold`, remembering where to return to once the new item is
+   *  weighed (`reweigh_from` — preserves an existing value if already
+   *  mid-loop, e.g. bounced back again before making it home) and resetting
+   *  "Start cutting" so a re-entry to Production later isn't stuck showing
+   *  stale "in progress" state. */
+  async function handleSendToColdToWeigh() {
+    if (!id || !order || advancing) return;
+    setAdvancing(true);
+    const actionAt = new Date().toISOString();
+    const patch = {
+      stage: "cold",
+      reweigh_from: order.reweigh_from || stage,
+      cutting_started: false,
+      cutting_started_at: null,
+      cutting_started_by: null,
+    };
+    const res = await updateOrder(id, {
+      ...patch,
+      undo_snapshot: snapshotFor(patch, actionAt),
+    });
+    if (!res.error && res.data) {
+      setOrder(res.data);
+      await appendOrderHistory({
+        order_id: id,
+        what: "Unweighed item — sent back to Cold Storage to weigh",
+        who: userId,
+        stage: "cold",
+        at: actionAt,
+      });
+      const hRes = await readOrderHistory(id);
+      if (!hRes.error) setHistory(hRes.data ?? []);
+    } else {
+      alert(`Failed to send back to Cold Storage: ${res.error}`, {
+        title: t("Couldn't send back"),
+      });
+    }
+    setAdvancing(false);
+  }
+
   async function handleSendBack() {
     if (!id || !flow?.prev || advancing) return;
     // Ported from the prototype's sendBackStage() (Dev-OrderDetail.jsx:360)
@@ -1767,18 +1890,18 @@ export function OrderDetail() {
       stage: flow.prev,
       ...(needsCutReset
         ? {
-            cutting_started: false,
-            cutting_started_at: null,
-            cutting_started_by: null,
-          }
+          cutting_started: false,
+          cutting_started_at: null,
+          cutting_started_by: null,
+        }
         : {}),
       ...(isDispatchReset
         ? {
-            taken_by: null,
-            pickup: false,
-            third_party: false,
-            courier_service: null,
-          }
+          taken_by: null,
+          pickup: false,
+          third_party: false,
+          courier_service: null,
+        }
         : {}),
     };
     // A fresh snapshot for THIS move — supersedes whatever snapshot (if
@@ -2108,15 +2231,15 @@ export function OrderDetail() {
       (orderIsPriced ? orderTotal : null);
     const dueDate =
       financeTiming === "terms" &&
-      matchedCustomer?.term_days &&
-      Number(matchedCustomer.term_days) > 0 &&
-      order.deliver_at
+        matchedCustomer?.term_days &&
+        Number(matchedCustomer.term_days) > 0 &&
+        order.deliver_at
         ? new Date(
-            new Date(order.deliver_at).getTime() +
-              Number(matchedCustomer.term_days) * 86400000,
-          )
-            .toISOString()
-            .slice(0, 10)
+          new Date(order.deliver_at).getTime() +
+          Number(matchedCustomer.term_days) * 86400000,
+        )
+          .toISOString()
+          .slice(0, 10)
         : null;
     const patch: Record<string, unknown> = {
       payment_confirmed: true,
@@ -2265,15 +2388,15 @@ export function OrderDetail() {
       handoffMode === "third"
         ? condPhotos.length > 0
         : condPhotos.length > 0 &&
-          (!proofRequired ||
-            (recvPhotos.length > 0 && signedPhotos.length > 0));
+        (!proofRequired ||
+          (recvPhotos.length > 0 && signedPhotos.length > 0));
     if (!photosOk) {
       alert(
         handoffMode === "third"
           ? t("A handover photo is required before marking handed over.")
           : t(
-              "Condition, receiver, and signed-invoice photos are all required before marking delivered.",
-            ),
+            "Condition, receiver, and signed-invoice photos are all required before marking delivered.",
+          ),
         { title: t("Photo required") },
       );
       return;
@@ -2477,7 +2600,7 @@ export function OrderDetail() {
     if (!id || !order || !order.undo_snapshot || !canUndo) return;
     const targetLabel = t(
       STAGE_LABELS[
-        order.undo_snapshot.prevStage as keyof typeof STAGE_LABELS
+      order.undo_snapshot.prevStage as keyof typeof STAGE_LABELS
       ] ?? order.undo_snapshot.prevStage,
     );
     if (
@@ -2550,11 +2673,8 @@ export function OrderDetail() {
 
   async function handleHold() {
     if (!id) return;
-    // Ported from the prototype's own `advance()` call for Hold — unlike
-    // Cancel (excluded from canSelfUndo's render by its `stage !==
-    // "cancelled"` check), Hold has no such exclusion there, so it gets
-    // the same self-undo as any other stage move.
-    const holdPatch = { stage: "outstanding" };
+    // Save current stage in cancelled_from so handleRestore knows where to return the order
+    const holdPatch = { stage: "outstanding", cancelled_from: stage };
     const actionAt = new Date().toISOString();
     const res = await updateOrder(id, {
       ...holdPatch,
@@ -2564,7 +2684,7 @@ export function OrderDetail() {
       setOrder(res.data);
       await appendOrderHistory({
         order_id: id,
-        what: "Order put on hold (outstanding)",
+        what: `Order put on hold (was at ${stage})`,
         who: userId,
         stage: "outstanding",
         at: actionAt,
@@ -2580,15 +2700,10 @@ export function OrderDetail() {
 
   async function handleRestore() {
     if (!id || !order) return;
-    // Outstanding orders were never cancelled — `cancelled_from` is only
-    // ever set by `handleCancel`, never by the COD-shortfall routing in
-    // `handleConfirmDelivery` — so falling back to `cancelled_from ??
-    // "intake"` for one would silently wipe an already-delivered order back
-    // to square one. An outstanding order needs a genuine redelivery/
-    // re-collection attempt, so it goes back to `dispatch` instead.
-    const restoreStage = isOutstanding
-      ? "dispatch"
-      : (order.cancelled_from ?? "intake");
+    // Outstanding/on-hold orders return to their recorded cancelled_from stage,
+    // falling back to dispatch for legacy rows or intake for cancelled.
+    const restoreStage =
+      order.cancelled_from ?? (isOutstanding ? "dispatch" : "intake");
     // Landing back at dispatch needs the same hand-off reset
     // `handleSendBack`'s reopen path already applies (delivered → dispatch)
     // — otherwise taken_by/pickup/third_party survive and the hand-off
@@ -2606,11 +2721,11 @@ export function OrderDetail() {
       cancelled_from: null,
       ...(isDispatchReset
         ? {
-            taken_by: null,
-            pickup: false,
-            third_party: false,
-            courier_service: null,
-          }
+          taken_by: null,
+          pickup: false,
+          third_party: false,
+          courier_service: null,
+        }
         : {}),
     };
     const actionAt = new Date().toISOString();
@@ -3246,14 +3361,23 @@ export function OrderDetail() {
               </div>
             </div>
             <div className={styles.actions}>
-              <Button
-                type="button"
-                variant="secondary"
-                icon="whatsapp"
-                onClick={copyWA}
-              >
-                {t("Copy WA")}
-              </Button>
+              {/* Ported from the prototype's `can(role, 'createOrders')`
+                  (`Dev-OrderDetail.jsx:1278`) — was unconditionally visible
+                  to every role. `createOrders` defaults to Admin only (+
+                  Owner always), so in practice this is Admin/Owner, but
+                  driven by the capability rather than a hardcoded role
+                  check so an Owner Settings grant to another role also
+                  enables it. */}
+              {auth.can("createOrders") && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  icon="whatsapp"
+                  onClick={copyWA}
+                >
+                  {t("Copy WA")}
+                </Button>
+              )}
               <Button
                 type="button"
                 variant="secondary"
@@ -3359,7 +3483,7 @@ export function OrderDetail() {
                     <Button
                       type="button"
                       variant="tertiary"
-                      className={styles.mapButton}
+                      className={styles.inlineButton}
                       onClick={() =>
                         window.open(
                           `https://www.google.com/maps/search/?api=1&query=${order.deliver_geo!.lat},${order.deliver_geo!.lng}`,
@@ -3447,6 +3571,40 @@ export function OrderDetail() {
             </div>
           )}
 
+          {/* "Isn't weighed yet" safety net — a kg/gram/loaf line added (or
+              unit-changed) after Cold Storage, still in the warehouse.
+              Ported from the prototype's own banner (`Dev-OrderDetail.jsx:1314-1321`). */}
+          {needsWeighing && (
+            <div className={styles.needsWeighingBanner}>
+              <div className={styles.needsWeighingRow}>
+                <Icon
+                  name="scale"
+                  size={16}
+                  style={{ color: "var(--state-warning)", flexShrink: 0 }}
+                />
+                <p className={styles.needsWeighingText}>
+                  <strong>
+                    {unweighedAdded.map((l) => l.name).join(", ")}
+                  </strong>{" "}
+                  — {t("isn't weighed yet (added after Cold Storage).")}
+                </p>
+              </div>
+              {canWeighFix && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  icon="arrowRight"
+                  style={{ marginTop: "var(--space-sm)" }}
+                  onClick={handleSendToColdToWeigh}
+                  disabled={advancing}
+                >
+                  {t("Send to Cold Storage to weigh")}
+                </Button>
+              )}
+            </div>
+          )}
+
           {showActorNotice && (
             <div className={styles.actorNotice}>
               {t("This order is currently with")}{" "}
@@ -3494,10 +3652,10 @@ export function OrderDetail() {
                 <span className={styles.detailValue}>
                   {order.order_date
                     ? new Date(order.order_date).toLocaleDateString("en-US", {
-                        year: "numeric",
-                        month: "long",
-                        day: "numeric",
-                      })
+                      year: "numeric",
+                      month: "long",
+                      day: "numeric",
+                    })
                     : "—"}
                 </span>
               </div>
@@ -3578,7 +3736,7 @@ export function OrderDetail() {
                 // no price and no weight (nothing worth totaling) still
                 // rendered a bare "Total:" with nothing after it.
                 const showLineDetail =
-                  (stage !== "intake" && isWeighedItem) ||
+                  isWeighedItem ||
                   (isWeightOnlyUnit(line.unit) && !!line.short) ||
                   (canSeePrices && hasPrice);
 
@@ -3590,58 +3748,63 @@ export function OrderDetail() {
                         <span className={styles.unitTag}>{line.unit}</span>
                         <span className={styles.itemName}>{line.name}</span>
                       </div>
-                      {/* kg/gram lines never get a Sending box — they're
-                          held back via the Short flag instead, matching the
-                          prototype's own scope exactly (`counted =
-                          !isWeightUnit`, `Dev-OrderDetail.jsx:1364`: the
-                          Sending box only ever renders for counted units,
-                          and Loaf falls into that same "counted" branch for
-                          hold purposes even though it also gets weight
-                          inputs). */}
-                      {!isWeightOnlyUnit(line.unit) && qty >= 1 && (
-                        <div className={styles.sendingBadge}>
-                          {t("sending")}
-                          {canWeighHere ? (
-                            <input
-                              type="number"
-                              className={styles.sendingInput}
-                              value={sendingQty}
-                              min={0}
-                              max={qty}
-                              onChange={(e) => {
-                                // Capped at the ordered qty — sending can
-                                // never exceed what was actually ordered.
-                                const val = Math.min(
-                                  qty,
-                                  Math.max(0, parseInt(e.target.value) || 0),
-                                );
-                                if (line.id)
-                                  setSendingQtyMap((prev) => ({
-                                    ...prev,
-                                    [line.id!]: val,
-                                  }));
-                              }}
-                              onBlur={() =>
-                                line.id && handleSendingBlur(line.id)
-                              }
-                            />
-                          ) : (
-                            // Only the role that owns Cold Storage picking
-                            // decides what's actually being sent — everyone
-                            // else (Finance, etc.) sees the saved figure but
-                            // can't edit it.
-                            <span className={styles.sendingValue}>
-                              {sendingQty}
-                            </span>
-                          )}
-                          {t("of")} {qty}
-                          {sendingQty < qty && (
-                            <span className={styles.toFollowHint}>
-                              · {qty - sendingQty} {t("to follow")}
-                            </span>
-                          )}
-                        </div>
-                      )}
+                      {/* Cold Storage only, and never on kg/gram — matches
+                          the prototype's exact gate (`Dev-OrderDetail.jsx
+                          :1364`: `weighing && counted && remaining(l) >= 1`,
+                          where `weighing = stage==='cold'` and `counted =
+                          !isWeightUnit`). kg/gram lines are held back via
+                          the Short flag instead; Loaf falls into the same
+                          "counted" branch for hold purposes even though it
+                          also gets weight inputs. Previously shown at every
+                          stage past cold too (a deliberate port-specific
+                          extension for "X to follow" visibility) — reverted
+                          to the prototype's own scope per direct request. */}
+                      {stage === "cold" &&
+                        !isWeightOnlyUnit(line.unit) &&
+                        qty >= 1 && (
+                          <div className={styles.sendingBadge}>
+                            {t("sending")}
+                            {canWeighHere ? (
+                              <input
+                                type="number"
+                                className={styles.sendingInput}
+                                value={sendingQty}
+                                min={0}
+                                max={qty}
+                                onChange={(e) => {
+                                  // Capped at the ordered qty — sending can
+                                  // never exceed what was actually ordered.
+                                  const val = Math.min(
+                                    qty,
+                                    Math.max(0, parseInt(e.target.value) || 0),
+                                  );
+                                  if (line.id)
+                                    setSendingQtyMap((prev) => ({
+                                      ...prev,
+                                      [line.id!]: val,
+                                    }));
+                                }}
+                                onBlur={() =>
+                                  line.id && handleSendingBlur(line.id)
+                                }
+                              />
+                            ) : (
+                              // Only the role that owns Cold Storage picking
+                              // decides what's actually being sent — everyone
+                              // else (Finance, etc.) sees the saved figure but
+                              // can't edit it.
+                              <span className={styles.sendingValue}>
+                                {sendingQty}
+                              </span>
+                            )}
+                            {t("of")} {qty}
+                            {sendingQty < qty && (
+                              <span className={styles.toFollowHint}>
+                                · {qty - sendingQty} {t("to follow")}
+                              </span>
+                            )}
+                          </div>
+                        )}
                     </div>
 
                     {/* Weighing Lines for Loaf/kg items — cold storage's job only */}
@@ -3903,15 +4066,15 @@ export function OrderDetail() {
                                   setActiveImageModal(
                                     canWeighHere
                                       ? {
-                                          url: img.url,
-                                          title: `${t("Attachment for")} ${line.name}`,
-                                          photoId: img.id,
-                                          lineId: line.id,
-                                        }
+                                        url: img.url,
+                                        title: `${t("Attachment for")} ${line.name}`,
+                                        photoId: img.id,
+                                        lineId: line.id,
+                                      }
                                       : {
-                                          url: img.url,
-                                          title: `${t("Attachment for")} ${line.name}`,
-                                        },
+                                        url: img.url,
+                                        title: `${t("Attachment for")} ${line.name}`,
+                                      },
                                   )
                                 }
                               >
@@ -3951,7 +4114,7 @@ export function OrderDetail() {
                     {/* Item Summary line — only when there's something to show */}
                     {showLineDetail && (
                       <div className={styles.itemTotalRow}>
-                        {stage !== "intake" && isWeighedItem && (
+                        {isWeighedItem ? (
                           <span
                             className={styles.totalWeight}
                             style={
@@ -3960,20 +4123,25 @@ export function OrderDetail() {
                                 : undefined
                             }
                           >
-                            {t("Total:")}{" "}
-                            {`${totalMeasuredWeight.toFixed(2)} kg`}
-                            {belowWeighHint && (
+                            {t("Total:")}
+                            {stage !== "intake" &&
+                              ` ${totalMeasuredWeight.toFixed(2)} kg`}
+                            {stage !== "intake" && belowWeighHint && (
                               <span className={styles.weighHint}>
                                 {" "}
                                 · {t("below order")} {qty} kg?
                               </span>
                             )}
-                            {aboveWeighHint && (
+                            {stage !== "intake" && aboveWeighHint && (
                               <span className={styles.weighHint}>
                                 {" "}
                                 · {t("over order")} {qty} kg?
                               </span>
                             )}
+                          </span>
+                        ) : (
+                          <span className={styles.totalWeight}>
+                            {t("Total:")}
                           </span>
                         )}
                         {/* Persistent, every role/stage — matches the
@@ -4029,129 +4197,133 @@ export function OrderDetail() {
               ))}
           </Card>
 
-          {/* Documents Section */}
-          <Card>
-            <div className={styles.heading}>
-              {t("Documents")}{" "}
-              <span className={styles.count}>{docEntries.length}</span>
-            </div>
-
-            {docEntries.length === 0 ? (
-              <p className={styles.muted}>{t("No documents logged yet.")}</p>
-            ) : (
-              <div className={styles.docList}>
-                {docEntries.map((doc) => {
-                  const fileId = doc.document_file ?? doc.file_path;
-                  return (
-                    <div key={doc.id} className={styles.docRow}>
-                      <div className={styles.docTop}>
-                        <span className={styles.docType}>
-                          {doc.doc_type} —{" "}
-                        </span>
-                        <span className={styles.docNumber}>
-                          {doc.number ?? "—"}
-                        </span>
-
-                        {fileId && (
-                          <div
-                            className={styles.thumbnailItem}
-                            style={{ width: 36, height: 36 }}
-                            onClick={() =>
-                              setActiveImageModal({
-                                url: directusFileUrl(fileId),
-                                title: `${doc.doc_type} ${doc.number ?? ""}`,
-                                attachmentId: doc.id ?? undefined,
-                              })
-                            }
-                          >
-                            <img
-                              src={directusFileUrl(fileId)}
-                              alt="doc"
-                              className={styles.thumbnailImg}
-                            />
-                          </div>
-                        )}
-
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          icon="trash"
-                          iconOnly
-                          title={t("Delete document")}
-                          onClick={() =>
-                            doc.id != null && handleDeleteDocument(doc.id)
-                          }
-                        ></Button>
-                      </div>
-
-                      {doc.note && (
-                        <div className={styles.docNote}>{doc.note}</div>
-                      )}
-                    </div>
-                  );
-                })}
+          {/* Documents Section — Admin/Finance/Owner only, matching the
+              prototype's own hardcoded role check (see `canSeeDocuments`'s
+              doc comment above). Previously visible to every role. */}
+          {canSeeDocuments && (
+            <Card>
+              <div className={styles.heading}>
+                {t("Documents")}{" "}
+                <span className={styles.count}>{docEntries.length}</span>
               </div>
-            )}
 
-            {canAddDocs && (
-              <form className={styles.docForm} onSubmit={handleAddDocument}>
-                <div className={styles.docFormRow}>
-                  <select
-                    className={styles.editInput}
-                    style={{ maxWidth: "120px" }}
-                    value={docType}
-                    onChange={(e) => setDocType(e.target.value)}
-                  >
-                    {DOC_TYPES.map((docTypeOption) => (
-                      <option key={docTypeOption} value={docTypeOption}>
-                        {docTypeOption}
-                      </option>
-                    ))}
-                  </select>
+              {docEntries.length === 0 ? (
+                <p className={styles.muted}>{t("No documents logged yet.")}</p>
+              ) : (
+                <div className={styles.docList}>
+                  {docEntries.map((doc) => {
+                    const fileId = doc.document_file ?? doc.file_path;
+                    return (
+                      <div key={doc.id} className={styles.docRow}>
+                        <div className={styles.docTop}>
+                          <span className={styles.docType}>
+                            {doc.doc_type} —{" "}
+                          </span>
+                          <span className={styles.docNumber}>
+                            {doc.number ?? "—"}
+                          </span>
+
+                          {fileId && (
+                            <div
+                              className={styles.thumbnailItem}
+                              style={{ width: 36, height: 36 }}
+                              onClick={() =>
+                                setActiveImageModal({
+                                  url: directusFileUrl(fileId),
+                                  title: `${doc.doc_type} ${doc.number ?? ""}`,
+                                  attachmentId: doc.id ?? undefined,
+                                })
+                              }
+                            >
+                              <img
+                                src={directusFileUrl(fileId)}
+                                alt="doc"
+                                className={styles.thumbnailImg}
+                              />
+                            </div>
+                          )}
+
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            icon="trash"
+                            iconOnly
+                            title={t("Delete document")}
+                            onClick={() =>
+                              doc.id != null && handleDeleteDocument(doc.id)
+                            }
+                          ></Button>
+                        </div>
+
+                        {doc.note && (
+                          <div className={styles.docNote}>{doc.note}</div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {canAddDocs && (
+                <form className={styles.docForm} onSubmit={handleAddDocument}>
+                  <div className={styles.docFormRow}>
+                    <select
+                      className={styles.editInput}
+                      style={{ maxWidth: "120px" }}
+                      value={docType}
+                      onChange={(e) => setDocType(e.target.value)}
+                    >
+                      {DOC_TYPES.map((docTypeOption) => (
+                        <option key={docTypeOption} value={docTypeOption}>
+                          {docTypeOption}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="text"
+                      className={styles.editInput}
+                      style={{ flex: 1 }}
+                      placeholder={t("Document number")}
+                      value={docNumber}
+                      onChange={(e) => setDocNumber(e.target.value)}
+                      required
+                    />
+                    <input
+                      ref={docFileInputRef}
+                      type="file"
+                      style={{ display: "none" }}
+                      accept="image/*,application/pdf"
+                      onChange={handleDocFileUpload}
+                    />
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="md"
+                      isActive={!!docFileName}
+                      icon={docFileName ? "paperclip" : "add"}
+                      iconOnly
+                      onClick={() => docFileInputRef.current?.click()}
+                    />
+                    <Button
+                      type="submit"
+                      variant="primary"
+                      disabled={savingDoc || !docNumber.trim()}
+                    >
+                      {savingDoc ? "…" : t("+ Add")}
+                    </Button>
+                  </div>
                   <input
                     type="text"
                     className={styles.editInput}
-                    style={{ flex: 1 }}
-                    placeholder={t("Document number")}
-                    value={docNumber}
-                    onChange={(e) => setDocNumber(e.target.value)}
-                    required
+                    placeholder={t("Put notes here...")}
+                    value={docNote}
+                    onChange={(e) => setDocNote(e.target.value)}
                   />
-                  <input
-                    ref={docFileInputRef}
-                    type="file"
-                    style={{ display: "none" }}
-                    accept="image/*,application/pdf"
-                    onChange={handleDocFileUpload}
-                  />
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="md"
-                    isActive={!!docFileName}
-                    icon={docFileName ? "paperclip" : "add"}
-                    iconOnly
-                    onClick={() => docFileInputRef.current?.click()}
-                  />
-                  <Button
-                    type="submit"
-                    variant="primary"
-                    disabled={savingDoc || !docNumber.trim()}
-                  >
-                    {savingDoc ? "…" : t("+ Add")}
-                  </Button>
-                </div>
-                <input
-                  type="text"
-                  className={styles.editInput}
-                  placeholder={t("Put notes here...")}
-                  value={docNote}
-                  onChange={(e) => setDocNote(e.target.value)}
-                />
-              </form>
-            )}
-          </Card>
+                </form>
+              )}
+            </Card>
+          )}
 
           {/* Stage Action Controls */}
           {!isCancelled && (
@@ -4175,6 +4347,34 @@ export function OrderDetail() {
                   </Button>
                 )}
 
+              {/* On Hold banner card — prominent pause card when order is on hold */}
+              {isOutstanding && (
+                <Card className={styles.onHoldCard}>
+                  <div className={styles.onHoldHeader}>
+                    <Icon name="pause" size={20} className={styles.onHoldIcon} />
+                    <span className={styles.onHoldTitle}>{t("On hold")}</span>
+                  </div>
+                  <p className={styles.onHoldText}>
+                    {t(
+                      "This order is paused — the process cannot continue until it is resumed.",
+                    )}
+                  </p>
+                  {canRestore && (
+                    <Button
+                      type="button"
+                      variant="primary"
+                      buttonStyle="fullWidth"
+                      size="lg"
+                      icon="play"
+                      onClick={handleRestore}
+                    >
+                      {t("Resume order")}
+                    </Button>
+                  )}
+                </Card>
+              )}
+
+
               {/* Cold Storage — "Pull & weigh" card, replacing the generic
                   advance button for this stage. Ported from the prototype's
                   own cold-stage card (Dev-OrderDetail.jsx:685-723), including
@@ -4193,13 +4393,13 @@ export function OrderDetail() {
                       style={
                         financeCleared
                           ? {
-                              border: "1px solid var(--accent-primary)",
-                              backgroundColor: "var(--bg-surface-hover-dark)",
-                            }
+                            border: "1px solid var(--accent-primary)",
+                            backgroundColor: "var(--bg-surface-hover-dark)",
+                          }
                           : {
-                              border: "1px solid var(--border-default)",
-                              backgroundColor: "none",
-                            }
+                            border: "1px solid var(--border-default)",
+                            backgroundColor: "none",
+                          }
                       }
                     >
                       <Icon
@@ -4442,8 +4642,8 @@ export function OrderDetail() {
                         {advancing
                           ? t("Saving…")
                           : t(
-                              "Delivery Order (Surat Jalan) or Sales Invoice (Faktur Penjualan) Printed",
-                            )}
+                            "Delivery Order (Surat Jalan) or Sales Invoice (Faktur Penjualan) Printed",
+                          )}
                       </Button>
                     </div>
                   </div>
@@ -4644,7 +4844,7 @@ export function OrderDetail() {
                           style={{
                             borderColor:
                               recvPhotos.length > 0 &&
-                              receiverName.trim() !== ""
+                                receiverName.trim() !== ""
                                 ? "var(--accent-primary)"
                                 : "var(--border-subtle)",
                           }}
@@ -4656,7 +4856,7 @@ export function OrderDetail() {
                                 size={18}
                                 className={
                                   recvPhotos.length > 0 &&
-                                  receiverName.trim() !== ""
+                                    receiverName.trim() !== ""
                                     ? styles.proofCheckFilled
                                     : styles.proofCheckEmpty
                                 }
@@ -5205,11 +5405,11 @@ export function OrderDetail() {
                           ⚠{" "}
                           {canOverrideCreditLimit
                             ? t(
-                                "Over credit limit — confirm with the owner before clearing.",
-                              )
+                              "Over credit limit — confirm with the owner before clearing.",
+                            )
                             : t(
-                                "Over credit limit — only Finance or the owner can clear this.",
-                              )}
+                              "Over credit limit — only Finance or the owner can clear this.",
+                            )}
                         </p>
                       )}
                     </Card>
@@ -5359,13 +5559,18 @@ export function OrderDetail() {
                     <Icon name="infoCircle" />
                     <p className="tiny muted">{t("Pressed wrongly?")}</p>
                   </div>
-                  <Button type="button" variant="tertiary" onClick={handleUndo}>
+                  <Button
+                    type="button"
+                    variant="tertiary"
+                    className={styles.inlineButton}
+                    onClick={handleUndo}
+                  >
                     <Icon name="undo" size={16} />
                     {t("Undo — back to")}{" "}
                     {t(
                       STAGE_LABELS[
-                        order.undo_snapshot
-                          .prevStage as keyof typeof STAGE_LABELS
+                      order.undo_snapshot
+                        .prevStage as keyof typeof STAGE_LABELS
                       ] ?? order.undo_snapshot.prevStage,
                     )}
                   </Button>
@@ -5653,7 +5858,7 @@ export function OrderDetail() {
                   <strong>
                     {t(
                       PIPELINE_STAGES.find((s) => s.key === stage)?.label ??
-                        stage,
+                      stage,
                     )}
                   </strong>
                   .
@@ -5677,75 +5882,63 @@ export function OrderDetail() {
             canHold ||
             canSendBack ||
             canRestore) && (
-            <div className={styles.orderActions}>
-              <div className={styles.orderActionsRow}>
-                {canReorder && (
+              <div className={styles.orderActions}>
+                <div className={styles.orderActionsRow}>
+                  {canReorder && (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      buttonStyle="fullWidth"
+                      size="lg"
+                      icon="reload"
+                      onClick={handleReorder}
+                      disabled={reordering}
+                    >
+                      {reordering ? t("Creating…") : t("Reorder")}
+                    </Button>
+                  )}
+                  {canHold && (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      buttonStyle="fullWidth"
+                      size="lg"
+                      icon="pause"
+                      onClick={handleHold}
+                    >
+                      {t("Put on Hold")}
+                    </Button>
+                  )}
+                </div>
+                <div className={styles.orderActionsRow}>
+                  {canSendBack && (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      buttonStyle="fullWidth"
+                      size="lg"
+                      icon="backward"
+                      onClick={handleSendBack}
+                      disabled={advancing}
+                    >
+                      {sendBackLabel()}
+                    </Button>
+                  )}
+                </div>
+                {canCancel && (
                   <Button
                     type="button"
                     variant="secondary"
-                    buttonStyle="fullWidth"
                     size="lg"
-                    icon="reload"
-                    onClick={handleReorder}
-                    disabled={reordering}
+                    icon="close"
+                    onClick={handleCancel}
+                    disabled={cancelling}
                   >
-                    {reordering ? t("Creating…") : t("Reorder")}
-                  </Button>
-                )}
-                {canHold && (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    buttonStyle="fullWidth"
-                    size="lg"
-                    icon="pause"
-                    onClick={handleHold}
-                  >
-                    {t("Put on Hold")}
+                    {cancelling ? t("Cancelling…") : t("Cancel Order")}
                   </Button>
                 )}
               </div>
-              <div className={styles.orderActionsRow}>
-                {canSendBack && (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    buttonStyle="fullWidth"
-                    size="lg"
-                    icon="backward"
-                    onClick={handleSendBack}
-                    disabled={advancing}
-                  >
-                    {sendBackLabel()}
-                  </Button>
-                )}
-                {canRestore && (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    buttonStyle="fullWidth"
-                    size="lg"
-                    icon="refresh"
-                    onClick={handleRestore}
-                  >
-                    {t("Restore Order")}
-                  </Button>
-                )}
-              </div>
-              {canCancel && (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="lg"
-                  icon="close"
-                  onClick={handleCancel}
-                  disabled={cancelling}
-                >
-                  {cancelling ? t("Cancelling…") : t("Cancel Order")}
-                </Button>
-              )}
-            </div>
-          )}
+            )}
         </div>
 
         {/* ── Collapsible Side Panel (Notes & History) ── */}
@@ -5774,7 +5967,7 @@ export function OrderDetail() {
               <h3 className={styles.heading}>{t("Notes")}</h3>
               <div className={styles.notesListScroll}>
                 {history.filter((h) => h.what.startsWith("Note")).length ===
-                0 ? (
+                  0 ? (
                   <p className={styles.muted}>{t("No note")}</p>
                 ) : (
                   history
@@ -5861,37 +6054,37 @@ export function OrderDetail() {
         onDelete={
           activeImageModal?.lineId && activeImageModal?.photoId
             ? () => {
-                handleRemoveItemPhoto(
-                  activeImageModal.lineId!,
-                  activeImageModal.photoId!,
+              handleRemoveItemPhoto(
+                activeImageModal.lineId!,
+                activeImageModal.photoId!,
+              );
+              setActiveImageModal(null);
+            }
+            : activeImageModal?.weighingLineId &&
+              activeImageModal?.weighingId &&
+              activeImageModal?.weighingPhotoId
+              ? () => {
+                handleRemoveWeighingPhoto(
+                  activeImageModal.weighingLineId!,
+                  activeImageModal.weighingId!,
+                  activeImageModal.weighingPhotoId!,
                 );
                 setActiveImageModal(null);
               }
-            : activeImageModal?.weighingLineId &&
-                activeImageModal?.weighingId &&
-                activeImageModal?.weighingPhotoId
-              ? () => {
-                  handleRemoveWeighingPhoto(
-                    activeImageModal.weighingLineId!,
-                    activeImageModal.weighingId!,
-                    activeImageModal.weighingPhotoId!,
-                  );
-                  setActiveImageModal(null);
-                }
               : activeImageModal?.attachmentId
                 ? () => {
-                    handleDeleteDocument(activeImageModal.attachmentId!);
+                  handleDeleteDocument(activeImageModal.attachmentId!);
+                  setActiveImageModal(null);
+                }
+                : activeImageModal?.stagedProofSlot &&
+                  activeImageModal?.stagedProofIndex !== undefined
+                  ? () => {
+                    handleRemoveStagedProofPhoto(
+                      activeImageModal.stagedProofSlot!,
+                      activeImageModal.stagedProofIndex!,
+                    );
                     setActiveImageModal(null);
                   }
-                : activeImageModal?.stagedProofSlot &&
-                    activeImageModal?.stagedProofIndex !== undefined
-                  ? () => {
-                      handleRemoveStagedProofPhoto(
-                        activeImageModal.stagedProofSlot!,
-                        activeImageModal.stagedProofIndex!,
-                      );
-                      setActiveImageModal(null);
-                    }
                   : undefined
         }
       />

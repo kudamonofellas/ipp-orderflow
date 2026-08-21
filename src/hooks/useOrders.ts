@@ -107,13 +107,15 @@ function toOpenOrder(
     pickup?: boolean | null;
     third_party?: boolean | null;
     is_replacement?: boolean | null;
+    docs_returned?: boolean | null;
   },
   linesByOrderId: Map<string, OpenOrderLine[]>,
 ): OpenOrder {
+  const currentStage = row.stage ?? row.status ?? "Draft";
   return {
     id: row.id,
     no: row.no ?? "—",
-    status: row.stage ?? row.status ?? "Draft",
+    status: currentStage,
     orderDate: formatDate(row.order_date ?? row.created_at),
     deliveryDate: formatDate(row.delivery_date),
     salesRep: row.sales_rep ?? "—",
@@ -123,6 +125,7 @@ function toOpenOrder(
     pickup: row.pickup === true,
     thirdParty: row.third_party === true,
     isReplacement: row.is_replacement === true,
+    pendingDocs: currentStage === "delivered" && row.docs_returned !== true,
   };
 }
 
@@ -280,6 +283,7 @@ export function useOrders(
         "pickup",
         "third_party",
         "is_replacement",
+        "docs_returned",
         ...(seeCustomerContact ? ["sales_rep"] : []),
       ];
       const lineFields = [

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Button } from "../../../components/Button/Button";
 import { Card } from "../../../components/Card/Card";
-import { OrderRows } from "../../../components/OrderRows/OrderRows";
+import { OrderRow } from "../../../components/OrderRow/OrderRow";
 import { SortableTh } from "../../../components/SortableTh/SortableTh";
 import { useLanguage } from "../../../hooks/useLanguage";
 import type { OpenOrder } from "../../../types/dashboard";
@@ -90,7 +90,7 @@ export function OpenOrdersPanel({
                 </tr>
               </thead>
               {displayOrders.map((order) => (
-                <OrderRows key={order.id} order={order} />
+                <OrderRow key={order.id} order={order} />
               ))}
             </table>
           </div>

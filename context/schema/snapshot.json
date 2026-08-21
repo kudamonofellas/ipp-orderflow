@@ -695,9 +695,7 @@
         "readonly": false,
         "required": false,
         "sort": 4,
-        "special": [
-          "uuid"
-        ],
+        "special": null,
         "translations": null,
         "validation": null,
         "validation_message": null,
@@ -865,9 +863,7 @@
         "readonly": false,
         "required": false,
         "sort": 9,
-        "special": [
-          "uuid"
-        ],
+        "special": null,
         "translations": null,
         "validation": null,
         "validation_message": null,
@@ -2829,9 +2825,7 @@
         "readonly": false,
         "required": false,
         "sort": null,
-        "special": [
-          "uuid"
-        ],
+        "special": null,
         "translations": null,
         "validation": null,
         "validation_message": null,
@@ -2873,9 +2867,7 @@
         "readonly": false,
         "required": false,
         "sort": null,
-        "special": [
-          "uuid"
-        ],
+        "special": null,
         "translations": null,
         "validation": null,
         "validation_message": null,
@@ -2917,9 +2909,7 @@
         "readonly": false,
         "required": false,
         "sort": null,
-        "special": [
-          "uuid"
-        ],
+        "special": null,
         "translations": null,
         "validation": null,
         "validation_message": null,
@@ -2961,9 +2951,7 @@
         "readonly": false,
         "required": false,
         "sort": null,
-        "special": [
-          "uuid"
-        ],
+        "special": null,
         "translations": null,
         "validation": null,
         "validation_message": null,
@@ -3263,9 +3251,7 @@
         "readonly": false,
         "required": false,
         "sort": null,
-        "special": [
-          "uuid"
-        ],
+        "special": null,
         "translations": null,
         "validation": null,
         "validation_message": null,
@@ -3393,9 +3379,7 @@
         "readonly": false,
         "required": false,
         "sort": null,
-        "special": [
-          "uuid"
-        ],
+        "special": null,
         "translations": null,
         "validation": null,
         "validation_message": null,
@@ -3523,9 +3507,7 @@
         "readonly": false,
         "required": false,
         "sort": null,
-        "special": [
-          "uuid"
-        ],
+        "special": null,
         "translations": null,
         "validation": null,
         "validation_message": null,
@@ -3739,9 +3721,7 @@
         "readonly": false,
         "required": false,
         "sort": null,
-        "special": [
-          "uuid"
-        ],
+        "special": null,
         "translations": null,
         "validation": null,
         "validation_message": null,
@@ -3783,9 +3763,7 @@
         "readonly": false,
         "required": false,
         "sort": null,
-        "special": [
-          "uuid"
-        ],
+        "special": null,
         "translations": null,
         "validation": null,
         "validation_message": null,
@@ -3913,9 +3891,7 @@
         "readonly": false,
         "required": false,
         "sort": null,
-        "special": [
-          "uuid"
-        ],
+        "special": null,
         "translations": null,
         "validation": null,
         "validation_message": null,
@@ -3957,9 +3933,7 @@
         "readonly": false,
         "required": false,
         "sort": null,
-        "special": [
-          "uuid"
-        ],
+        "special": null,
         "translations": null,
         "validation": null,
         "validation_message": null,
@@ -4677,9 +4651,7 @@
         "readonly": false,
         "required": false,
         "sort": 7,
-        "special": [
-          "uuid"
-        ],
+        "special": null,
         "translations": null,
         "validation": null,
         "validation_message": null,
@@ -8365,6 +8337,48 @@
         "has_auto_increment": false,
         "foreign_key_table": "directus_users",
         "foreign_key_column": "id"
+      }
+    },
+    {
+      "collection": "orders",
+      "field": "reweigh_from",
+      "type": "text",
+      "meta": {
+        "collection": "orders",
+        "conditions": null,
+        "display": null,
+        "display_options": null,
+        "field": "reweigh_from",
+        "group": null,
+        "hidden": false,
+        "interface": "input",
+        "note": "Stage to return to after re-weighing a line added post-Cold-Storage.",
+        "options": null,
+        "readonly": false,
+        "required": false,
+        "sort": 57,
+        "special": null,
+        "translations": null,
+        "validation": null,
+        "validation_message": null,
+        "width": "full"
+      },
+      "schema": {
+        "name": "reweigh_from",
+        "table": "orders",
+        "data_type": "text",
+        "default_value": null,
+        "max_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null,
+        "is_nullable": true,
+        "is_unique": false,
+        "is_primary_key": false,
+        "is_generated": false,
+        "generation_expression": null,
+        "has_auto_increment": false,
+        "foreign_key_table": null,
+        "foreign_key_column": null
       }
     },
     {

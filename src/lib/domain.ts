@@ -34,6 +34,16 @@ export type Capability =
   | 'cutProduction'
   | 'packWarehouse'
   | 'printDocuments'
+  // Broader than `printDocuments` (which gates the Finalise "Print DO/SI"
+  // stage-advance action, Admin/Owner only) — this gates the Documents
+  // section itself (both seeing it and adding to it) on `OrderDetail.tsx`.
+  // Ported from the prototype's own hardcoded `['Admin','Finance',
+  // 'Owner'].includes(role)` (`Dev-OrderDetail.jsx:1615`) — DO/SI numbers
+  // are accounting/paperwork, not floor work, so Warehouse/Production/
+  // Courier don't see it at all; Finance sees AND adds (no narrower gate
+  // for the add-form — the prototype's add-form sits inside the same
+  // Admin/Finance/Owner block with nothing extra).
+  | 'seeDocuments'
   | 'dispatch'
   | 'uploadDeliveryProof'
   | 'processReturns'
@@ -103,6 +113,7 @@ export const ALLOW: Record<Exclude<Role, 'Owner'>, Partial<Record<Capability, bo
     // dispatch, which is Admin's (and Owner's) job alone. Reported directly.
     advanceStage: true,
     printDocuments: true,
+    seeDocuments: true,
     processReturns: true,
     manage_products: true,
     flag_out_of_stock: true,
@@ -155,6 +166,7 @@ export const ALLOW: Record<Exclude<Role, 'Owner'>, Partial<Record<Capability, bo
   },
   Finance: {
     approveFinance: true,
+    seeDocuments: true,
     seePrices: true,
     seeCustomerContact: true,
     reconcileCOD: true,
@@ -191,6 +203,7 @@ export const CAPABILITIES: Capability[] = [
   'cutProduction',
   'packWarehouse',
   'printDocuments',
+  'seeDocuments',
   'dispatch',
   'uploadDeliveryProof',
   'processReturns',
@@ -247,6 +260,7 @@ export const PERMISSION_GRID: { section: string; rows: { cap: Capability; label:
       { cap: 'createOrders', label: 'Create orders' },
       { cap: 'editOrderLines', label: 'Edit orders (own stage, pre-cut)' },
       { cap: 'editAfterLock', label: 'Edit after cutting / dispatch (override)' },
+      { cap: 'seeDocuments', label: 'See & add Documents (DO/SI, PO)' },
     ],
   },
   {

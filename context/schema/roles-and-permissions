@@ -55,7 +55,7 @@ Weighs orders, attaches photos, manages packing. Does **not** create orders or t
 
 | Collection | Create | Read | Update | Delete | Notes |
 |---|:---:|:---:|:---:|:---:|---|
-| `orders` | ❌ | ✅ | ✅ (fields only) | ❌ | Reads all; can update only: `stage`, `cutting_started`, `cutting_started_at`, `cutting_started_by`, `pickup`, `undo_snapshot` (2026-08-19 — `undo_snapshot` was missing, so the new generic self-undo write on every stage advance/send-back 403'd the whole request for Warehouse) |
+| `orders` | ❌ | ✅ | ✅ (fields only) | ❌ | Reads all; can update only: `stage`, `cutting_started`, `cutting_started_at`, `cutting_started_by`, `pickup`, `undo_snapshot` (2026-08-19 — `undo_snapshot` was missing, so the new generic self-undo write on every stage advance/send-back 403'd the whole request for Warehouse), `reweigh_from` (2026-08-21 — new field, the "isn't weighed yet" re-weigh detour; Warehouse both sets it via "Send to Cold Storage to weigh" and clears it on release) |
 | `order_lines` | ✅ | ✅ | ✅ | ✅ | Full CRUD — adds/edits weighings, marks delivered/returned. Update grant includes `sent` (the "sending" qty, 2026-08-18) and `short` (the "ran out of stock" flag — field/ACL were already live before 2026-08-19 but unused by the app until the Short-flag feature that day) |
 | `line_weighings` | ✅ | ✅ | ✅ | ✅ | Full CRUD — their core job |
 | `line_photos` | ✅ | ✅ | ✅ | ✅ | Full CRUD — weigh photo proofs |
@@ -85,7 +85,7 @@ Creates cut instructions, marks cutting progress.
 
 | Collection | Create | Read | Update | Delete | Notes |
 |---|:---:|:---:|:---:|:---:|---|
-| `orders` | ❌ | ✅ | ✅ (field only) | ❌ | Reads all; can update only: `cutting_started`, `stage`, `cutting_started_at`, `cutting_started_by`, `undo_snapshot` (2026-08-19 — `stage` was missing entirely, so Production could never actually advance production→packing despite owning `cutProduction`; every stage-advance write was rejected outright. `undo_snapshot` added same day for the same reason as Warehouse's.) |
+| `orders` | ❌ | ✅ | ✅ (field only) | ❌ | Reads all; can update only: `cutting_started`, `stage`, `cutting_started_at`, `cutting_started_by`, `undo_snapshot` (2026-08-19 — `stage` was missing entirely, so Production could never actually advance production→packing despite owning `cutProduction`; every stage-advance write was rejected outright. `undo_snapshot` added same day for the same reason as Warehouse's.), `reweigh_from` (2026-08-21 — new field; Production reads it to route a re-weigh detour's cutting-done straight back to origin, and clears it once reached) |
 | `order_lines` | ❌ | ✅ | ❌ | ❌ | Read-only — sees what to cut |
 | `line_cuts` | ✅ | ✅ | ✅ | ✅ | Full CRUD — their core job |
 | `order_history` | ✅ | ✅ | ❌ | ❌ | Append-only — logs cutting actions |

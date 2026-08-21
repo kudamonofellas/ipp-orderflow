@@ -6,7 +6,7 @@ import { useCan } from "../../hooks/useAuth";
 import { useLanguage } from "../../hooks/useLanguage";
 import { dispatchSubLabel } from "../../lib/pipeline";
 import type { OpenOrder } from "../../types/dashboard";
-import styles from "./OrderRows.module.css";
+import styles from "./OrderRow.module.css";
 
 const currency = new Intl.NumberFormat("id-ID", {
   minimumFractionDigits: 0,
@@ -16,10 +16,10 @@ const currency = new Intl.NumberFormat("id-ID", {
  * One expandable order row (+ line items) for an 8-column orders table:
  * arrow, Order ID, Stage, Order Date, Delivery Date, Sales Rep, Customer, Items.
  * Shared by the Orders page and the Dashboard's Open Orders panel — both
- * render `<table>{orders.map(o => <OrderRows key={o.id} order={o} />)}</table>`
+ * render `<table>{orders.map(o => <OrderRow key={o.id} order={o} />)}</table>`
  * with no wrapping `<tbody>` of their own, since each row owns its `<tbody>`.
  */
-export function OrderRows({ order }: { order: OpenOrder }) {
+export function OrderRow({ order }: { order: OpenOrder }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [expanded, setExpanded] = useState(false);
@@ -68,11 +68,12 @@ export function OrderRows({ order }: { order: OpenOrder }) {
           )}
         </td>
         <td className={styles.orderId}>{order.no}</td>
-        <td>
+        <td className={styles.statusCell}>
           <StatusPill
             status={order.status}
             subLabel={subLabel}
             isReplacement={order.isReplacement}
+            pendingDocs={order.pendingDocs}
           />
         </td>
         <td>{order.orderDate}</td>

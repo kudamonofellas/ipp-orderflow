@@ -78,6 +78,8 @@ export interface OpenOrder {
   /** Drives the `StatusPill`'s "Replacement" badge — see `RETURN_BUCKET_ACTOR`'s
    *  doc comment in lib/pipeline.ts for why this isn't a pill colour. */
   isReplacement: boolean;
+  /** True when delivered but signed DO/SI is not returned yet */
+  pendingDocs?: boolean;
 }
 
 /** A notification entry, grouped by date. */

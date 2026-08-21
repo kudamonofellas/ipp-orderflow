@@ -97,3 +97,21 @@
 .lineQty {
   color: var(--text-muted);
 }
+
+/* Status cell — stretches the StatusPill so its own internal Replacement
+   badge (rendered by StatusPill itself) lands at the right edge of the
+   cell, not just adjacent to the pill. Targets StatusPill's root `.wrap`
+   span generically (`> span:first-child`) rather than reaching into its
+   CSS module, so this stays local to this one table instead of changing
+   `.wrap`'s default (shrink-to-fit) behavior everywhere else StatusPill
+   is used. */
+.statusCell {
+  vertical-align: middle;
+}
+
+.statusCell > span:first-child {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
