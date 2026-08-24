@@ -80,6 +80,8 @@ export interface OpenOrder {
   isReplacement: boolean;
   /** True when delivered but signed DO/SI is not returned yet */
   pendingDocs?: boolean;
+  /** True when the order is put on hold */
+  hold?: boolean;
 }
 
 /** A notification entry, grouped by date. */

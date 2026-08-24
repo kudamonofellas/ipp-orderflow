@@ -751,6 +751,7 @@ export function OrderDetail() {
   const isOutstanding = stage === "outstanding";
   const isDelivered = stage === "delivered";
   const isReturned = stage === "returned";
+  const isHold = order.hold === true;
 
   // Locked once delivered, dispatched-and-taken, or in a terminal off-pipeline
   // stage (outstanding/cancelled/returned) — `editAfterLock` (Owner by
@@ -1141,6 +1142,7 @@ export function OrderDetail() {
   const showFinanceUndoRow =
     financeCleared &&
     canApproveFinance &&
+    !isHold &&
     ["cold", "finance", "production", "packing", "finalise"].includes(stage);
   // Ported from the prototype's `orderPriced` (`Dev-domain.js`): true the
   // moment ANY line has a real (positive) price — was previously `.every()`
@@ -2671,10 +2673,10 @@ export function OrderDetail() {
     setCancelling(false);
   }
 
-  async function handleHold() {
-    if (!id) return;
-    // Save current stage in cancelled_from so handleRestore knows where to return the order
-    const holdPatch = { stage: "outstanding", cancelled_from: stage };
+  async function handleToggleHold() {
+    if (!id || !order) return;
+    const nextHold = !isHold;
+    const holdPatch = { hold: nextHold };
     const actionAt = new Date().toISOString();
     const res = await updateOrder(id, {
       ...holdPatch,
@@ -2684,24 +2686,24 @@ export function OrderDetail() {
       setOrder(res.data);
       await appendOrderHistory({
         order_id: id,
-        what: `Order put on hold (was at ${stage})`,
+        what: nextHold ? "Put on hold" : "Resumed (off hold)",
         who: userId,
-        stage: "outstanding",
+        stage: stage,
         at: actionAt,
       });
       const hRes = await readOrderHistory(id);
       if (!hRes.error) setHistory(hRes.data ?? []);
     } else {
-      alert(`Failed to hold order: ${res.error}`, {
-        title: t("Couldn't hold order"),
+      alert(`Failed to update hold status: ${res.error}`, {
+        title: t("Couldn't update order"),
       });
     }
   }
 
   async function handleRestore() {
     if (!id || !order) return;
-    // Outstanding/on-hold orders return to their recorded cancelled_from stage,
-    // falling back to dispatch for legacy rows or intake for cancelled.
+    // Outstanding or cancelled orders return to their recorded cancelled_from stage,
+    // falling back to dispatch for outstanding or intake for cancelled.
     const restoreStage =
       order.cancelled_from ?? (isOutstanding ? "dispatch" : "intake");
     // Landing back at dispatch needs the same hand-off reset
@@ -4328,27 +4330,7 @@ export function OrderDetail() {
           {/* Stage Action Controls */}
           {!isCancelled && (
             <div className={styles.stageActions}>
-              {flow?.next &&
-                canAdvance &&
-                stage !== "dispatch" &&
-                stage !== "production" &&
-                stage !== "packing" &&
-                stage !== "cold" &&
-                stage !== "finalise" && (
-                  <Button
-                    type="button"
-                    variant="primary"
-                    size="lg"
-                    onClick={handleAdvance}
-                    disabled={advancing}
-                    className={styles.actionBtn}
-                  >
-                    {advancing ? t("Saving…") : t(flow.advanceLabel)}
-                  </Button>
-                )}
-
-              {/* On Hold banner card — prominent pause card when order is on hold */}
-              {isOutstanding && (
+              {isHold ? (
                 <Card className={styles.onHoldCard}>
                   <div className={styles.onHoldHeader}>
                     <Icon name="pause" size={20} className={styles.onHoldIcon} />
@@ -4359,20 +4341,43 @@ export function OrderDetail() {
                       "This order is paused — the process cannot continue until it is resumed.",
                     )}
                   </p>
-                  {canRestore && (
+                  {canHold ? (
                     <Button
                       type="button"
                       variant="primary"
                       buttonStyle="fullWidth"
                       size="lg"
                       icon="play"
-                      onClick={handleRestore}
+                      onClick={handleToggleHold}
                     >
                       {t("Resume order")}
                     </Button>
+                  ) : (
+                    <p className="tiny muted">
+                      {t("An admin or owner must resume it to continue.")}
+                    </p>
                   )}
                 </Card>
-              )}
+              ) : (
+                <>
+                  {flow?.next &&
+                    canAdvance &&
+                    stage !== "dispatch" &&
+                    stage !== "production" &&
+                    stage !== "packing" &&
+                    stage !== "cold" &&
+                    stage !== "finalise" && (
+                      <Button
+                        type="button"
+                        variant="primary"
+                        size="lg"
+                        onClick={handleAdvance}
+                        disabled={advancing}
+                        className={styles.actionBtn}
+                      >
+                        {advancing ? t("Saving…") : t(flow.advanceLabel)}
+                      </Button>
+                    )}
 
 
               {/* Cold Storage — "Pull & weigh" card, replacing the generic
@@ -5672,8 +5677,10 @@ export function OrderDetail() {
                   </div>
                 </Card>
               )}
-            </div>
+            </>
           )}
+        </div>
+      )}
 
           {/* Returns Sub-Flow — parallel buckets (receive / settle / sign) */}
           {isReturned && !isCancelled && (
@@ -5903,10 +5910,10 @@ export function OrderDetail() {
                       variant="secondary"
                       buttonStyle="fullWidth"
                       size="lg"
-                      icon="pause"
-                      onClick={handleHold}
+                      icon={isHold ? "play" : "pause"}
+                      onClick={handleToggleHold}
                     >
-                      {t("Put on Hold")}
+                      {isHold ? t("Resume order") : t("Put on Hold")}
                     </Button>
                   )}
                 </div>
@@ -5922,6 +5929,18 @@ export function OrderDetail() {
                       disabled={advancing}
                     >
                       {sendBackLabel()}
+                    </Button>
+                  )}
+                  {canRestore && (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      buttonStyle="fullWidth"
+                      size="lg"
+                      icon="refresh"
+                      onClick={handleRestore}
+                    >
+                      {t("Restore Order")}
                     </Button>
                   )}
                 </div>

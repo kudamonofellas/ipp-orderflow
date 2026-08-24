@@ -82,6 +82,7 @@ export const OrdersCollectionSchema = z.object({
   notes: z.string().nullable().optional(),
   cancelled: z.boolean().nullable().optional(),
   cancelled_from: z.string().nullable().optional(),
+  hold: z.boolean().nullable().optional(),
   cutting_started: z.boolean().nullable().optional(),
   cutting_started_at: z.string().nullable().optional(),
   cutting_started_by: z.string().nullable().optional(),

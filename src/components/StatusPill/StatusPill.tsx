@@ -76,7 +76,7 @@ export function StatusPill({
       )}
       {pendingDocs && (
         <span
-          className={`${styles.subStatusBadge} ${styles.warningBadge}`}
+          className={styles.subStatusBadge}
           title={t("Signed DO/SI not returned yet")}
         >
           <Icon name="document" size={11} />

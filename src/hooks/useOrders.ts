@@ -108,6 +108,7 @@ function toOpenOrder(
     third_party?: boolean | null;
     is_replacement?: boolean | null;
     docs_returned?: boolean | null;
+    hold?: boolean | null;
   },
   linesByOrderId: Map<string, OpenOrderLine[]>,
 ): OpenOrder {
@@ -126,6 +127,7 @@ function toOpenOrder(
     thirdParty: row.third_party === true,
     isReplacement: row.is_replacement === true,
     pendingDocs: currentStage === "delivered" && row.docs_returned !== true,
+    hold: row.hold === true,
   };
 }
 
@@ -284,6 +286,7 @@ export function useOrders(
         "third_party",
         "is_replacement",
         "docs_returned",
+        "hold",
         ...(seeCustomerContact ? ["sales_rep"] : []),
       ];
       const lineFields = [
