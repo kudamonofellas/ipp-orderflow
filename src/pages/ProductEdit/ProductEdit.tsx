@@ -216,38 +216,39 @@ export function ProductEdit() {
       <div className={styles.mainColumn}>
         {/* ── Sticky Header ── */}
         <header className={styles.header}>
-          <div className={styles.titleSection}>
+          <div className={styles.topActionsRow}>
             <Button type="button" variant="tertiary" icon="chevronLeft" onClick={handleCancel}>
               {t('Back to product')}
             </Button>
-            <div className={styles.titleRow}>
-              <h2 className={styles.title}>{t('Edit Product')}</h2>
-            </div>
-          </div>
-          <div className={styles.actions}>
-            {canManage && (
+            <div className={styles.actions}>
+              {canManage && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  icon="trash"
+                  onClick={handleDelete}
+                  disabled={saving || deleting}
+                >
+                  {deleting ? t('Deleting…') : t('Delete')}
+                </Button>
+              )}
+              <Button type="button" variant="secondary" onClick={handleCancel} disabled={saving}>
+                {t('Cancel')}
+              </Button>
               <Button
                 type="button"
-                variant="secondary"
-                icon="trash"
-                onClick={handleDelete}
-                disabled={saving || deleting}
+                variant="primary"
+                icon="save"
+                disabled={!canSave}
+                onClick={handleSave}
               >
-                {deleting ? t('Deleting…') : t('Delete')}
+                {saving ? t('Saving…') : t('Save Changes')}
               </Button>
-            )}
-            <Button type="button" variant="secondary" onClick={handleCancel} disabled={saving}>
-              {t('Cancel')}
-            </Button>
-            <Button
-              type="button"
-              variant="primary"
-              icon="save"
-              disabled={!canSave}
-              onClick={handleSave}
-            >
-              {saving ? t('Saving…') : t('Save Changes')}
-            </Button>
+            </div>
+          </div>
+
+          <div className={styles.titleRow}>
+            <h2 className={styles.title}>{t('Edit Product')}</h2>
           </div>
         </header>
 

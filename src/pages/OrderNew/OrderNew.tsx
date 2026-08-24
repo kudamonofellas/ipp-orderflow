@@ -612,7 +612,7 @@ export function OrderNew() {
       >
         <div className={styles.mainColumn}>
           <header className={styles.header}>
-            <div className={styles.titleSection}>
+            <div className={styles.topActionsRow}>
               <Button
                 type="button"
                 variant="tertiary"
@@ -621,32 +621,35 @@ export function OrderNew() {
               >
                 {t("Back")}
               </Button>
-              <h3 className={styles.title}>{t("New Order")}</h3>
+              <div className={styles.actions}>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={cancel}
+                  disabled={submitting}
+                >
+                  <Icon name="close" size={16} /> {t("Cancel")}
+                </Button>
+                <Button
+                  type="submit"
+                  form="new-order-form"
+                  variant="primary"
+                  icon="save"
+                  disabled={
+                    submitting ||
+                    !allowed ||
+                    loadingOpts ||
+                    (!!dupOrder && !replaceId)
+                  }
+                >
+                  {" "}
+                  {submitting ? t("Creating…") : t("Create order")}
+                </Button>
+              </div>
             </div>
-            <div className={styles.actions}>
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={cancel}
-                disabled={submitting}
-              >
-                <Icon name="close" size={16} /> {t("Cancel")}
-              </Button>
-              <Button
-                type="submit"
-                form="new-order-form"
-                variant="primary"
-                icon="save"
-                disabled={
-                  submitting ||
-                  !allowed ||
-                  loadingOpts ||
-                  (!!dupOrder && !replaceId)
-                }
-              >
-                {" "}
-                {submitting ? t("Creating…") : t("Create order")}
-              </Button>
+
+            <div className={styles.titleRow}>
+              <h3 className={styles.title}>{t("New Order")}</h3>
             </div>
           </header>
 

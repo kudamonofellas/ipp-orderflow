@@ -5,6 +5,12 @@
 > Token source of truth: `context/ui-context.md` + `context/ui-tokens.md`.
 > CSS implementation: `src/styles/tokens.css`.
 
+## Update — 2026-08-24 Flag-gated card independent of stage, ungated persistent-record card
+
+- **A card gated on a boolean order flag (`order.return_inbound`), not on `stage`**, for a parallel workflow that can be true at any pipeline stage — unlike this file's usual stage-switch cards, `OrderDetail.tsx`'s new "Incoming Return" card renders purely off `order.return_inbound`, so it still shows on a replacement order sitting at `cold` while its original return is still in transit. Reach for this whenever a card represents a state that runs *alongside* the current stage rather than *at* it (same family as the existing Finance-parallel-queue card at Cold Storage).
+- **Ungated read-only "persistent record" card next to a capability-gated Documents section**: the new "Return settlement" card has no role/capability check at all (any role sees it, matching the Documents section's *absence* of a gate before 2026-08-14's fix) — reach for a fully ungated card specifically when the content is a closed-record fact relevant to whoever's handling the order next (a settlement document reference), as opposed to an editable/sensitive log like Documents, which should stay capability-gated.
+- **New action state reuses an existing map/handler instead of adding a parallel one**: the Incoming Return card's weight input reuses the existing `receiveQtyMap` state and `handleUploadReceiveWeighPhoto` handler already built for the "Awaiting Return" bucket, rather than introducing `verifyWeight`/`verifyPhoto` twins — safe here because a line is never in both buckets (`returned`-pending and `inbound_return`-pending) at once. Reach for this whenever two UI cards edit the same shape of per-line data at mutually-exclusive times.
+
 ## Update — 2026-08-14 (2) Sortable `<th>` replaces the dropdown-sort button
 
 - **New `SortableTh` component** (`src/components/SortableTh/`) — a `<th>` that sorts on click/Enter/Space (ascending first, descending on a second click) with a hover state, replacing the old pattern of a separate `Button` + dropdown listing sort options next to the table heading. Reach for this for any paginated, server-sortable table — it now drives all 4 of this app's sortable tables (Dashboard Open Orders, Orders, Customers, Products), each just passing its own `sortKey`/`activeSort`/`onSort`.

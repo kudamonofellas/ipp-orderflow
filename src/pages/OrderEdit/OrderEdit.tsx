@@ -535,7 +535,7 @@ export function OrderEdit() {
       <div className={styles.layoutGrid}>
         <div className={styles.mainColumn}>
           <header className={styles.header}>
-            <div className={styles.titleSection}>
+            <div className={styles.topActionsRow}>
               <Button
                 type="button"
                 variant="tertiary"
@@ -544,28 +544,31 @@ export function OrderEdit() {
               >
                 {t("Back to order")}
               </Button>
+              <div className={styles.actions}>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={handleCancel}
+                  disabled={submitting}
+                >
+                  {t("Cancel")}
+                </Button>
+                <Button
+                  type="button"
+                  variant="primary"
+                  disabled={!hasEditChanges || submitting || !canEdit}
+                  icon="save"
+                  onClick={handleSaveAllEdits}
+                >
+                  {submitting ? t("Saving…") : t("Save Changes")}
+                </Button>
+              </div>
+            </div>
+
+            <div className={styles.titleRow}>
               <h2 className={styles.title}>
                 {t("Order")} {order.no}
               </h2>
-            </div>
-            <div className={styles.actions}>
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={handleCancel}
-                disabled={submitting}
-              >
-                {t("Cancel")}
-              </Button>
-              <Button
-                type="button"
-                variant="primary"
-                disabled={!hasEditChanges || submitting || !canEdit}
-                icon="save"
-                onClick={handleSaveAllEdits}
-              >
-                {submitting ? t("Saving…") : t("Save Changes")}
-              </Button>
             </div>
           </header>
 

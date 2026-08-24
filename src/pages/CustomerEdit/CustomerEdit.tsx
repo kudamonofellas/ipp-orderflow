@@ -192,7 +192,7 @@ export function CustomerEdit() {
       <div className={styles.mainColumn}>
         {/* ── Sticky Header ── */}
         <header className={styles.header}>
-          <div className={styles.titleSection}>
+          <div className={styles.topActionsRow}>
             <Button
               type="button"
               variant="tertiary"
@@ -201,28 +201,28 @@ export function CustomerEdit() {
             >
               {t("Back to customer")}
             </Button>
-            <div className={styles.titleRow}>
-              <h2 className={styles.title}>{t("Edit Customer")}</h2>
+            <div className={styles.actions}>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={handleCancel}
+                disabled={saving}
+              >
+                {t("Cancel")}
+              </Button>
+              <Button
+                type="button"
+                variant="primary"
+                icon="save"
+                disabled={!canSave}
+                onClick={handleSave}
+              >
+                {saving ? t("Saving…") : t("Save Changes")}
+              </Button>
             </div>
           </div>
-          <div className={styles.actions}>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={handleCancel}
-              disabled={saving}
-            >
-              {t("Cancel")}
-            </Button>
-            <Button
-              type="button"
-              variant="primary"
-              icon="save"
-              disabled={!canSave}
-              onClick={handleSave}
-            >
-              {saving ? t("Saving…") : t("Save Changes")}
-            </Button>
+          <div className={styles.titleRow}>
+            <h2 className={styles.title}>{t("Edit Customer")}</h2>
           </div>
         </header>
 

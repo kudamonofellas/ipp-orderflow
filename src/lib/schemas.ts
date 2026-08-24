@@ -209,6 +209,9 @@ export const OrderLinesCollectionSchema = z.object({
   weigh_photo: z.string().nullable().optional(),
   returned_weigh_photo: z.string().nullable().optional(),
   sort_order: numeric,
+  // Snapshot of `returned` taken when a replacement is settled before the
+  // goods physically come back — see OrderDetail.tsx's Incoming Return card.
+  inbound_return: numeric,
 });
 
 /** Directus `order_history` collection row (append-only). */

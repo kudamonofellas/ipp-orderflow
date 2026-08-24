@@ -57,6 +57,7 @@
   --text-primary: #1a1d1f;
   --text-secondary: #7c7c7c;
   --text-muted: #9ca3af;
+  --text-state-warning: #df8d00;
 
   --accent-primary: #0c4458;
   --accent-primary-light: #2291b9;
@@ -88,7 +89,7 @@
      from the terminal-state colours below (delivered/returned/cancelled
      aren't roles). See lib/pipeline.ts's statusColor(). */
   --role-admin: #3b82f6;
-  --role-warehouse: #10b981;
+  --role-warehouse: #24d49a;
   --role-finance: #8b5cf6;
   --role-production: #20a7e6;
   --role-courier: #4eb8c0;
@@ -139,6 +140,7 @@
   --text-primary: #f5f6fa;
   --text-secondary: #9ca3af;
   --text-muted: #6c757d;
+  --text-state-warning: #ffca6f;
 
   --accent-primary: #57b3cd;
   --accent-primary-dark: #1e4d5c;
@@ -168,7 +170,7 @@
   /* Role colours, lightened ~15-20% for dark backgrounds — same distinctness
      requirement as the light-theme block above. */
   --role-admin: #81b5f5;
-  --role-warehouse: #34d399;
+  --role-warehouse: #4be9af;
   --role-finance: #a789ff;
   --role-production: #41bdf7;
   --role-courier: #7adae0;
@@ -186,6 +188,7 @@
 
 /* ===== Reduced motion ===== */
 @media (prefers-reduced-motion: reduce) {
+
   *,
   *::before,
   *::after {

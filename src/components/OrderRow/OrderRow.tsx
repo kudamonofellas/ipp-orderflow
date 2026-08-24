@@ -74,6 +74,7 @@ export function OrderRow({ order }: { order: OpenOrder }) {
             subLabel={subLabel}
             isReplacement={order.isReplacement}
             pendingDocs={order.pendingDocs}
+            isHold={order.hold}
           />
         </td>
         <td>{order.orderDate}</td>

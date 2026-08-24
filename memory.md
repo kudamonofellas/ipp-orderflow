@@ -36,7 +36,7 @@ Last updated: 2026-08-21T16:40 WIB
 - **Total text at intake**: Rendered `{t("Total:")}` label in item line at intake (new order) stage (`OrderDetail.tsx`).
 - **Replacement subStatusBadge alignment**: Aligned replacement and pending docs subStatusBadge to the right of `td` in `OrderRow.module.css`.
 - **Signed DO/SI not returned badge**: Added `pendingDocs` badge on order rows (`StatusPill.tsx`, `OrderRow.tsx`, `useOrders.ts`, `dashboard.ts`).
-- **Prototype On Hold Model**: Reverted hold behavior to match the prototype's boolean `hold` model (`hold: true/false` flag on `orders` without mutating `stage` to `outstanding`). Freezes stage actions and shows the "On hold" banner card while preserving the real pipeline stage.
+- **Prototype On Hold Model**: Reverted hold behavior to match the prototype's boolean `hold` model (`hold: true/false` flag on `orders` without mutating `stage` to `outstanding`). Freezes stage actions and renders the prominent amber **"On hold"** card banner at the very top replacing the stepper (matching `stage === "delivered"` banner placement), while preserving the real pipeline stage. Fixed hold/resume toggle to not write an `undo_snapshot` or trigger stage-undo banners. Positioned `subStatusBadges` (`On hold`, `Replacement`, `Signed DO/SI not returned yet`) in a neat row directly underneath the main `StatusPill` within the Stage column, with a unified 64px row height across all order table rows.
 
 ## Current state
 

@@ -135,7 +135,7 @@ export function ProductDetail() {
   return (
     <div className={styles.container}>
       <header className={styles.header}>
-        <div className={styles.titleSection}>
+        <div className={styles.topActionsRow}>
           <Button
             type="button"
             variant="tertiary"
@@ -144,6 +144,30 @@ export function ProductDetail() {
           >
             {t("Back")}
           </Button>
+          {canManage && (
+            <div className={styles.actions}>
+              <Button
+                type="button"
+                variant="secondary"
+                icon="trash"
+                onClick={handleDelete}
+                disabled={deleting}
+              >
+                {deleting ? t("Deleting…") : t("Delete")}
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                icon="edit"
+                onClick={() => navigate(`/products/${id}/edit`)}
+              >
+                {t("Edit")}
+              </Button>
+            </div>
+          )}
+        </div>
+
+        <div className={styles.titleRow}>
           <div className={styles.headingRow}>
             <h2 className={styles.title}>{name}</h2>
 
@@ -171,27 +195,6 @@ export function ProductDetail() {
             </span>
           </div>
         </div>
-        {canManage && (
-          <div className={styles.actions}>
-            <Button
-              type="button"
-              variant="secondary"
-              icon="trash"
-              onClick={handleDelete}
-              disabled={deleting}
-            >
-              {deleting ? t("Deleting…") : t("Delete")}
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              icon="edit"
-              onClick={() => navigate(`/products/${id}/edit`)}
-            >
-              {t("Edit")}
-            </Button>
-          </div>
-        )}
       </header>
 
       <Card>

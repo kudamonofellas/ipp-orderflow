@@ -101,6 +101,11 @@
   color: var(--accent-primary);
 }
 
+.ghost.active {
+  background: var(--bg-surface-hover-dark);
+  color: var(--accent-primary);
+}
+
 .fullWidth,
 .full-width {
   width: 100%;

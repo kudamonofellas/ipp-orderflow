@@ -21,8 +21,59 @@ interface StatusPillProps {
   isReplacement?: boolean;
   /** When true, renders a small "Signed DO/SI not returned yet" badge */
   pendingDocs?: boolean;
+  /** When true, renders a small "On hold" badge with pause icon */
+  isHold?: boolean;
   /** Optional extra CSS class name */
   className?: string;
+}
+
+export interface SubStatusBadgesProps {
+  isReplacement?: boolean;
+  pendingDocs?: boolean;
+  isHold?: boolean;
+  className?: string;
+}
+
+export function SubStatusBadges({
+  isReplacement,
+  pendingDocs,
+  isHold,
+  className,
+}: SubStatusBadgesProps) {
+  const { t } = useLanguage();
+
+  if (!isReplacement && !pendingDocs && !isHold) {
+    return null;
+  }
+
+  return (
+    <span className={[styles.subStatusWrap, className].filter(Boolean).join(" ")}>
+      {isReplacement && (
+        <span className={styles.subStatusBadge} title={t("Replacement")}>
+          <Icon name="reload" size={11} />
+          {t("Replacement")}
+        </span>
+      )}
+      {pendingDocs && (
+        <span
+          className={styles.subStatusBadge}
+          title={t("Signed DO/SI not returned yet")}
+        >
+          <Icon name="document" size={11} />
+          {t("Signed DO/SI not returned yet")}
+        </span>
+      )}
+      {isHold && (
+        <span
+          className={styles.subStatusBadge}
+          title={t("On hold")}
+        >
+          <Icon name="pause" size={11} />
+          {t("On hold")}
+        </span>
+      )}
+    </span>
+  );
 }
 
 /** Helper to format fallback status labels (e.g., "unknown_stage" -> "Unknown Stage") */
@@ -37,6 +88,7 @@ export function StatusPill({
   subLabel,
   isReplacement,
   pendingDocs,
+  isHold,
   className,
 }: StatusPillProps) {
   const { t } = useLanguage();
@@ -60,29 +112,17 @@ export function StatusPill({
       <span
         className={classes}
         style={{
-          backgroundColor: `color-mix(in srgb, ${color} 13%, transparent)`,
           color,
-          borderColor: `color-mix(in srgb, ${color} 33%, transparent)`,
         }}
       >
         <span className={styles.dot} style={{ backgroundColor: color }} />
         <span className={styles.label}>{t(displayLabel)}</span>
       </span>
-      {isReplacement && (
-        <span className={styles.subStatusBadge} title={t("Replacement")}>
-          <Icon name="reload" size={11} />
-          {t("Replacement")}
-        </span>
-      )}
-      {pendingDocs && (
-        <span
-          className={styles.subStatusBadge}
-          title={t("Signed DO/SI not returned yet")}
-        >
-          <Icon name="document" size={11} />
-          {t("Signed DO/SI not returned yet")}
-        </span>
-      )}
+      <SubStatusBadges
+        isReplacement={isReplacement}
+        pendingDocs={pendingDocs}
+        isHold={isHold}
+      />
     </span>
   );
 }

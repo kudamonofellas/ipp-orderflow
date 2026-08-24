@@ -83,27 +83,28 @@ export function ProductNew() {
       <div className={styles.mainColumn}>
         {/* ── Sticky Header ── */}
         <header className={styles.header}>
-          <div className={styles.titleSection}>
+          <div className={styles.topActionsRow}>
             <Button type="button" variant="tertiary" icon="chevronLeft" onClick={handleCancel}>
               {t('Back to products')}
             </Button>
-            <div className={styles.titleRow}>
-              <h2 className={styles.title}>{t('New Product')}</h2>
+            <div className={styles.actions}>
+              <Button type="button" variant="secondary" onClick={handleCancel} disabled={saving}>
+                {t('Cancel')}
+              </Button>
+              <Button
+                type="button"
+                variant="primary"
+                icon="save"
+                disabled={!canSave}
+                onClick={handleSave}
+              >
+                {saving ? t('Creating…') : t('Create Product')}
+              </Button>
             </div>
           </div>
-          <div className={styles.actions}>
-            <Button type="button" variant="secondary" onClick={handleCancel} disabled={saving}>
-              {t('Cancel')}
-            </Button>
-            <Button
-              type="button"
-              variant="primary"
-              icon="save"
-              disabled={!canSave}
-              onClick={handleSave}
-            >
-              {saving ? t('Creating…') : t('Create Product')}
-            </Button>
+
+          <div className={styles.titleRow}>
+            <h2 className={styles.title}>{t('New Product')}</h2>
           </div>
         </header>
 

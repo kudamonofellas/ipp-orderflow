@@ -101,7 +101,7 @@ export function CustomerNew() {
       <div className={styles.mainColumn}>
         {/* ── Sticky Header ── */}
         <header className={styles.header}>
-          <div className={styles.titleSection}>
+          <div className={styles.topActionsRow}>
             <Button
               type="button"
               variant="tertiary"
@@ -110,28 +110,28 @@ export function CustomerNew() {
             >
               {t("Back to customers")}
             </Button>
-            <div className={styles.titleRow}>
-              <h2 className={styles.title}>{t("New Customer")}</h2>
+            <div className={styles.actions}>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={handleCancel}
+                disabled={saving}
+              >
+                {t("Cancel")}
+              </Button>
+              <Button
+                type="button"
+                variant="primary"
+                icon="save"
+                disabled={!canSave}
+                onClick={handleSave}
+              >
+                {saving ? t("Creating…") : t("Create Customer")}
+              </Button>
             </div>
           </div>
-          <div className={styles.actions}>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={handleCancel}
-              disabled={saving}
-            >
-              {t("Cancel")}
-            </Button>
-            <Button
-              type="button"
-              variant="primary"
-              icon="save"
-              disabled={!canSave}
-              onClick={handleSave}
-            >
-              {saving ? t("Creating…") : t("Create Customer")}
-            </Button>
+          <div className={styles.titleRow}>
+            <h2 className={styles.title}>{t("New Customer")}</h2>
           </div>
         </header>
 

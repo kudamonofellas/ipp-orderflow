@@ -6024,6 +6024,48 @@
       }
     },
     {
+      "collection": "order_lines",
+      "field": "inbound_return",
+      "type": "decimal",
+      "meta": {
+        "collection": "order_lines",
+        "conditions": null,
+        "display": null,
+        "display_options": null,
+        "field": "inbound_return",
+        "group": null,
+        "hidden": false,
+        "interface": "input",
+        "note": "Snapshot of the returned qty/weight still physically in transit when a replacement is settled before the goods are received back — cleared once the warehouse confirms receipt (see the Incoming Return card).",
+        "options": null,
+        "readonly": false,
+        "required": false,
+        "sort": 18,
+        "special": null,
+        "translations": null,
+        "validation": null,
+        "validation_message": null,
+        "width": "full"
+      },
+      "schema": {
+        "name": "inbound_return",
+        "table": "order_lines",
+        "data_type": "numeric",
+        "default_value": null,
+        "max_length": null,
+        "numeric_precision": 12,
+        "numeric_scale": 3,
+        "is_nullable": true,
+        "is_unique": false,
+        "is_primary_key": false,
+        "is_generated": false,
+        "generation_expression": null,
+        "has_auto_increment": false,
+        "foreign_key_table": null,
+        "foreign_key_column": null
+      }
+    },
+    {
       "collection": "orders",
       "field": "id",
       "type": "uuid",

@@ -5,9 +5,14 @@
 .orderGroup td {
   font: var(--text-body);
   color: var(--text-primary);
-  padding: var(--space-md);
+  padding: 0 var(--space-md);
   border-top: 1px solid var(--border-subtle);
   transition: background-color var(--duration-fast) var(--ease-default);
+}
+
+.orderRow td {
+  height: 64px;
+  vertical-align: middle;
 }
 
 .orderGroup:hover td {
@@ -38,6 +43,8 @@
 
 .linesRow td {
   border-top: none;
+  height: auto;
+  padding: 0 var(--space-lg) var(--space-xl);
 }
 
 .clickable {
@@ -106,12 +113,6 @@
    `.wrap`'s default (shrink-to-fit) behavior everywhere else StatusPill
    is used. */
 .statusCell {
-  vertical-align: middle;
-}
-
-.statusCell > span:first-child {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  width: 100%;
 }

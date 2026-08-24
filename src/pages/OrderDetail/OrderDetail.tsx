@@ -163,12 +163,12 @@ const STAGE_FLOW: Record<
     next: string | null;
     prev: string | null;
     capability:
-    | "advanceStage"
-    | "approveFinance"
-    | "weighColdStorage"
-    | "cutProduction"
-    | "packWarehouse"
-    | "dispatch";
+      | "advanceStage"
+      | "approveFinance"
+      | "weighColdStorage"
+      | "cutProduction"
+      | "packWarehouse"
+      | "dispatch";
     advanceLabel: string;
   }
 > = {
@@ -414,6 +414,8 @@ export function OrderDetail() {
   const [confirmingSettle, setConfirmingSettle] = useState(false);
   const [signedDocFileId, setSignedDocFileId] = useState<string | null>(null);
   const [closingSigned, setClosingSigned] = useState(false);
+  const [confirmingInbound, setConfirmingInbound] = useState(false);
+  const [undoingInbound, setUndoingInbound] = useState(false);
 
   /* ── hand-off mode chooser (dispatch stage) ── */
   const [choosingMode, setChoosingMode] = useState(false);
@@ -665,8 +667,8 @@ export function OrderDetail() {
   // every field access is optional-chained.
   useDriverLive(
     order?.stage === "dispatch" &&
-    !!order?.taken_by &&
-    order.taken_by === userId,
+      !!order?.taken_by &&
+      order.taken_by === userId,
   );
 
   // Customer exposure for the Finance gate's Terms-timing credit-limit
@@ -819,7 +821,7 @@ export function OrderDetail() {
   const HELP_OTHER_STAGES = ["cold", "production", "packing", "dispatch"];
   const canAdvance = flow
     ? auth.can(flow.capability) ||
-    (HELP_OTHER_STAGES.includes(stage) && auth.can("helpOtherStages"))
+      (HELP_OTHER_STAGES.includes(stage) && auth.can("helpOtherStages"))
     : false;
   // Previously gated on the generic `sendBackStage` capability alone
   // (Admin-only by default) — the role that actually owns the current
@@ -829,8 +831,8 @@ export function OrderDetail() {
   // cover (`helpOtherStages`), matching `canAdvance`'s own pattern above.
   const canSendBack = flow?.prev
     ? auth.can("sendBackStage") ||
-    auth.can(flow.capability) ||
-    auth.can("helpOtherStages")
+      auth.can(flow.capability) ||
+      auth.can("helpOtherStages")
     : false;
   const canCancel =
     auth.can("cancelOrders") && !isCancelled && !isDelivered && !isReturned;
@@ -860,9 +862,9 @@ export function OrderDetail() {
   const visibleHistory: typeof history = canSeePrices
     ? history
     : history.flatMap((h) => {
-      const redacted = redactHistoryPrices(h.what);
-      return redacted === null ? [] : [{ ...h, what: redacted }];
-    });
+        const redacted = redactHistoryPrices(h.what);
+        return redacted === null ? [] : [{ ...h, what: redacted }];
+      });
   const canSeeCustomerContact = auth.can("seeCustomerContact");
   const canConfirmDocsReturned = auth.can("confirmDocsReturned");
   const canTrackCourier = auth.can("trackCourier");
@@ -989,7 +991,8 @@ export function OrderDetail() {
     (userId === order.undo_snapshot.who || auth.role === "Owner") &&
     !!lastHistoryEntry &&
     lastHistoryEntry.at === order.undo_snapshot.at &&
-    stage !== "cancelled";
+    stage !== "cancelled" &&
+    !isHold;
   // Finance has a parallel job at cold/finance (the Finance gate card) even
   // though they can't advance the *stage* itself — ported from the
   // prototype's `canAct`, which explicitly includes Finance at
@@ -1049,8 +1052,8 @@ export function OrderDetail() {
   const dropDistanceM =
     order.deliver_geo && matchedCustomer?.address_geo
       ? Math.round(
-        haversineMeters(order.deliver_geo, matchedCustomer.address_geo),
-      )
+          haversineMeters(order.deliver_geo, matchedCustomer.address_geo),
+        )
       : null;
 
   /* Calculate order total value */
@@ -1348,13 +1351,13 @@ export function OrderDetail() {
       [lineId]: (prev[lineId] ?? []).map((x) =>
         x.id === wId
           ? {
-            ...x,
-            id: weighingId,
-            photos: [
-              ...x.photos,
-              { id: photoRes.data!.id, fileId, url: photoUrl },
-            ],
-          }
+              ...x,
+              id: weighingId,
+              photos: [
+                ...x.photos,
+                { id: photoRes.data!.id, fileId, url: photoUrl },
+              ],
+            }
           : x,
       ),
     }));
@@ -1892,18 +1895,18 @@ export function OrderDetail() {
       stage: flow.prev,
       ...(needsCutReset
         ? {
-          cutting_started: false,
-          cutting_started_at: null,
-          cutting_started_by: null,
-        }
+            cutting_started: false,
+            cutting_started_at: null,
+            cutting_started_by: null,
+          }
         : {}),
       ...(isDispatchReset
         ? {
-          taken_by: null,
-          pickup: false,
-          third_party: false,
-          courier_service: null,
-        }
+            taken_by: null,
+            pickup: false,
+            third_party: false,
+            courier_service: null,
+          }
         : {}),
     };
     // A fresh snapshot for THIS move — supersedes whatever snapshot (if
@@ -2233,15 +2236,15 @@ export function OrderDetail() {
       (orderIsPriced ? orderTotal : null);
     const dueDate =
       financeTiming === "terms" &&
-        matchedCustomer?.term_days &&
-        Number(matchedCustomer.term_days) > 0 &&
-        order.deliver_at
+      matchedCustomer?.term_days &&
+      Number(matchedCustomer.term_days) > 0 &&
+      order.deliver_at
         ? new Date(
-          new Date(order.deliver_at).getTime() +
-          Number(matchedCustomer.term_days) * 86400000,
-        )
-          .toISOString()
-          .slice(0, 10)
+            new Date(order.deliver_at).getTime() +
+              Number(matchedCustomer.term_days) * 86400000,
+          )
+            .toISOString()
+            .slice(0, 10)
         : null;
     const patch: Record<string, unknown> = {
       payment_confirmed: true,
@@ -2390,15 +2393,15 @@ export function OrderDetail() {
       handoffMode === "third"
         ? condPhotos.length > 0
         : condPhotos.length > 0 &&
-        (!proofRequired ||
-          (recvPhotos.length > 0 && signedPhotos.length > 0));
+          (!proofRequired ||
+            (recvPhotos.length > 0 && signedPhotos.length > 0));
     if (!photosOk) {
       alert(
         handoffMode === "third"
           ? t("A handover photo is required before marking handed over.")
           : t(
-            "Condition, receiver, and signed-invoice photos are all required before marking delivered.",
-          ),
+              "Condition, receiver, and signed-invoice photos are all required before marking delivered.",
+            ),
         { title: t("Photo required") },
       );
       return;
@@ -2602,7 +2605,7 @@ export function OrderDetail() {
     if (!id || !order || !order.undo_snapshot || !canUndo) return;
     const targetLabel = t(
       STAGE_LABELS[
-      order.undo_snapshot.prevStage as keyof typeof STAGE_LABELS
+        order.undo_snapshot.prevStage as keyof typeof STAGE_LABELS
       ] ?? order.undo_snapshot.prevStage,
     );
     if (
@@ -2678,10 +2681,7 @@ export function OrderDetail() {
     const nextHold = !isHold;
     const holdPatch = { hold: nextHold };
     const actionAt = new Date().toISOString();
-    const res = await updateOrder(id, {
-      ...holdPatch,
-      undo_snapshot: snapshotFor(holdPatch, actionAt),
-    });
+    const res = await updateOrder(id, holdPatch);
     if (!res.error && res.data) {
       setOrder(res.data);
       await appendOrderHistory({
@@ -2723,11 +2723,11 @@ export function OrderDetail() {
       cancelled_from: null,
       ...(isDispatchReset
         ? {
-          taken_by: null,
-          pickup: false,
-          third_party: false,
-          courier_service: null,
-        }
+            taken_by: null,
+            pickup: false,
+            third_party: false,
+            courier_service: null,
+          }
         : {}),
     };
     const actionAt = new Date().toISOString();
@@ -3061,6 +3061,105 @@ export function OrderDetail() {
     setConfirmingReceive(false);
   }
 
+  /** INBOUND RETURN — the replacement was ordered before the goods came back;
+   *  the warehouse receives + weighs them here, in parallel, whatever stage
+   *  the replacement is now at. Verified weight moves from `inbound_return`
+   *  (the snapshot taken at settle time) into `returned` — the same field
+   *  the read-only Return Settlement card and the normal receive flow both
+   *  read — so the record looks identical regardless of which path produced
+   *  it. Ported from the prototype's `receiveInbound` (Dev-OrderDetail.jsx:465-475). */
+  async function handleReceiveInbound() {
+    if (!id || confirmingInbound) return;
+    setConfirmingInbound(true);
+    const inboundLines = lines.filter((l) => Number(l.inbound_return) > 0);
+    for (const l of inboundLines) {
+      const verifiedRaw = receiveQtyMap[l.id];
+      const verified =
+        verifiedRaw != null ? parseFloat(verifiedRaw) || 0 : Number(l.inbound_return);
+      const res = await updateOrderLine(l.id, {
+        returned: verified,
+        inbound_return: null,
+      });
+      if (res.error) {
+        alert(`Failed to update "${l.name}": ${res.error}`, {
+          title: t("Couldn't update line"),
+        });
+        setConfirmingInbound(false);
+        return;
+      }
+    }
+    const res = await updateOrder(id, {
+      return_received: true,
+      return_inbound: false,
+    });
+    if (!res.error && res.data) {
+      setOrder(res.data);
+      const linesRes = await readOrderLines({
+        filter: { order_id: { _eq: id } },
+      });
+      if (!linesRes.error) setLines(linesRes.data ?? []);
+      await appendOrderHistory({
+        order_id: id,
+        what: "Returned goods received & weighed at the warehouse (replacement already in progress)",
+        who: userId,
+        stage,
+      });
+      const hRes = await readOrderHistory(id);
+      if (!hRes.error) setHistory(hRes.data ?? []);
+    } else {
+      alert(`Failed to confirm receipt: ${res.error}`, {
+        title: t("Couldn't confirm receipt"),
+      });
+    }
+    setConfirmingInbound(false);
+  }
+
+  /** Re-opens the inbound return for re-weighing — mirrors the quiet ghost
+   *  "Undo" links elsewhere on this page (docs-returned, COD reconcile). */
+  async function handleUndoInbound() {
+    if (!id || undoingInbound) return;
+    const receivedLines = lines.filter((l) => Number(l.returned) > 0);
+    if (receivedLines.length === 0) return;
+    setUndoingInbound(true);
+    for (const l of receivedLines) {
+      const res = await updateOrderLine(l.id, {
+        inbound_return: Number(l.returned),
+        returned: 0,
+      });
+      if (res.error) {
+        alert(`Failed to update "${l.name}": ${res.error}`, {
+          title: t("Couldn't update line"),
+        });
+        setUndoingInbound(false);
+        return;
+      }
+    }
+    const res = await updateOrder(id, {
+      return_inbound: true,
+      return_received: false,
+    });
+    if (!res.error && res.data) {
+      setOrder(res.data);
+      const linesRes = await readOrderLines({
+        filter: { order_id: { _eq: id } },
+      });
+      if (!linesRes.error) setLines(linesRes.data ?? []);
+      await appendOrderHistory({
+        order_id: id,
+        what: "Return receive re-opened for re-weighing",
+        who: userId,
+        stage,
+      });
+      const hRes = await readOrderHistory(id);
+      if (!hRes.error) setHistory(hRes.data ?? []);
+    } else {
+      alert(`Failed to reopen the return: ${res.error}`, {
+        title: t("Couldn't reopen return"),
+      });
+    }
+    setUndoingInbound(false);
+  }
+
   /** SETTLE bucket — admin picks the Accurate document type, branching to close or replacement. */
   async function handleConfirmSettle() {
     if (!id || !order || confirmingSettle) return;
@@ -3069,9 +3168,20 @@ export function OrderDetail() {
     setConfirmingSettle(true);
 
     if (doc.replacement) {
+      // The admin may settle on a replacement BEFORE the goods are physically
+      // back (the courier already counted them) — then the inbound return is
+      // tracked in parallel: each line snapshots what's coming back
+      // (inbound_return) and the order carries return_inbound until the
+      // warehouse receives it via the Incoming Return card. Ported from the
+      // prototype's `pending`/`inboundReturn` (Dev-OrderDetail.jsx:410-413).
+      const pending = !order.return_received;
       const returnedLines = lines.filter((l) => Number(l.returned) > 0);
       for (const l of returnedLines) {
-        const res = await updateOrderLine(l.id, { returned: 0, delivered: 0 });
+        const res = await updateOrderLine(l.id, {
+          returned: 0,
+          delivered: 0,
+          ...(pending ? { inbound_return: Number(l.returned) } : {}),
+        });
         if (res.error) {
           alert(`Failed to reset "${l.name}": ${res.error}`, {
             title: t("Couldn't reset line"),
@@ -3085,6 +3195,8 @@ export function OrderDetail() {
         is_replacement: true,
         return_doc: doc.label,
         return_settle: null,
+        return_received: false,
+        return_inbound: pending,
       };
       const actionAt = new Date().toISOString();
       const res = await updateOrder(id, {
@@ -3099,7 +3211,7 @@ export function OrderDetail() {
         if (!linesRes.error) setLines(linesRes.data ?? []);
         await appendOrderHistory({
           order_id: id,
-          what: `Return + replacement (${doc.label}) — back to Cold Storage`,
+          what: `Return + replacement (${doc.label}) — back to Cold Storage${pending ? " (return still coming back)" : ""}`,
           who: userId,
           stage: "cold",
           at: actionAt,
@@ -3302,7 +3414,7 @@ export function OrderDetail() {
         <div className={styles.mainColumn}>
           {/* ── Top Header ── */}
           <header className={styles.header}>
-            <div className={styles.titleSection}>
+            <div className={styles.topActionsRow}>
               <Button
                 type="button"
                 variant="tertiary"
@@ -3311,93 +3423,69 @@ export function OrderDetail() {
               >
                 {t("Back")}
               </Button>
-
-              <div className={styles.titleRow}>
-                <h3 className={styles.title}>
-                  {t("Order")} {order.no}
-                </h3>
-                {isCancelled && (
-                  <span
-                    style={{
-                      color: "var(--state-error)",
-                      fontSize: "0.8rem",
-                      fontWeight: 600,
-                    }}
-                  >
-                    {t("CANCELLED")}
-                  </span>
-                )}
-                {isOutstanding && (
-                  <span
-                    style={{
-                      color: "var(--state-warning)",
-                      fontSize: "0.8rem",
-                      fontWeight: 600,
-                    }}
-                  >
-                    {t("ON HOLD")}
-                  </span>
-                )}
-                {isReturned && (
-                  <span
-                    style={{
-                      color: "var(--state-error)",
-                      fontSize: "0.8rem",
-                      fontWeight: 600,
-                    }}
-                  >
-                    {t("RETURNED")}
-                  </span>
-                )}
-                {order.is_replacement && (
-                  <span
-                    style={{
-                      color: "var(--accent-primary)",
-                      fontSize: "0.8rem",
-                      fontWeight: 600,
-                    }}
-                  >
-                    {t("REPLACEMENT")}
-                  </span>
-                )}
-              </div>
-            </div>
-            <div className={styles.actions}>
-              {/* Ported from the prototype's `can(role, 'createOrders')`
+              <div className={styles.actions}>
+                {/* Ported from the prototype's `can(role, 'createOrders')`
                   (`Dev-OrderDetail.jsx:1278`) — was unconditionally visible
                   to every role. `createOrders` defaults to Admin only (+
                   Owner always), so in practice this is Admin/Owner, but
                   driven by the capability rather than a hardcoded role
                   check so an Owner Settings grant to another role also
                   enables it. */}
-              {auth.can("createOrders") && (
+                {auth.can("createOrders") && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    icon="whatsapp"
+                    onClick={copyWA}
+                  >
+                    {t("Copy WA")}
+                  </Button>
+                )}
                 <Button
                   type="button"
                   variant="secondary"
-                  icon="whatsapp"
-                  onClick={copyWA}
+                  icon="printer"
+                  onClick={() => window.print()}
                 >
-                  {t("Copy WA")}
+                  {t("Print")}
                 </Button>
-              )}
-              <Button
-                type="button"
-                variant="secondary"
-                icon="printer"
-                onClick={() => window.print()}
-              >
-                {t("Print")}
-              </Button>
-              {canEdit && (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  icon="edit"
-                  onClick={() => navigate(`/orders/${order.id}/edit`)}
-                >
-                  {t("Edit")}
-                </Button>
-              )}
+                {canEdit && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    icon="edit"
+                    onClick={() => navigate(`/orders/${order.id}/edit`)}
+                  >
+                    {t("Edit")}
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            <div className={styles.titleRow}>
+              <h3 className={styles.title}>
+                {t("Order")} {order.no}
+              </h3>
+              <div className={styles.pillsContainer}>
+                {isCancelled && (
+                  <div className={styles.pill}>
+                    <Icon name="cancelled" />
+                    Cancelled
+                  </div>
+                )}
+                {isReturned && (
+                  <div className={`${styles.pill} ${styles.pillError}`}>
+                    <Icon name="returned" />
+                    Returned
+                  </div>
+                )}
+                {order.is_replacement && (
+                  <div className={`${styles.pill} ${styles.pillWarning}`}>
+                    <Icon name="reload" size={16} />
+                    Replacement
+                  </div>
+                )}
+              </div>
             </div>
           </header>
 
@@ -3412,7 +3500,7 @@ export function OrderDetail() {
               }}
             >
               <div className={styles.cardContent}>
-                <div className={styles.deliveredBannerHeader}>
+                <div className={styles.successCard}>
                   <div
                     className={styles.left}
                     style={{ color: "var(--accent-primary)" }}
@@ -3505,26 +3593,49 @@ export function OrderDetail() {
                 )}
               </div>
             </Card>
-          ) : (
-            <></>
-          )}
+          ) : isHold ? (
+            <Card className={styles.warningCard}>
+              <div className={styles.cardContent}>
+                <div className={styles.warningHeader}>
+                  <Icon name="pause" size={20} />
+                  <span className={styles.warningTitle}>{t("On hold")}</span>
+                </div>
 
-          {stage !== "delivered" && (
+                {canHold ? (
+                  <div className={styles.cardListColumn}>
+                    <p>
+                      {t(
+                        "This order is paused — the process cannot continue until it is resumed.",
+                      )}
+                    </p>
+                    <Button
+                      type="button"
+                      variant="primary"
+                      buttonStyle="fullWidth"
+                      size="lg"
+                      icon="play"
+                      onClick={handleToggleHold}
+                    >
+                      {t("Resume order")}
+                    </Button>
+                  </div>
+                ) : (
+                  <p>
+                    This order is paused — the process cannot continue until{" "}
+                    <strong>Admin</strong> or <strong>Owner</strong> resumes it.
+                  </p>
+                )}
+              </div>
+            </Card>
+          ) : (
             <div
               className={styles.stepperContainer}
               style={{ "--completed-pct": completedPct } as React.CSSProperties}
             >
               <div className={styles.stepperTrack}>
                 {PIPELINE_STAGES.map((s, idx) => {
-                  // Once the order is delivered, the whole stepper — every
-                  // dot and every connecting line, not just up to the current
-                  // index — reads as done: no in-progress/pulsing step left.
-                  const isDeliveredStage = stage === "delivered";
-                  const isTerminalDelivered =
-                    s.key === "delivered" && isDeliveredStage;
-                  const isActive = stage === s.key && !isTerminalDelivered;
-                  const isCompleted =
-                    isDeliveredStage || currentStageIndex > idx;
+                  const isActive = stage === s.key;
+                  const isCompleted = currentStageIndex > idx;
 
                   return (
                     <div key={s.key} className={styles.stepColumn}>
@@ -3533,7 +3644,7 @@ export function OrderDetail() {
                           className={[
                             styles.stepLine,
                             idx === 0 ? styles.stepLineInvisible : "",
-                            isDeliveredStage || currentStageIndex >= idx
+                            currentStageIndex >= idx
                               ? styles.stepLineCompleted
                               : "",
                           ].join(" ")}
@@ -3551,7 +3662,7 @@ export function OrderDetail() {
                             idx === PIPELINE_STAGES.length - 1
                               ? styles.stepLineInvisible
                               : "",
-                            isDeliveredStage || currentStageIndex > idx
+                            currentStageIndex > idx
                               ? styles.stepLineCompleted
                               : "",
                           ].join(" ")}
@@ -3571,6 +3682,14 @@ export function OrderDetail() {
                 })}
               </div>
             </div>
+          )}
+
+          {showActorNotice && (
+            <Card className={styles.successCard}>
+              {t("This order is currently with")}{" "}
+              <strong>{t(stageActor ?? "")}</strong>.{" "}
+              {"You can view it, but the action is theirs."}
+            </Card>
           )}
 
           {/* "Isn't weighed yet" safety net — a kg/gram/loaf line added (or
@@ -3604,14 +3723,6 @@ export function OrderDetail() {
                   {t("Send to Cold Storage to weigh")}
                 </Button>
               )}
-            </div>
-          )}
-
-          {showActorNotice && (
-            <div className={styles.actorNotice}>
-              {t("This order is currently with")}{" "}
-              <strong>{t(stageActor ?? "")}</strong>.{" "}
-              {"You can view it, but the action is theirs."}
             </div>
           )}
 
@@ -3654,10 +3765,10 @@ export function OrderDetail() {
                 <span className={styles.detailValue}>
                   {order.order_date
                     ? new Date(order.order_date).toLocaleDateString("en-US", {
-                      year: "numeric",
-                      month: "long",
-                      day: "numeric",
-                    })
+                        year: "numeric",
+                        month: "long",
+                        day: "numeric",
+                      })
                     : "—"}
                 </span>
               </div>
@@ -3937,11 +4048,9 @@ export function OrderDetail() {
                             variant="ghost"
                             size="md"
                             icon="cancelled"
+                            isActive={!!line.short}
                             style={{
                               alignSelf: "flex-start",
-                              color: line.short
-                                ? "var(--state-warning)"
-                                : undefined,
                             }}
                             onClick={() =>
                               line.id &&
@@ -4068,15 +4177,15 @@ export function OrderDetail() {
                                   setActiveImageModal(
                                     canWeighHere
                                       ? {
-                                        url: img.url,
-                                        title: `${t("Attachment for")} ${line.name}`,
-                                        photoId: img.id,
-                                        lineId: line.id,
-                                      }
+                                          url: img.url,
+                                          title: `${t("Attachment for")} ${line.name}`,
+                                          photoId: img.id,
+                                          lineId: line.id,
+                                        }
                                       : {
-                                        url: img.url,
-                                        title: `${t("Attachment for")} ${line.name}`,
-                                      },
+                                          url: img.url,
+                                          title: `${t("Attachment for")} ${line.name}`,
+                                        },
                                   )
                                 }
                               >
@@ -4198,6 +4307,177 @@ export function OrderDetail() {
                 </div>
               ))}
           </Card>
+
+          {/* Return Settlement — a persistent, ungated record of how a return
+              was settled in Accurate (kept on the order for disputes), unlike
+              the Documents section below which is Admin/Finance/Owner only.
+              Ported from the prototype's own ungated `order.returnDoc` card
+              (Dev-OrderDetail.jsx:1492-1508). */}
+          {order.return_doc && (
+            <Card>
+              <div className={styles.heading}>{t("Return settlement")}</div>
+              <p className={styles.muted}>
+                {t("Document")} · <strong>{order.return_doc}</strong>
+              </p>
+              {lines
+                .filter((l) => Number(l.returned) > 0)
+                .map((l) => (
+                  <p key={l.id} className={styles.muted}>
+                    {l.name} · {t("returned")}{" "}
+                    <strong>
+                      {l.returned} {l.unit}
+                    </strong>
+                  </p>
+                ))}
+              {(lines.some((l) => l.returned_weigh_photo) ||
+                latestSignedDoc?.photo_id) && (
+                <div
+                  style={{
+                    display: "flex",
+                    gap: "0.5rem",
+                    flexWrap: "wrap",
+                    marginTop: "0.5rem",
+                  }}
+                >
+                  {lines
+                    .filter((l) => l.returned_weigh_photo)
+                    .map((l) => (
+                      <img
+                        key={l.id}
+                        src={getAssetUrl(l.returned_weigh_photo!)}
+                        alt=""
+                        className={styles.thumbnailImg}
+                      />
+                    ))}
+                  {latestSignedDoc?.photo_id && (
+                    <img
+                      src={getAssetUrl(latestSignedDoc.photo_id)}
+                      alt=""
+                      className={styles.thumbnailImg}
+                    />
+                  )}
+                </div>
+              )}
+            </Card>
+          )}
+
+          {/* Incoming Return — the replacement was ordered before the goods
+              came back; the warehouse receives + verifies them here, in
+              parallel, whatever stage the replacement is now at. Same
+              `canProcessReturns` gate as the "Awaiting Return" bucket inside
+              the Customer Return card (isReturned-only) — this is the
+              stage-independent counterpart for a replacement that already
+              re-entered the pipeline. Ported from the prototype's
+              `order.returnInbound` card (Dev-OrderDetail.jsx:1535-1561). */}
+          {order.return_inbound && (
+            <Card className={styles.warningCard} style={{ borderColor: "var(--state-error)" }}>
+              <div className={styles.heading}>
+                {t("Incoming return — receive & verify")}
+              </div>
+              <p className={styles.muted}>
+                {t(
+                  "The replacement is already in the pipeline — weigh/verify the returned goods when they arrive.",
+                )}
+              </p>
+              {lines
+                .filter((l) => Number(l.inbound_return) > 0)
+                .map((l) => (
+                  <div
+                    key={l.id}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.75rem",
+                      marginBottom: "0.5rem",
+                    }}
+                  >
+                    <span style={{ flex: 1 }}>{l.name}</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      className={styles.editInput}
+                      style={{ width: 90 }}
+                      value={receiveQtyMap[l.id] ?? String(l.inbound_return ?? 0)}
+                      disabled={!canProcessReturns}
+                      onChange={(e) =>
+                        setReceiveQtyMap((prev) => ({
+                          ...prev,
+                          [l.id]: e.target.value,
+                        }))
+                      }
+                    />
+                    <span className="tiny muted">{l.unit}</span>
+                    {canProcessReturns && (
+                      <label
+                        className={styles.actionBtn}
+                        style={{ cursor: "pointer" }}
+                      >
+                        <input
+                          type="file"
+                          accept="image/*"
+                          style={{ display: "none" }}
+                          onChange={(e) =>
+                            handleUploadReceiveWeighPhoto(l.id, e)
+                          }
+                        />
+                        <Icon name="camera" size={16} />
+                      </label>
+                    )}
+                    {l.returned_weigh_photo && (
+                      <img
+                        src={getAssetUrl(l.returned_weigh_photo)}
+                        alt=""
+                        className={styles.thumbnailImg}
+                        style={{ width: 32, height: 32 }}
+                      />
+                    )}
+                  </div>
+                ))}
+              {canProcessReturns && (
+                <Button
+                  type="button"
+                  variant="primary"
+                  onClick={handleReceiveInbound}
+                  disabled={confirmingInbound}
+                >
+                  {confirmingInbound
+                    ? t("Saving…")
+                    : t("Confirm received & weighed")}
+                </Button>
+              )}
+            </Card>
+          )}
+          {!order.return_inbound &&
+            order.return_received &&
+            lines.some((l) => Number(l.returned) > 0) &&
+            !isDelivered &&
+            !isCancelled && (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: "0.5rem",
+                  marginBottom: "1rem",
+                }}
+              >
+                <span className="tiny muted">
+                  {t("Incoming return received")}
+                </span>
+                {canProcessReturns && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleUndoInbound}
+                    disabled={undoingInbound}
+                  >
+                    {t("Undo")}
+                  </Button>
+                )}
+              </div>
+            )}
 
           {/* Documents Section — Admin/Finance/Owner only, matching the
               prototype's own hardcoded role check (see `canSeeDocuments`'s
@@ -4328,57 +4608,26 @@ export function OrderDetail() {
           )}
 
           {/* Stage Action Controls */}
-          {!isCancelled && (
+          {!isCancelled && !isHold && (
             <div className={styles.stageActions}>
-              {isHold ? (
-                <Card className={styles.onHoldCard}>
-                  <div className={styles.onHoldHeader}>
-                    <Icon name="pause" size={20} className={styles.onHoldIcon} />
-                    <span className={styles.onHoldTitle}>{t("On hold")}</span>
-                  </div>
-                  <p className={styles.onHoldText}>
-                    {t(
-                      "This order is paused — the process cannot continue until it is resumed.",
-                    )}
-                  </p>
-                  {canHold ? (
-                    <Button
-                      type="button"
-                      variant="primary"
-                      buttonStyle="fullWidth"
-                      size="lg"
-                      icon="play"
-                      onClick={handleToggleHold}
-                    >
-                      {t("Resume order")}
-                    </Button>
-                  ) : (
-                    <p className="tiny muted">
-                      {t("An admin or owner must resume it to continue.")}
-                    </p>
-                  )}
-                </Card>
-              ) : (
-                <>
-                  {flow?.next &&
-                    canAdvance &&
-                    stage !== "dispatch" &&
-                    stage !== "production" &&
-                    stage !== "packing" &&
-                    stage !== "cold" &&
-                    stage !== "finalise" && (
-                      <Button
-                        type="button"
-                        variant="primary"
-                        size="lg"
-                        onClick={handleAdvance}
-                        disabled={advancing}
-                        className={styles.actionBtn}
-                      >
-                        {advancing ? t("Saving…") : t(flow.advanceLabel)}
-                      </Button>
-                    )}
-
+              {flow?.next &&
+                canAdvance &&
+                stage !== "dispatch" &&
+                stage !== "production" &&
+                stage !== "packing" &&
+                stage !== "cold" &&
+                stage !== "finalise" && (
+                  <Button
+                    type="button"
+                    variant="primary"
+                    size="lg"
+                    onClick={handleAdvance}
+                    disabled={advancing}
+                    className={styles.actionBtn}
+                  >
+                    {advancing ? t("Saving…") : t(flow.advanceLabel)}
+                  </Button>
+                )}
 
               {/* Cold Storage — "Pull & weigh" card, replacing the generic
                   advance button for this stage. Ported from the prototype's
@@ -4398,13 +4647,13 @@ export function OrderDetail() {
                       style={
                         financeCleared
                           ? {
-                            border: "1px solid var(--accent-primary)",
-                            backgroundColor: "var(--bg-surface-hover-dark)",
-                          }
+                              border: "1px solid var(--accent-primary)",
+                              backgroundColor: "var(--bg-surface-hover-dark)",
+                            }
                           : {
-                            border: "1px solid var(--border-default)",
-                            backgroundColor: "none",
-                          }
+                              border: "1px solid var(--border-default)",
+                              backgroundColor: "none",
+                            }
                       }
                     >
                       <Icon
@@ -4647,8 +4896,8 @@ export function OrderDetail() {
                         {advancing
                           ? t("Saving…")
                           : t(
-                            "Delivery Order (Surat Jalan) or Sales Invoice (Faktur Penjualan) Printed",
-                          )}
+                              "Delivery Order (Surat Jalan) or Sales Invoice (Faktur Penjualan) Printed",
+                            )}
                       </Button>
                     </div>
                   </div>
@@ -4849,7 +5098,7 @@ export function OrderDetail() {
                           style={{
                             borderColor:
                               recvPhotos.length > 0 &&
-                                receiverName.trim() !== ""
+                              receiverName.trim() !== ""
                                 ? "var(--accent-primary)"
                                 : "var(--border-subtle)",
                           }}
@@ -4861,7 +5110,7 @@ export function OrderDetail() {
                                 size={18}
                                 className={
                                   recvPhotos.length > 0 &&
-                                    receiverName.trim() !== ""
+                                  receiverName.trim() !== ""
                                     ? styles.proofCheckFilled
                                     : styles.proofCheckEmpty
                                 }
@@ -5301,18 +5550,13 @@ export function OrderDetail() {
                 </Card>
               )}
               {isDelivered && order.docs_returned && (
-                <Card
-                  style={{
-                    borderColor: "var(--accent-primary)",
-                    backgroundColor: "var(--bg-surface-hover-dark)",
-                  }}
-                >
-                  <div
-                    className={styles.left}
-                    style={{ color: "var(--accent-primary)" }}
-                  >
+                <Card className={styles.successCard}>
+                  <div className={styles.left}>
                     <Icon name="check" />
-                    <div className={styles.fieldLabel}>
+                    <div
+                      className={styles.fieldLabel}
+                      style={{ color: "var(--accent-primary)" }}
+                    >
                       {t("Signed DO & SI returned")}
                     </div>
                   </div>
@@ -5410,11 +5654,11 @@ export function OrderDetail() {
                           ⚠{" "}
                           {canOverrideCreditLimit
                             ? t(
-                              "Over credit limit — confirm with the owner before clearing.",
-                            )
+                                "Over credit limit — confirm with the owner before clearing.",
+                              )
                             : t(
-                              "Over credit limit — only Finance or the owner can clear this.",
-                            )}
+                                "Over credit limit — only Finance or the owner can clear this.",
+                              )}
                         </p>
                       )}
                     </Card>
@@ -5574,8 +5818,8 @@ export function OrderDetail() {
                     {t("Undo — back to")}{" "}
                     {t(
                       STAGE_LABELS[
-                      order.undo_snapshot
-                        .prevStage as keyof typeof STAGE_LABELS
+                        order.undo_snapshot
+                          .prevStage as keyof typeof STAGE_LABELS
                       ] ?? order.undo_snapshot.prevStage,
                     )}
                   </Button>
@@ -5677,10 +5921,8 @@ export function OrderDetail() {
                   </div>
                 </Card>
               )}
-            </>
+            </div>
           )}
-        </div>
-      )}
 
           {/* Returns Sub-Flow — parallel buckets (receive / settle / sign) */}
           {isReturned && !isCancelled && (
@@ -5865,7 +6107,7 @@ export function OrderDetail() {
                   <strong>
                     {t(
                       PIPELINE_STAGES.find((s) => s.key === stage)?.label ??
-                      stage,
+                        stage,
                     )}
                   </strong>
                   .
@@ -5889,75 +6131,75 @@ export function OrderDetail() {
             canHold ||
             canSendBack ||
             canRestore) && (
-              <div className={styles.orderActions}>
-                <div className={styles.orderActionsRow}>
-                  {canReorder && (
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      buttonStyle="fullWidth"
-                      size="lg"
-                      icon="reload"
-                      onClick={handleReorder}
-                      disabled={reordering}
-                    >
-                      {reordering ? t("Creating…") : t("Reorder")}
-                    </Button>
-                  )}
-                  {canHold && (
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      buttonStyle="fullWidth"
-                      size="lg"
-                      icon={isHold ? "play" : "pause"}
-                      onClick={handleToggleHold}
-                    >
-                      {isHold ? t("Resume order") : t("Put on Hold")}
-                    </Button>
-                  )}
-                </div>
-                <div className={styles.orderActionsRow}>
-                  {canSendBack && (
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      buttonStyle="fullWidth"
-                      size="lg"
-                      icon="backward"
-                      onClick={handleSendBack}
-                      disabled={advancing}
-                    >
-                      {sendBackLabel()}
-                    </Button>
-                  )}
-                  {canRestore && (
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      buttonStyle="fullWidth"
-                      size="lg"
-                      icon="refresh"
-                      onClick={handleRestore}
-                    >
-                      {t("Restore Order")}
-                    </Button>
-                  )}
-                </div>
-                {canCancel && (
+            <div className={styles.orderActions}>
+              <div className={styles.orderActionsRow}>
+                {canReorder && (
                   <Button
                     type="button"
                     variant="secondary"
+                    buttonStyle="fullWidth"
                     size="lg"
-                    icon="close"
-                    onClick={handleCancel}
-                    disabled={cancelling}
+                    icon="reload"
+                    onClick={handleReorder}
+                    disabled={reordering}
                   >
-                    {cancelling ? t("Cancelling…") : t("Cancel Order")}
+                    {reordering ? t("Creating…") : t("Reorder")}
+                  </Button>
+                )}
+                {canHold && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    buttonStyle="fullWidth"
+                    size="lg"
+                    icon={isHold ? "play" : "pause"}
+                    onClick={handleToggleHold}
+                  >
+                    {isHold ? t("Resume order") : t("Put on Hold")}
                   </Button>
                 )}
               </div>
-            )}
+              <div className={styles.orderActionsRow}>
+                {canSendBack && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    buttonStyle="fullWidth"
+                    size="lg"
+                    icon="backward"
+                    onClick={handleSendBack}
+                    disabled={advancing}
+                  >
+                    {sendBackLabel()}
+                  </Button>
+                )}
+                {canRestore && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    buttonStyle="fullWidth"
+                    size="lg"
+                    icon="refresh"
+                    onClick={handleRestore}
+                  >
+                    {t("Restore Order")}
+                  </Button>
+                )}
+              </div>
+              {canCancel && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="lg"
+                  icon="close"
+                  onClick={handleCancel}
+                  disabled={cancelling}
+                >
+                  {cancelling ? t("Cancelling…") : t("Cancel Order")}
+                </Button>
+              )}
+            </div>
+          )}
         </div>
 
         {/* ── Collapsible Side Panel (Notes & History) ── */}
@@ -5986,7 +6228,7 @@ export function OrderDetail() {
               <h3 className={styles.heading}>{t("Notes")}</h3>
               <div className={styles.notesListScroll}>
                 {history.filter((h) => h.what.startsWith("Note")).length ===
-                  0 ? (
+                0 ? (
                   <p className={styles.muted}>{t("No note")}</p>
                 ) : (
                   history
@@ -6073,37 +6315,37 @@ export function OrderDetail() {
         onDelete={
           activeImageModal?.lineId && activeImageModal?.photoId
             ? () => {
-              handleRemoveItemPhoto(
-                activeImageModal.lineId!,
-                activeImageModal.photoId!,
-              );
-              setActiveImageModal(null);
-            }
-            : activeImageModal?.weighingLineId &&
-              activeImageModal?.weighingId &&
-              activeImageModal?.weighingPhotoId
-              ? () => {
-                handleRemoveWeighingPhoto(
-                  activeImageModal.weighingLineId!,
-                  activeImageModal.weighingId!,
-                  activeImageModal.weighingPhotoId!,
+                handleRemoveItemPhoto(
+                  activeImageModal.lineId!,
+                  activeImageModal.photoId!,
                 );
                 setActiveImageModal(null);
               }
-              : activeImageModal?.attachmentId
-                ? () => {
-                  handleDeleteDocument(activeImageModal.attachmentId!);
+            : activeImageModal?.weighingLineId &&
+                activeImageModal?.weighingId &&
+                activeImageModal?.weighingPhotoId
+              ? () => {
+                  handleRemoveWeighingPhoto(
+                    activeImageModal.weighingLineId!,
+                    activeImageModal.weighingId!,
+                    activeImageModal.weighingPhotoId!,
+                  );
                   setActiveImageModal(null);
                 }
-                : activeImageModal?.stagedProofSlot &&
-                  activeImageModal?.stagedProofIndex !== undefined
-                  ? () => {
-                    handleRemoveStagedProofPhoto(
-                      activeImageModal.stagedProofSlot!,
-                      activeImageModal.stagedProofIndex!,
-                    );
+              : activeImageModal?.attachmentId
+                ? () => {
+                    handleDeleteDocument(activeImageModal.attachmentId!);
                     setActiveImageModal(null);
                   }
+                : activeImageModal?.stagedProofSlot &&
+                    activeImageModal?.stagedProofIndex !== undefined
+                  ? () => {
+                      handleRemoveStagedProofPhoto(
+                        activeImageModal.stagedProofSlot!,
+                        activeImageModal.stagedProofIndex!,
+                      );
+                      setActiveImageModal(null);
+                    }
                   : undefined
         }
       />

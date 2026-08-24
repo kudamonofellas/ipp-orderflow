@@ -188,19 +188,19 @@ export function Customers() {
                 >
                   <td className={styles.td}>
                     <div className={styles.nameCell}>
-                      
-                        <Avatar
-                          initials={getInitials(c.name) || '??'}
-                          label={c.name || ''}
-                          size="md"
-                        />
-                      
+
+                      <Avatar
+                        initials={getInitials(c.name) || '??'}
+                        label={c.name || ''}
+                        size="md"
+                      />
+
                       <span style={{ display: 'flex', flexDirection: 'column' }}>
 
-                      <span className={styles.name}>{c.name}</span>
-                      {c.company_name && (
-                        <span className={styles.company}>{c.company_name}</span>
-                      )}
+                        <span className={styles.name}>{c.name}</span>
+                        {c.company_name && (
+                          <span className={styles.company}>{c.company_name}</span>
+                        )}
                       </span>
                     </div>
                   </td>
@@ -242,9 +242,7 @@ export function Customers() {
               onClick={() => setPage?.(currentPage - 1)}
               disabled={currentPage <= 1}
               aria-label={t('Previous page')}
-            >
-              <Icon name="chevronLeft" size={16} />
-            </Button>
+            />
             <span className={styles.pageIndicator}>
               {currentPage} / {totalPages}
             </span>
@@ -257,9 +255,7 @@ export function Customers() {
               onClick={() => setPage?.(currentPage + 1)}
               disabled={currentPage >= totalPages}
               aria-label={t('Next page')}
-            >
-              <Icon name="chevronRight" size={16} />
-            </Button>
+            />
           </div>
         </footer>
 

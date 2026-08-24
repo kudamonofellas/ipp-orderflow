@@ -175,7 +175,7 @@ export function CustomerDetail() {
         {/* ── Main Column ── */}
         <div className={styles.mainColumn}>
           <header className={styles.header}>
-            <div className={styles.titleSection}>
+            <div className={styles.topActionsRow}>
               <Button
                 type="button"
                 variant="tertiary"
@@ -184,7 +184,21 @@ export function CustomerDetail() {
               >
                 {t("Back")}
               </Button>
-              <div className={styles.titleRow}>
+              <div className={styles.actions}>
+                {canEdit && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    icon="edit"
+                    onClick={() => navigate(`/customers/${id}/edit`)}
+                  >
+                    {t("Edit")}
+                  </Button>
+                )}
+              </div>
+            </div>
+            <div className={styles.titleRow}>
+              <div className={styles.customerHeading}>
                 <Avatar
                   initials={getInitials(name) || "??"}
                   label={name || ""}
@@ -195,18 +209,6 @@ export function CustomerDetail() {
                   <p>{channel?.toUpperCase() || "—"}</p>
                 </div>
               </div>
-            </div>
-            <div className={styles.actions}>
-              {canEdit && (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  icon="edit"
-                  onClick={() => navigate(`/customers/${id}/edit`)}
-                >
-                  {t("Edit")}
-                </Button>
-              )}
             </div>
           </header>
 
@@ -354,6 +356,7 @@ export function CustomerDetail() {
                           <StatusPill
                             status={o.stage || o.status}
                             isReplacement={o.is_replacement === true}
+                            isHold={o.hold === true}
                           />
                         </td>
                         <td>

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Button } from '../../components/Button/Button';
 import { Icon } from '../../components/Icon/Icon';
 import { Card } from '../../components/Card/Card';
 import { SortableTh } from '../../components/SortableTh/SortableTh';
@@ -210,14 +211,14 @@ export function Products() {
             />
           </div>
           {canManageProducts && (
-            <button
+            <Button
               type="button"
-              className={styles.addBtn}
+              variant="primary"
+              icon="add"
               onClick={() => navigate('/products/new')}
             >
-              <Icon name="add" size={16} />
               {t('New Product')}
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -311,27 +312,29 @@ export function Products() {
               {t('Showing')} {rangeStart}–{rangeEnd} {t('of')} {total}
             </span>
             <div className={styles.pageControls}>
-              <button
+              <Button
                 type="button"
-                className={styles.pageButton}
+                variant="secondary"
+                size="sm"
+                iconOnly
+                icon="chevronLeft"
                 onClick={() => setPage(currentPage - 1)}
                 disabled={currentPage <= 1}
                 aria-label={t('Previous page')}
-              >
-                <Icon name="chevronLeft" size={16} />
-              </button>
+              />
               <span className={styles.pageIndicator}>
                 {currentPage} / {totalPages}
               </span>
-              <button
+              <Button
                 type="button"
-                className={styles.pageButton}
+                variant="secondary"
+                size="sm"
+                iconOnly
+                icon="chevronRight"
                 onClick={() => setPage(currentPage + 1)}
                 disabled={currentPage >= totalPages}
                 aria-label={t('Next page')}
-              >
-                <Icon name="chevronRight" size={16} />
-              </button>
+              />
             </div>
           </footer>
         </div>
