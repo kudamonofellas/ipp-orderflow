@@ -70,13 +70,13 @@ const BUCKETS: Bucket[] = [
     key: 'awaiting_return',
     label: 'Returns awaiting warehouse receipt',
     filter: { stage: { _eq: 'awaiting_return' } },
-    capability: 'processReturns',
+    capability: 'receiveReturns',
   },
   {
     key: 'admin_action',
     label: 'Returns needing admin action',
     filter: { stage: { _eq: 'admin_action' } },
-    capability: 'processReturns',
+    capability: 'decideReturns',
   },
 ];
 

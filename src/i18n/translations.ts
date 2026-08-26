@@ -534,6 +534,7 @@ const ID: Record<string, string> = {
   "Retail & online shop — Tokopedia, Shopee, walk-in.": "Ritel & toko online — Tokopedia, Shopee, walk-in.",
   "return — admin to update Accurate & decide (can run before goods arrive)": "retur — admin perbarui Accurate & putuskan (bisa sebelum barang tiba)",
   "return coming back — warehouse to receive & verify": "retur dalam perjalanan — gudang menerima & verifikasi",
+  "Return documents": "Dokumen retur",
   "Return settlement": "Penyelesaian retur",
   "return verified — admin to update Accurate & decide": "retur diverifikasi — admin perbarui Accurate & putuskan",
   "Return Workflows": "Alur Retur",

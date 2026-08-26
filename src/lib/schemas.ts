@@ -212,6 +212,10 @@ export const OrderLinesCollectionSchema = z.object({
   // Snapshot of `returned` taken when a replacement is settled before the
   // goods physically come back — see OrderDetail.tsx's Incoming Return card.
   inbound_return: numeric,
+  // Per-line confirm flag for the Customer Return / Incoming Return receive
+  // step — independent of other lines on the same order (see the
+  // per-line-box UI in OrderDetail.tsx).
+  return_verified: z.boolean().nullable().optional(),
 });
 
 /** Directus `order_history` collection row (append-only). */
@@ -267,7 +271,10 @@ export const LineWeighingPhotosCollectionArraySchema = z.array(
   LineWeighingPhotosCollectionSchema,
 );
 
-/** Directus `line_return_photos` collection row — courier's refusal-evidence photos per line. */
+/** Directus `line_return_photos` collection row — return-evidence photos per
+ *  line: the courier's refusal-evidence at delivery, and the warehouse's
+ *  scale/condition photos when receiving the goods back in (both write here;
+ *  distinguished only by which stage the order was at when captured). */
 export const LineReturnPhotosCollectionSchema = z.object({
   id: z.string(),
   line_id: z.string(),

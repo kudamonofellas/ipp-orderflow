@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+﻿import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { Card } from "../../components/Card/Card";
 import { Icon } from "../../components/Icon/Icon";
@@ -40,6 +40,8 @@ import {
   deleteLineWeighingPhoto,
   updateOrderLine,
   createLineReturnPhoto,
+  readLineReturnPhotos,
+  deleteLineReturnPhoto,
   readReturnDocuments,
   createReturnDocument,
   createDeliveryProof,
@@ -154,6 +156,16 @@ const RETURN_DOC_OPTIONS = [
     replacement: true,
   },
 ] as const;
+
+/** Labels for `return_documents.kind` — see `target-db-schema.md`'s
+ *  `return_documents` entry. `signed_draft` is unused by this port today (no
+ *  intermediate courier-carries-it-for-signing capture step exists here),
+ *  kept only so an unexpected row still renders something sensible. */
+const RETURN_DOC_KIND_LABELS: Record<string, string> = {
+  signed_doc: "Signed DO/SI",
+  signed_draft: "Signed DO/SI (draft)",
+  note: "Return note",
+};
 
 /* ─────────────────────────────────────── pipeline definition ── */
 
@@ -385,6 +397,8 @@ export function OrderDetail() {
     weighingLineId?: string;
     weighingId?: string;
     weighingPhotoId?: string;
+    receiveLineId?: string;
+    receivePhotoId?: string;
     /** A staged (not-yet-confirmed) delivery-proof photo — see handleRemoveStagedProofPhoto. */
     stagedProofSlot?: "cond" | "recv" | "signed";
     stagedProofIndex?: number;
@@ -409,11 +423,24 @@ export function OrderDetail() {
   const [receiveQtyMap, setReceiveQtyMap] = useState<Record<string, string>>(
     {},
   );
+  // Multi-photo scale/condition evidence for a returned line, shared by the
+  // "Awaiting Return" bucket and the Incoming Return card (whichever entry
+  // point receives the goods back) — same shape and `line_return_photos`
+  // backing as `refusePhotosMap`, just persistent/reloaded rather than reset
+  // per form-open, since receiving can happen in a later session.
+  const [receivePhotosMap, setReceivePhotosMap] = useState<
+    Record<string, { id: string; fileId: string; url: string }[]>
+  >({});
   const [confirmingReceive, setConfirmingReceive] = useState(false);
   const [selectedDocType, setSelectedDocType] = useState<string>("");
+  // Required gate on the return-note path only — matches the prototype's
+  // `retPrinted` checkbox (Dev-OrderDetail.jsx:1246), confirming the note
+  // was actually entered in Accurate before the order can close.
+  const [retPrinted, setRetPrinted] = useState(false);
   const [confirmingSettle, setConfirmingSettle] = useState(false);
   const [signedDocFileId, setSignedDocFileId] = useState<string | null>(null);
   const [closingSigned, setClosingSigned] = useState(false);
+  const [noteFileId, setNoteFileId] = useState<string | null>(null);
   const [confirmingInbound, setConfirmingInbound] = useState(false);
   const [undoingInbound, setUndoingInbound] = useState(false);
 
@@ -652,6 +679,22 @@ export function OrderDetail() {
       });
       setItemPhotosMap(groupedPhotos);
 
+      const returnPhotosRes = await readLineReturnPhotos(
+        loadedLines.map((l) => l.id),
+      );
+      const groupedReturnPhotos: Record<
+        string,
+        { id: string; fileId: string; url: string }[]
+      > = {};
+      (returnPhotosRes.data ?? []).forEach((p) => {
+        (groupedReturnPhotos[p.line_id] ??= []).push({
+          id: p.id,
+          fileId: p.photo_id,
+          url: getAssetUrl(p.photo_id),
+        });
+      });
+      setReceivePhotosMap(groupedReturnPhotos);
+
       setLoading(false);
     }
 
@@ -853,7 +896,16 @@ export function OrderDetail() {
   // `printDocuments`, which excluded Finance. Reported directly.
   const canSeeDocuments = auth.can("seeDocuments");
   const canAddDocs = canSeeDocuments;
-  const canProcessReturns = auth.can("processReturns");
+  // Split from the old single `canProcessReturns`, matching the prototype's
+  // own 3 distinct role checks on the Customer Return panel
+  // (`Dev-OrderDetail.jsx:1094-1096`): the warehouse physically receives &
+  // weighs the goods (`canReceive`), the admin picks the Accurate document
+  // type (`canDecide`), and whoever carries the revised DO/SI captures the
+  // signed photo (`canSign` — admin or courier).
+  const canReceiveReturn = auth.can("receiveReturns");
+  const canDecideReturn = auth.can("decideReturns");
+  const canSignReturn = auth.can("signReturns");
+  const selectedDoc = RETURN_DOC_OPTIONS.find((d) => d.key === selectedDocType);
   const canSeePrices = auth.can("seePrices");
   // History card render — same treatment as the Notifications feed
   // (`useNotifications.ts`): price clauses removed outright (not masked),
@@ -1021,7 +1073,6 @@ export function OrderDetail() {
     return_inbound: order.return_inbound,
     is_replacement: order.is_replacement,
   });
-  const inReceiveBucket = returnBuckets.includes("awaiting_return");
   const inSettleBucket = returnBuckets.includes("admin_action");
   const inSignBucket = returnBuckets.includes("awaiting_signed_doc");
   const latestSignedDoc = returnDocs.find((d) => d.kind === "signed_doc");
@@ -2943,7 +2994,10 @@ export function OrderDetail() {
     setSubmittingRefusal(true);
     for (const l of refusedLines) {
       const qty = parseFloat(refuseQtyMap[l.id] ?? "0") || 0;
-      const res = await updateOrderLine(l.id, { returned: qty });
+      const res = await updateOrderLine(l.id, {
+        returned: qty,
+        return_verified: false,
+      });
       if (res.error) {
         alert(`Failed to record return on "${l.name}": ${res.error}`, {
           title: t("Couldn't record return"),
@@ -2988,7 +3042,12 @@ export function OrderDetail() {
     setSubmittingRefusal(false);
   }
 
-  /** RECEIVE bucket — warehouse weighs the goods back in, per line, with a scale photo. */
+  /** RECEIVE bucket — warehouse weighs the goods back in, per line, with one
+   *  or more scale/condition photos. Backed by `line_return_photos` (the
+   *  same multi-photo table the courier's refusal step already uses via
+   *  `refusePhotosMap`/`handleUploadRefusePhoto`) rather than the single
+   *  `order_lines.returned_weigh_photo` field this used to write — a line
+   *  can need more than one angle on the scale. */
   async function handleUploadReceiveWeighPhoto(
     lineId: string,
     e: React.ChangeEvent<HTMLInputElement>,
@@ -3003,48 +3062,84 @@ export function OrderDetail() {
       e.target.value = "";
       return;
     }
-    const res = await updateOrderLine(lineId, {
-      returned_weigh_photo: uploadRes.data.id,
+    const fileId = uploadRes.data.id;
+    const current = receivePhotosMap[lineId] ?? [];
+    const createRes = await createLineReturnPhoto({
+      line_id: lineId,
+      photo_id: fileId,
+      sort_order: current.length,
     });
-    if (res.error || !res.data) {
-      alert(`Failed to save weigh-back photo: ${res.error}`, {
+    if (createRes.error || !createRes.data) {
+      alert(`Failed to save weigh-back photo: ${createRes.error}`, {
         title: t("Couldn't save photo"),
       });
       e.target.value = "";
       return;
     }
-    setLines((prev) => prev.map((l) => (l.id === lineId ? res.data! : l)));
+    setReceivePhotosMap((prev) => ({
+      ...prev,
+      [lineId]: [
+        ...(prev[lineId] ?? []),
+        { id: createRes.data!.id, fileId, url: getAssetUrl(fileId) },
+      ],
+    }));
     e.target.value = "";
   }
 
-  async function handleConfirmReceive() {
-    if (!id || confirmingReceive) return;
-    setConfirmingReceive(true);
-    const returnedLines = lines.filter((l) => Number(l.returned) > 0);
-    for (const l of returnedLines) {
-      const verifiedRaw = receiveQtyMap[l.id];
-      if (verifiedRaw == null) continue;
-      const verified = parseFloat(verifiedRaw) || 0;
-      if (verified === Number(l.returned)) continue;
-      const res = await updateOrderLine(l.id, { returned: verified });
-      if (res.error) {
-        alert(`Failed to update "${l.name}": ${res.error}`, {
-          title: t("Couldn't update line"),
-        });
-        setConfirmingReceive(false);
-        return;
-      }
-    }
-    const res = await updateOrder(id, {
-      return_received: true,
-      return_inbound: false,
-    });
-    if (!res.error && res.data) {
-      setOrder(res.data);
-      const linesRes = await readOrderLines({
-        filter: { order_id: { _eq: id } },
+  async function handleRemoveReceiveWeighPhoto(
+    lineId: string,
+    photoRowId: string,
+  ) {
+    const res = await deleteLineReturnPhoto(photoRowId);
+    if (res.error) {
+      alert(`Failed to remove photo: ${res.error}`, {
+        title: t("Couldn't remove photo"),
       });
-      if (!linesRes.error) setLines(linesRes.data ?? []);
+      return;
+    }
+    setReceivePhotosMap((prev) => ({
+      ...prev,
+      [lineId]: (prev[lineId] ?? []).filter((p) => p.id !== photoRowId),
+    }));
+    if (activeImageModal?.receivePhotoId === photoRowId)
+      setActiveImageModal(null);
+  }
+
+  /** Direct receive (order still at `returned` stage) — per-LINE confirm,
+   *  matching the design's independent per-line state (one line can show
+   *  "confirmed" while a sibling line is still pending). Order-level
+   *  `return_received` only flips once every returned line is verified. */
+  async function handleConfirmReturnLine(lineId: string) {
+    if (!id || confirmingReceive) return;
+    const line = lines.find((l) => l.id === lineId);
+    if (!line) return;
+    setConfirmingReceive(true);
+    const verifiedRaw = receiveQtyMap[lineId];
+    const verified =
+      verifiedRaw != null ? parseFloat(verifiedRaw) || 0 : Number(line.returned);
+    const res = await updateOrderLine(lineId, {
+      returned: verified,
+      return_verified: true,
+    });
+    if (res.error || !res.data) {
+      alert(`Failed to update "${line.name}": ${res.error}`, {
+        title: t("Couldn't update line"),
+      });
+      setConfirmingReceive(false);
+      return;
+    }
+    const updatedLines = lines.map((l) => (l.id === lineId ? res.data! : l));
+    setLines(updatedLines);
+    const stillPending = updatedLines.some(
+      (l) => Number(l.returned) > 0 && !l.return_verified,
+    );
+    if (stillPending) {
+      setConfirmingReceive(false);
+      return;
+    }
+    const orderRes = await updateOrder(id, { return_received: true });
+    if (!orderRes.error && orderRes.data) {
+      setOrder(orderRes.data);
       await appendOrderHistory({
         order_id: id,
         what: "Returned goods received & weighed at the warehouse",
@@ -3054,50 +3149,223 @@ export function OrderDetail() {
       const hRes = await readOrderHistory(id);
       if (!hRes.error) setHistory(hRes.data ?? []);
     } else {
-      alert(`Failed to confirm receipt: ${res.error}`, {
+      alert(`Failed to confirm receipt: ${orderRes.error}`, {
         title: t("Couldn't confirm receipt"),
       });
     }
     setConfirmingReceive(false);
   }
 
+  /** One returned-line box inside the Customer Return card — shared between
+   *  the direct (isReturned-stage) and parallel (Incoming Return) receive
+   *  flows, since both need identical read-only / interactive / confirmed
+   *  states. `pendingAmount` is `l.returned` for the direct flow or
+   *  `l.inbound_return` for the parallel flow. Plain function, not a
+   *  component — called inline like `renderPanel()` elsewhere in this file,
+   *  so it never remounts the subtree it returns. */
+  function renderReturnLineBox(
+    line: OrderLinesCollection,
+    pendingAmount: number,
+    onConfirm: (lineId: string) => void,
+    confirming: boolean,
+  ) {
+    const isConfirmed = !!line.return_verified && Number(line.returned) > 0;
+    const isPending = !isConfirmed && pendingAmount > 0;
+    const photos = receivePhotosMap[line.id] ?? [];
+    return (
+      <div
+        key={line.id}
+        className={`${styles.returnLineBox} ${isConfirmed ? styles.returnLineBoxConfirmed : ""}`}
+      >
+        <div className={styles.returnLineTop}>
+          <span className={styles.returnLineName}>
+            <Icon name={isConfirmed ? "check" : "box"} size={16} />
+            {line.qty} {line.unit} {line.name}
+          </span>
+          {isConfirmed ? (
+            <span className={styles.returnLineStatus}>
+              {line.returned} {line.unit} · {t("Confirmed")}
+            </span>
+          ) : (
+            <span className="tiny muted">{t("returned")}</span>
+          )}
+        </div>
+        {order?.returned_reason && (
+          <p className="tiny">
+            {t("Reason:")} <strong>{order.returned_reason}</strong>
+          </p>
+        )}
+        {isConfirmed ? (
+          photos.length > 0 && (
+            <div className={styles.thumbnailsContainer}>
+              {photos.map((p) => (
+                <div
+                  key={p.id}
+                  className={styles.thumbnailItem}
+                  onClick={() =>
+                    setActiveImageModal({
+                      url: p.url,
+                      title: `${t("Scale photo")} · ${line.name}`,
+                    })
+                  }
+                >
+                  <img src={p.url} alt="" className={styles.thumbnailImg} />
+                </div>
+              ))}
+            </div>
+          )
+        ) : isPending && canReceiveReturn ? (
+          <>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "0.75rem",
+                flexWrap: "wrap",
+              }}
+            >
+              <input
+                type="number"
+                min="0"
+                step="any"
+                className={styles.editInput}
+                style={{ width: 90 }}
+                value={receiveQtyMap[line.id] ?? String(pendingAmount)}
+                onChange={(e) =>
+                  setReceiveQtyMap((prev) => ({
+                    ...prev,
+                    [line.id]: e.target.value,
+                  }))
+                }
+              />
+              <span className="tiny muted">{line.unit}</span>
+              <label style={{ display: "inline-flex", cursor: "pointer" }}>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  icon="camera"
+                  iconOnly
+                  title={t("Add weighing photo")}
+                  onClick={(e) => {
+                    const inputElem = (e.currentTarget as HTMLElement)
+                      .nextElementSibling as HTMLInputElement;
+                    inputElem?.click();
+                  }}
+                />
+                <input
+                  type="file"
+                  accept="image/*"
+                  style={{ display: "none" }}
+                  onChange={(e) =>
+                    handleUploadReceiveWeighPhoto(line.id, e)
+                  }
+                />
+              </label>
+              {photos.length > 0 && (
+                <div className={styles.thumbnailsContainer}>
+                  {photos.map((p) => (
+                    <div
+                      key={p.id}
+                      className={styles.thumbnailItem}
+                      style={{ width: 32, height: 32 }}
+                      onClick={() =>
+                        setActiveImageModal({
+                          url: p.url,
+                          title: `${t("Scale photo")} · ${line.name}`,
+                          receiveLineId: line.id,
+                          receivePhotoId: p.id,
+                        })
+                      }
+                    >
+                      <img
+                        src={p.url}
+                        alt=""
+                        className={styles.thumbnailImg}
+                      />
+                      <div
+                        className={styles.thumbnailHoverTrash}
+                        title={t("Delete image")}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRemoveReceiveWeighPhoto(line.id, p.id);
+                        }}
+                      >
+                        <Icon name="trash" size={14} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <Button
+              type="button"
+              variant="secondary"
+              buttonStyle="fullWidth"
+              onClick={() => onConfirm(line.id)}
+              disabled={confirming}
+            >
+              {confirming ? t("Saving…") : t("Confirm received & weighed")}
+            </Button>
+          </>
+        ) : (
+          <p className="tiny muted">
+            {order?.return_received
+              ? t(
+                  "Received — waiting for an admin to update the Accurate documents and decide.",
+                )
+              : t(
+                  "Coming back to the warehouse — waiting for the warehouse to receive & verify the goods.",
+                )}
+          </p>
+        )}
+      </div>
+    );
+  }
+
   /** INBOUND RETURN — the replacement was ordered before the goods came back;
    *  the warehouse receives + weighs them here, in parallel, whatever stage
-   *  the replacement is now at. Verified weight moves from `inbound_return`
+   *  the replacement is now at. Per-LINE confirm, same as
+   *  `handleConfirmReturnLine`. Verified weight moves from `inbound_return`
    *  (the snapshot taken at settle time) into `returned` — the same field
    *  the read-only Return Settlement card and the normal receive flow both
    *  read — so the record looks identical regardless of which path produced
    *  it. Ported from the prototype's `receiveInbound` (Dev-OrderDetail.jsx:465-475). */
-  async function handleReceiveInbound() {
+  async function handleConfirmInboundLine(lineId: string) {
     if (!id || confirmingInbound) return;
+    const line = lines.find((l) => l.id === lineId);
+    if (!line) return;
     setConfirmingInbound(true);
-    const inboundLines = lines.filter((l) => Number(l.inbound_return) > 0);
-    for (const l of inboundLines) {
-      const verifiedRaw = receiveQtyMap[l.id];
-      const verified =
-        verifiedRaw != null ? parseFloat(verifiedRaw) || 0 : Number(l.inbound_return);
-      const res = await updateOrderLine(l.id, {
-        returned: verified,
-        inbound_return: null,
+    const verifiedRaw = receiveQtyMap[lineId];
+    const verified =
+      verifiedRaw != null
+        ? parseFloat(verifiedRaw) || 0
+        : Number(line.inbound_return);
+    const res = await updateOrderLine(lineId, {
+      returned: verified,
+      inbound_return: null,
+      return_verified: true,
+    });
+    if (res.error || !res.data) {
+      alert(`Failed to update "${line.name}": ${res.error}`, {
+        title: t("Couldn't update line"),
       });
-      if (res.error) {
-        alert(`Failed to update "${l.name}": ${res.error}`, {
-          title: t("Couldn't update line"),
-        });
-        setConfirmingInbound(false);
-        return;
-      }
+      setConfirmingInbound(false);
+      return;
     }
-    const res = await updateOrder(id, {
+    const updatedLines = lines.map((l) => (l.id === lineId ? res.data! : l));
+    setLines(updatedLines);
+    const stillPending = updatedLines.some((l) => Number(l.inbound_return) > 0);
+    if (stillPending) {
+      setConfirmingInbound(false);
+      return;
+    }
+    const orderRes = await updateOrder(id, {
       return_received: true,
       return_inbound: false,
     });
-    if (!res.error && res.data) {
-      setOrder(res.data);
-      const linesRes = await readOrderLines({
-        filter: { order_id: { _eq: id } },
-      });
-      if (!linesRes.error) setLines(linesRes.data ?? []);
+    if (!orderRes.error && orderRes.data) {
+      setOrder(orderRes.data);
       await appendOrderHistory({
         order_id: id,
         what: "Returned goods received & weighed at the warehouse (replacement already in progress)",
@@ -3107,7 +3375,7 @@ export function OrderDetail() {
       const hRes = await readOrderHistory(id);
       if (!hRes.error) setHistory(hRes.data ?? []);
     } else {
-      alert(`Failed to confirm receipt: ${res.error}`, {
+      alert(`Failed to confirm receipt: ${orderRes.error}`, {
         title: t("Couldn't confirm receipt"),
       });
     }
@@ -3125,6 +3393,7 @@ export function OrderDetail() {
       const res = await updateOrderLine(l.id, {
         inbound_return: Number(l.returned),
         returned: 0,
+        return_verified: false,
       });
       if (res.error) {
         alert(`Failed to update "${l.name}": ${res.error}`, {
@@ -3161,6 +3430,25 @@ export function OrderDetail() {
   }
 
   /** SETTLE bucket — admin picks the Accurate document type, branching to close or replacement. */
+  /** SETTLE bucket, return-note path — optional photo of the printed Sales
+   *  Return Note, staged here and attached as a `return_documents` row (kind
+   *  `note`) once Confirm is pressed. Ported from the prototype's
+   *  `retNotePhoto` (`Dev-OrderDetail.jsx:94,1249`). */
+  async function handleUploadReturnNotePhoto(
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const uploadRes = await uploadFile(file);
+    if (uploadRes.error || !uploadRes.data) {
+      alert(`Upload failed: ${uploadRes.error}`, { title: t("Upload failed") });
+      e.target.value = "";
+      return;
+    }
+    setNoteFileId(uploadRes.data.id);
+    e.target.value = "";
+  }
+
   async function handleConfirmSettle() {
     if (!id || !order || confirmingSettle) return;
     const doc = RETURN_DOC_OPTIONS.find((d) => d.key === selectedDocType);
@@ -3180,6 +3468,7 @@ export function OrderDetail() {
         const res = await updateOrderLine(l.id, {
           returned: 0,
           delivered: 0,
+          return_verified: false,
           ...(pending ? { inbound_return: Number(l.returned) } : {}),
         });
         if (res.error) {
@@ -3244,7 +3533,26 @@ export function OrderDetail() {
         });
       }
     } else {
-      // return-note: nothing physical goes out — closes immediately.
+      // return-note: nothing physical goes out — closes immediately. The
+      // return-note photo is optional (matches the prototype's own "·
+      // optional" label) — saved first, same order as the signed-doc path,
+      // so a failed attach doesn't leave the order closed with a silently
+      // lost photo.
+      if (noteFileId) {
+        const docRes = await createReturnDocument({
+          order_id: id,
+          kind: "note",
+          photo_id: noteFileId,
+        });
+        if (docRes.error) {
+          alert(`Failed to save the return note photo: ${docRes.error}`, {
+            title: t("Couldn't save document"),
+          });
+          setConfirmingSettle(false);
+          return;
+        }
+        setReturnDocs((prev) => [docRes.data!, ...prev]);
+      }
       const res = await updateOrder(id, {
         return_doc: doc.label,
         return_settle: "done",
@@ -3259,6 +3567,7 @@ export function OrderDetail() {
         });
         const hRes = await readOrderHistory(id);
         if (!hRes.error) setHistory(hRes.data ?? []);
+        setNoteFileId(null);
       } else {
         alert(`Failed to close the return: ${res.error}`, {
           title: t("Couldn't close return"),
@@ -3485,6 +3794,12 @@ export function OrderDetail() {
                     Replacement
                   </div>
                 )}
+                {isHold && (
+                  <div className={`${styles.pill} ${styles.pillWarning}`}>
+                    <Icon name="pause" size={16} />
+                    On Hold
+                  </div>
+                )}
               </div>
             </div>
           </header>
@@ -3626,6 +3941,236 @@ export function OrderDetail() {
                   </p>
                 )}
               </div>
+            </Card>
+          ) : isReturned && !isCancelled ? (
+            <Card className={styles.errorCard}>
+              <div className={styles.heading}>
+                <span>{t("Customer return")}</span>
+              </div>
+
+              {lines
+                .filter((l) => Number(l.returned) > 0)
+                .map((l) =>
+                  renderReturnLineBox(
+                    l,
+                    Number(l.returned),
+                    handleConfirmReturnLine,
+                    confirmingReceive,
+                  ),
+                )}
+
+              {inSettleBucket && (
+                <div style={{ marginTop: "1rem" }}>
+                  <p className={styles.fieldLabel}>
+                    {t("Admin Action Required")}
+                  </p>
+                  {canDecideReturn ? (
+                    <>
+                      <p style={{ margin: "0.25rem 0 0.75rem" }}>
+                        {order.return_received
+                          ? t(
+                              "Received — waiting for an admin to update the Accurate documents and decide.",
+                            )
+                          : lines.some(
+                                (l) =>
+                                  Number(l.returned) > 0 &&
+                                  isWeighedUnit(l.unit),
+                              )
+                            ? t(
+                                "Goods not back yet — counted quantities are exact; the kg/loaf credit is provisional until the warehouse weighs the return.",
+                              )
+                            : t(
+                                "Goods not back yet — quantities are exact (counted). You can prepare everything now.",
+                              )}
+                      </p>
+                      <select
+                        className={styles.editInput}
+                        style={{ width: "100%", marginBottom: "0.75rem" }}
+                        value={selectedDocType}
+                        onChange={(e) => setSelectedDocType(e.target.value)}
+                      >
+                        <option value="">
+                          {t("— how is this settled in Accurate? —")}
+                        </option>
+                        {RETURN_DOC_OPTIONS.map((opt) => (
+                          <option key={opt.key} value={opt.key}>
+                            {t(opt.label)}
+                          </option>
+                        ))}
+                      </select>
+                      {selectedDocType === "return-note" && (
+                        <>
+                          <label
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "0.5rem",
+                              cursor: "pointer",
+                              marginBottom: "0.75rem",
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={retPrinted}
+                              onChange={(e) =>
+                                setRetPrinted(e.target.checked)
+                              }
+                            />
+                            {t("Input in Accurate & printed")}
+                          </label>
+                          <label
+                            className={styles.actionBtn}
+                            style={{
+                              cursor: "pointer",
+                              display: "inline-block",
+                              marginBottom: "0.75rem",
+                            }}
+                          >
+                            <input
+                              type="file"
+                              accept="image/*"
+                              style={{ display: "none" }}
+                              onChange={handleUploadReturnNotePhoto}
+                            />
+                            {noteFileId
+                              ? t("Photo attached ✓")
+                              : `${t("Photo of the return note")} · ${t("optional")}`}
+                          </label>
+                        </>
+                      )}
+                      <Button
+                        type="button"
+                        variant="primary"
+                        buttonStyle="fullWidth"
+                        icon="check"
+                        onClick={handleConfirmSettle}
+                        disabled={
+                          !selectedDocType ||
+                          confirmingSettle ||
+                          (selectedDocType === "return-note" && !retPrinted)
+                        }
+                      >
+                        {confirmingSettle
+                          ? t("Saving…")
+                          : !selectedDoc
+                            ? t("Confirm & close")
+                            : selectedDoc.replacement
+                              ? t("Send replacement — back to Cold Storage")
+                              : selectedDoc.key === "revise-return"
+                                ? t("Send revised DO/SI for signing")
+                                : t("Confirm & close")}
+                      </Button>
+                      {selectedDoc &&
+                        !selectedDoc.replacement &&
+                        selectedDoc.key !== "revise-return" &&
+                        !order.return_received && (
+                          <p
+                            className="tiny muted"
+                            style={{ margin: "0.5rem 0 0" }}
+                          >
+                            {t(
+                              "The order closes only after the warehouse receives the goods.",
+                            )}
+                          </p>
+                        )}
+                      {selectedDoc && (
+                        <p
+                          className="tiny muted"
+                          style={{ margin: "0.375rem 0 0" }}
+                        >
+                          {selectedDoc.key === "single-replace"
+                            ? t(
+                                "ONE document: the original DO/SI is revised to show what the customer finally keeps incl. the replacement. Best for a like-for-like swap.",
+                              )
+                            : selectedDoc.key === "separate-replace"
+                              ? t(
+                                  "TWO documents: a Sales Return Note credits what came back + a NEW DO/SI for the replacement shipment. Best when the replacement differs (item / kg / price) or ships another day.",
+                                )
+                              : selectedDoc.key === "revise-return"
+                                ? t(
+                                    "The revised DO/SI goes to the customer to sign before the order closes.",
+                                  )
+                                : t(
+                                    "Returned goods credited — the order closes.",
+                                  )}
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <p className="tiny muted">
+                      {t("Waiting for an admin to update Accurate & decide.")}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {inSignBucket && (
+                <div className={styles.followUpRow}>
+                  <Icon
+                    style={{
+                      flexShrink: 0,
+                      color: "var(--state-error)",
+                    }}
+                    name="documentWait"
+                  />
+                  <div className={styles.followUpMain}>
+                    <p className={styles.fieldLabel}>
+                      {t("Awaiting Signed DO/SI")}
+                    </p>
+
+                    {latestSignedDoc ? (
+                      <p className="tiny muted">
+                        {t(
+                          "Signed document on file — order closes once received.",
+                        )}
+                      </p>
+                    ) : canSignReturn ? (
+                      <label
+                        className={styles.actionBtn}
+                        style={{ cursor: "pointer", display: "inline-block" }}
+                      >
+                        <input
+                          type="file"
+                          accept="image/*"
+                          style={{ display: "none" }}
+                          onChange={handleUploadSignedDoc}
+                        />
+                        {signedDocFileId
+                          ? t("Photo attached ✓")
+                          : t("Attach signed document")}
+                      </label>
+                    ) : (
+                      <p className="tiny muted">
+                        {t("Revised DO/SI is out with the customer to sign.")}
+                      </p>
+                    )}
+                  </div>
+
+                  {!latestSignedDoc && canSignReturn && (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={handleMarkSignedAndClose}
+                      disabled={!signedDocFileId || closingSigned}
+                    >
+                      {closingSigned ? t("Saving…") : t("Mark signed & close")}
+                    </Button>
+                  )}
+                </div>
+              )}
+
+              {order.is_replacement && !isDelivered && (
+                <p className="tiny muted">
+                  {t("Replacement re-entered the pipeline and is currently at")}{" "}
+                  <strong>
+                    {t(
+                      PIPELINE_STAGES.find((s) => s.key === stage)?.label ??
+                        stage,
+                    )}
+                  </strong>
+                  .
+                </p>
+              )}
             </Card>
           ) : (
             <div
@@ -4316,160 +4861,152 @@ export function OrderDetail() {
           {order.return_doc && (
             <Card>
               <div className={styles.heading}>{t("Return settlement")}</div>
-              <p className={styles.muted}>
-                {t("Document")} · <strong>{order.return_doc}</strong>
-              </p>
-              {lines
-                .filter((l) => Number(l.returned) > 0)
-                .map((l) => (
-                  <p key={l.id} className={styles.muted}>
-                    {l.name} · {t("returned")}{" "}
-                    <strong>
-                      {l.returned} {l.unit}
-                    </strong>
-                  </p>
-                ))}
-              {(lines.some((l) => l.returned_weigh_photo) ||
-                latestSignedDoc?.photo_id) && (
-                <div
-                  style={{
-                    display: "flex",
-                    gap: "0.5rem",
-                    flexWrap: "wrap",
-                    marginTop: "0.5rem",
-                  }}
-                >
+              <div className={styles.cardContent}>
+                <div className={styles.docList}>
+                  <div className={styles.docRow}>
+                    <p>
+                      {t("Document")} · <strong>{order.return_doc}</strong>
+                    </p>
+                  </div>
+
                   {lines
-                    .filter((l) => l.returned_weigh_photo)
+                    .filter((l) => Number(l.returned) > 0)
                     .map((l) => (
-                      <img
-                        key={l.id}
-                        src={getAssetUrl(l.returned_weigh_photo!)}
-                        alt=""
-                        className={styles.thumbnailImg}
-                      />
+                      <div key={l.id} className={styles.docRow}>
+                        <div className={styles.docTop}>
+                          <p>
+                            {l.name} · {t("returned")}{" "}
+                            <strong>
+                              {l.returned} {l.unit}
+                            </strong>
+                          </p>
+                          {(receivePhotosMap[l.id]?.length ?? 0) > 0 && (
+                            <div className={styles.thumbnailsContainer}>
+                              {receivePhotosMap[l.id]!.map((p) => (
+                                <div
+                                  key={p.id}
+                                  className={styles.thumbnailItem}
+                                  onClick={() =>
+                                    setActiveImageModal({
+                                      url: p.url,
+                                      title: `${t("Scale photo")} · ${l.name}`,
+                                      receiveLineId: l.id,
+                                      receivePhotoId: p.id,
+                                    })
+                                  }
+                                >
+                                  <img
+                                    src={p.url}
+                                    alt=""
+                                    className={styles.thumbnailImg}
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     ))}
-                  {latestSignedDoc?.photo_id && (
-                    <img
-                      src={getAssetUrl(latestSignedDoc.photo_id)}
-                      alt=""
-                      className={styles.thumbnailImg}
-                    />
+
+                  {returnDocs.some((d) => d.photo_id) && (
+                    <div className={styles.docRow}>
+                      <div className={styles.docTop}>
+                        <p className={styles.docType}>
+                          {t("Return documents")}
+                        </p>
+                        <div className={styles.thumbnailsContainer}>
+                          {returnDocs
+                            .filter((d) => d.photo_id)
+                            .map((d) => (
+                              <div
+                                key={d.id}
+                                className={styles.thumbnailItem}
+                                onClick={() =>
+                                  setActiveImageModal({
+                                    url: getAssetUrl(d.photo_id!),
+                                    title:
+                                      RETURN_DOC_KIND_LABELS[d.kind] ?? d.kind,
+                                  })
+                                }
+                              >
+                                <img
+                                  src={getAssetUrl(d.photo_id!)}
+                                  alt=""
+                                  className={styles.thumbnailImg}
+                                />
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+                    </div>
                   )}
                 </div>
-              )}
+              </div>
             </Card>
           )}
 
           {/* Incoming Return — the replacement was ordered before the goods
               came back; the warehouse receives + verifies them here, in
               parallel, whatever stage the replacement is now at. Same
-              `canProcessReturns` gate as the "Awaiting Return" bucket inside
-              the Customer Return card (isReturned-only) — this is the
+              visual chrome as the Customer Return card above — this is the
               stage-independent counterpart for a replacement that already
-              re-entered the pipeline. Ported from the prototype's
+              re-entered the pipeline. `!isReturned` is a defensive guard,
+              not just a stylistic choice: `return_inbound` should only ever
+              be true once `stage` has moved past `returned` (settling into
+              a replacement flips both in the same write) — but a stale or
+              hand-edited row can leave `return_inbound` true while `stage`
+              never actually left `returned`, which would otherwise render
+              this card *and* the isReturned card above simultaneously for
+              the same order. Ported from the prototype's
               `order.returnInbound` card (Dev-OrderDetail.jsx:1535-1561). */}
-          {order.return_inbound && (
-            <Card className={styles.warningCard} style={{ borderColor: "var(--state-error)" }}>
+          {!isReturned && order.return_inbound && (
+            <Card className={styles.errorCard}>
               <div className={styles.heading}>
-                {t("Incoming return — receive & verify")}
+                <span>{t("Customer return")}</span>
               </div>
-              <p className={styles.muted}>
+              <p className={styles.fieldLabel} style={{ margin: 0 }}>
+                {t("Warehouse — receive & verify")}
+              </p>
+              <p style={{ margin: "0.25rem 0 0.75rem" }}>
                 {t(
                   "The replacement is already in the pipeline — weigh/verify the returned goods when they arrive.",
                 )}
               </p>
               {lines
-                .filter((l) => Number(l.inbound_return) > 0)
-                .map((l) => (
-                  <div
-                    key={l.id}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "0.75rem",
-                      marginBottom: "0.5rem",
-                    }}
-                  >
-                    <span style={{ flex: 1 }}>{l.name}</span>
-                    <input
-                      type="number"
-                      min="0"
-                      step="any"
-                      className={styles.editInput}
-                      style={{ width: 90 }}
-                      value={receiveQtyMap[l.id] ?? String(l.inbound_return ?? 0)}
-                      disabled={!canProcessReturns}
-                      onChange={(e) =>
-                        setReceiveQtyMap((prev) => ({
-                          ...prev,
-                          [l.id]: e.target.value,
-                        }))
-                      }
-                    />
-                    <span className="tiny muted">{l.unit}</span>
-                    {canProcessReturns && (
-                      <label
-                        className={styles.actionBtn}
-                        style={{ cursor: "pointer" }}
-                      >
-                        <input
-                          type="file"
-                          accept="image/*"
-                          style={{ display: "none" }}
-                          onChange={(e) =>
-                            handleUploadReceiveWeighPhoto(l.id, e)
-                          }
-                        />
-                        <Icon name="camera" size={16} />
-                      </label>
-                    )}
-                    {l.returned_weigh_photo && (
-                      <img
-                        src={getAssetUrl(l.returned_weigh_photo)}
-                        alt=""
-                        className={styles.thumbnailImg}
-                        style={{ width: 32, height: 32 }}
-                      />
-                    )}
-                  </div>
-                ))}
-              {canProcessReturns && (
-                <Button
-                  type="button"
-                  variant="primary"
-                  onClick={handleReceiveInbound}
-                  disabled={confirmingInbound}
-                >
-                  {confirmingInbound
-                    ? t("Saving…")
-                    : t("Confirm received & weighed")}
-                </Button>
-              )}
+                .filter((l) => Number(l.inbound_return) > 0 || l.return_verified)
+                .map((l) =>
+                  renderReturnLineBox(
+                    l,
+                    Number(l.inbound_return),
+                    handleConfirmInboundLine,
+                    confirmingInbound,
+                  ),
+                )}
+              <p className="tiny muted" style={{ marginTop: "0.75rem" }}>
+                {t(
+                  "Waiting for an admin to update Accurate & decide — this can run before the goods arrive.",
+                )}
+              </p>
             </Card>
           )}
-          {!order.return_inbound &&
+          {!isReturned &&
+            !order.return_inbound &&
             order.return_received &&
             lines.some((l) => Number(l.returned) > 0) &&
             !isDelivered &&
             !isCancelled && (
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: "0.5rem",
-                  marginBottom: "1rem",
-                }}
-              >
-                <span className="tiny muted">
+              <div className={styles.undoRow}>
+                <div className={styles.left}>
+                  <Icon name="infoCircle" />
                   {t("Incoming return received")}
-                </span>
-                {canProcessReturns && (
+                </div>
+                {canReceiveReturn && (
                   <Button
                     type="button"
-                    variant="ghost"
+                    variant="tertiary"
+                    icon="undo"
                     size="sm"
+                    className={styles.inlineButton}
                     onClick={handleUndoInbound}
                     disabled={undoingInbound}
                   >
@@ -5793,6 +6330,7 @@ export function OrderDetail() {
                   <Button
                     type="button"
                     variant="secondary"
+                    className={styles.inlineButton}
                     onClick={handleUndoFinanceClear}
                     disabled={approvingFinance}
                   >
@@ -5922,198 +6460,6 @@ export function OrderDetail() {
                 </Card>
               )}
             </div>
-          )}
-
-          {/* Returns Sub-Flow — parallel buckets (receive / settle / sign) */}
-          {isReturned && !isCancelled && (
-            <Card>
-              <div className={styles.heading}>
-                <span>{t("Customer Return")}</span>
-              </div>
-              {order.returned_reason && (
-                <p className="tiny muted">
-                  {t("Reason:")} {order.returned_reason}
-                </p>
-              )}
-
-              {inReceiveBucket && (
-                <div style={{ marginBottom: "1rem" }}>
-                  <h4 style={{ margin: "0.5rem 0" }}>{t("Awaiting Return")}</h4>
-                  {lines
-                    .filter((l) => Number(l.returned) > 0)
-                    .map((l) => (
-                      <div
-                        key={l.id}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "0.75rem",
-                          marginBottom: "0.5rem",
-                        }}
-                      >
-                        <span style={{ flex: 1 }}>{l.name}</span>
-                        <input
-                          type="number"
-                          min="0"
-                          step="any"
-                          className={styles.editInput}
-                          style={{ width: 90 }}
-                          value={receiveQtyMap[l.id] ?? String(l.returned ?? 0)}
-                          disabled={!canProcessReturns}
-                          onChange={(e) =>
-                            setReceiveQtyMap((prev) => ({
-                              ...prev,
-                              [l.id]: e.target.value,
-                            }))
-                          }
-                        />
-                        <span className="tiny muted">{l.unit}</span>
-                        {canProcessReturns && (
-                          <label
-                            className={styles.actionBtn}
-                            style={{ cursor: "pointer" }}
-                          >
-                            <input
-                              type="file"
-                              accept="image/*"
-                              style={{ display: "none" }}
-                              onChange={(e) =>
-                                handleUploadReceiveWeighPhoto(l.id, e)
-                              }
-                            />
-                            <Icon name="camera" size={16} />
-                          </label>
-                        )}
-                        {l.returned_weigh_photo && (
-                          <img
-                            src={getAssetUrl(l.returned_weigh_photo)}
-                            alt=""
-                            className={styles.thumbnailImg}
-                            style={{ width: 32, height: 32 }}
-                          />
-                        )}
-                      </div>
-                    ))}
-                  {canProcessReturns && (
-                    <Button
-                      type="button"
-                      variant="primary"
-                      onClick={handleConfirmReceive}
-                      disabled={confirmingReceive}
-                    >
-                      {confirmingReceive
-                        ? "Saving…"
-                        : "Confirm received & weighed"}
-                    </Button>
-                  )}
-                </div>
-              )}
-
-              {inSettleBucket && (
-                <div style={{ marginBottom: "1rem" }}>
-                  <h4 style={{ margin: "0.5rem 0" }}>
-                    {t("Admin Action Required")}
-                  </h4>
-                  {canProcessReturns ? (
-                    <>
-                      {RETURN_DOC_OPTIONS.map((opt) => (
-                        <label
-                          key={opt.key}
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "0.5rem",
-                            marginBottom: "0.375rem",
-                          }}
-                        >
-                          <input
-                            type="radio"
-                            name="returnDocType"
-                            value={opt.key}
-                            checked={selectedDocType === opt.key}
-                            onChange={() => setSelectedDocType(opt.key)}
-                          />
-                          {t(opt.label)}
-                        </label>
-                      ))}
-                      <Button
-                        type="button"
-                        variant="primary"
-                        onClick={handleConfirmSettle}
-                        disabled={!selectedDocType || confirmingSettle}
-                      >
-                        {confirmingSettle ? t("Saving…") : t("Confirm")}
-                      </Button>
-                    </>
-                  ) : (
-                    <p className="tiny muted">
-                      {t("Waiting for an admin to update Accurate & decide.")}
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {inSignBucket && (
-                <div style={{ marginBottom: "1rem" }}>
-                  <h4 style={{ margin: "0.5rem 0" }}>
-                    {t("Awaiting Signed DO/SI")}
-                  </h4>
-                  {latestSignedDoc ? (
-                    <p className="tiny muted">
-                      {t(
-                        "Signed document on file — order closes once received.",
-                      )}
-                    </p>
-                  ) : canProcessReturns ? (
-                    <>
-                      <label
-                        className={styles.actionBtn}
-                        style={{ cursor: "pointer", display: "inline-block" }}
-                      >
-                        <input
-                          type="file"
-                          accept="image/*"
-                          style={{ display: "none" }}
-                          onChange={handleUploadSignedDoc}
-                        />
-                        {signedDocFileId
-                          ? t("Photo attached ✓")
-                          : t("Attach signed document")}
-                      </label>
-                      <div>
-                        <Button
-                          type="button"
-                          variant="primary"
-                          onClick={handleMarkSignedAndClose}
-                          disabled={!signedDocFileId || closingSigned}
-                        >
-                          {closingSigned
-                            ? t("Saving…")
-                            : t("Mark signed & close")}
-                        </Button>
-                      </div>
-                    </>
-                  ) : (
-                    <p className="tiny muted">
-                      {t("Revised DO/SI is out with the customer to sign.")}
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {order.is_replacement && !isDelivered && (
-                <p className="tiny muted">
-                  {t("Replacement re-entered the pipeline and is currently at")}{" "}
-                  <strong>
-                    {t(
-                      PIPELINE_STAGES.find((s) => s.key === stage)?.label ??
-                        stage,
-                    )}
-                  </strong>
-                  .
-                </p>
-              )}
-            </Card>
           )}
 
           {/*
@@ -6332,21 +6678,30 @@ export function OrderDetail() {
                   );
                   setActiveImageModal(null);
                 }
-              : activeImageModal?.attachmentId
+              : activeImageModal?.receiveLineId &&
+                  activeImageModal?.receivePhotoId
                 ? () => {
-                    handleDeleteDocument(activeImageModal.attachmentId!);
+                    handleRemoveReceiveWeighPhoto(
+                      activeImageModal.receiveLineId!,
+                      activeImageModal.receivePhotoId!,
+                    );
                     setActiveImageModal(null);
                   }
-                : activeImageModal?.stagedProofSlot &&
-                    activeImageModal?.stagedProofIndex !== undefined
+                : activeImageModal?.attachmentId
                   ? () => {
-                      handleRemoveStagedProofPhoto(
-                        activeImageModal.stagedProofSlot!,
-                        activeImageModal.stagedProofIndex!,
-                      );
+                      handleDeleteDocument(activeImageModal.attachmentId!);
                       setActiveImageModal(null);
                     }
-                  : undefined
+                  : activeImageModal?.stagedProofSlot &&
+                      activeImageModal?.stagedProofIndex !== undefined
+                    ? () => {
+                        handleRemoveStagedProofPhoto(
+                          activeImageModal.stagedProofSlot!,
+                          activeImageModal.stagedProofIndex!,
+                        );
+                        setActiveImageModal(null);
+                      }
+                    : undefined
         }
       />
     </div>

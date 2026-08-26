@@ -46,7 +46,19 @@ export type Capability =
   | 'seeDocuments'
   | 'dispatch'
   | 'uploadDeliveryProof'
-  | 'processReturns'
+  // Split from the single `processReturns` (2026-08-26) to match the
+  // prototype's own two distinct role checks on the returns panel
+  // (`Dev-OrderDetail.jsx:1094-1095`): `canReceive` (warehouse physically
+  // receives/weighs the goods back in) vs `canDecide` (admin picks the
+  // Accurate document type). Warehouse and Admin never overlap on either —
+  // a Warehouse session should never see the Settle dropdown, an Admin
+  // session should never see the receive-weigh controls.
+  | 'receiveReturns'
+  | 'decideReturns'
+  // The courier who carries the revised DO/SI out for signing can capture
+  // the signed photo (`canSign`, `Dev-OrderDetail.jsx:1096` —
+  // `['Admin','Courier','Owner']`), distinct from both of the above.
+  | 'signReturns'
   | 'manageRoles'
   | 'manageSettings'
   | 'manage_products'
@@ -114,7 +126,8 @@ export const ALLOW: Record<Exclude<Role, 'Owner'>, Partial<Record<Capability, bo
     advanceStage: true,
     printDocuments: true,
     seeDocuments: true,
-    processReturns: true,
+    decideReturns: true,
+    signReturns: true,
     manage_products: true,
     flag_out_of_stock: true,
     manage_customers: true,
@@ -147,8 +160,10 @@ export const ALLOW: Record<Exclude<Role, 'Owner'>, Partial<Record<Capability, bo
     flag_out_of_stock: true,
     // Warehouse completes the "receive" bucket of a return (weigh the goods
     // back in) — no Owner Settings page exists yet to grant this per-role,
-    // so it defaults on rather than blocking the workflow.
-    processReturns: true,
+    // so it defaults on rather than blocking the workflow. Matches the
+    // prototype's `canReceive` exactly (`Dev-OrderDetail.jsx:1094`) —
+    // Warehouse never gets `decideReturns` (that's Admin's job).
+    receiveReturns: true,
     viewPickList: true,
     browseProducts: true,
     // Per Settings-Owner.png's Roles & Permissions grid: Warehouse sees order
@@ -187,6 +202,9 @@ export const ALLOW: Record<Exclude<Role, 'Owner'>, Partial<Record<Capability, bo
     viewDeliveryRun: true,
     browseProducts: true,
     exportCSV: true,
+    // The courier physically carries the revised DO/SI out for signing and
+    // captures the signed photo (`canSign`, Dev-OrderDetail.jsx:1096).
+    signReturns: true,
   },
 };
 
@@ -206,7 +224,9 @@ export const CAPABILITIES: Capability[] = [
   'seeDocuments',
   'dispatch',
   'uploadDeliveryProof',
-  'processReturns',
+  'receiveReturns',
+  'decideReturns',
+  'signReturns',
   'manageRoles',
   'manageSettings',
   'manage_products',

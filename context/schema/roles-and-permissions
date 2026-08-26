@@ -40,7 +40,7 @@ The order creator and manager. Broad access to order + customer + product data.
 | `line_weighings` | ✅ | ✅ | ✅ | ✅ | Full CRUD (2026-08-18) — Admin covers Cold Storage weighing as floor helper (`helpOtherStages`) |
 | `line_photos` | ✅ | ✅ | ✅ | ✅ | Full CRUD (2026-08-18) — same floor-helper reason as `line_weighings` |
 | `line_weighing_photos` | ✅ | ✅ | ✅ | ✅ | Full CRUD — same floor-helper reason as `line_weighings` |
-| `line_return_photos` | ❌ | ✅ | ❌ | ❌ | Read-only |
+| `line_return_photos` | ✅ | ✅ | ✅ | ✅ | Full CRUD (2026-08-24) — was read-only when this table only held the courier's refusal-evidence photos; Admin also has `processReturns`, and the Awaiting Return/Incoming Return cards' multi-photo weigh-back capture now writes here too, so Admin needs the same CRUD Warehouse already had |
 | `delivery_proofs` | ❌ | ✅ | ❌ | ❌ | Read-only — sees if delivery happened |
 | `draft_weighings` | ❌ | ✅ | ❌ | ❌ | Read-only |
 | `courier_locations` | ❌ | ✅ | ❌ | ❌ | Read-only — sees courier GPS |
@@ -183,7 +183,7 @@ Picks up, delivers, uploads 3 proof photos, broadcasts GPS.
 | `line_weighings` | CRUD | CRUD | CRUD | R | — | — |
 | `line_photos` | CRUD | CRUD | CRUD | R | R | — |
 | `line_weighing_photos` | CRUD | CRUD | CRUD | R | R | — |
-| `line_return_photos` | CRUD | R | CRUD | R | — | — |
+| `line_return_photos` | CRUD | CRUD | CRUD | R | — | — |
 | `order_history` | CRUD | CR | CR | CR | CR | CR |
 | `delivery_proofs` | CRUD | R | CRU | R | — | CRU |
 | `draft_weighings` | CRUD | R | CRUD | R | — | — |

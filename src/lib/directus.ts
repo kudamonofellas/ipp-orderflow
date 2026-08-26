@@ -1337,7 +1337,8 @@ export async function deleteLineWeighingPhoto(
   }
 }
 
-/** Courier's refusal-evidence photos per line, captured when an order is returned. */
+/** Return-evidence photos per line — courier's refusal-evidence at delivery
+ *  plus the warehouse's receive/weigh-back photos, both stored here. */
 export async function readLineReturnPhotos(
   lineIds: string[],
 ): Promise<DirectusResult<LineReturnPhotosCollection[]>> {
