@@ -1100,46 +1100,9 @@
   color: var(--text-primary);
 }
 
-/* Customer Return / Incoming Return — one bordered box per returned line,
-   shared between the direct (isReturned-stage) and parallel receive flows. */
-.returnLineBox {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  padding: var(--space-md);
-}
-
-.returnLineBox + .returnLineBox {
-  margin-top: var(--space-sm);
-}
-
-.returnLineBoxConfirmed {
-  background-color: color-mix(in srgb, var(--accent-primary), transparent 94%);
-  border-color: var(--accent-primary);
-}
-
-.returnLineTop {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-sm);
-}
-
-.returnLineName {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.returnLineStatus {
-  color: var(--accent-primary);
-  font-weight: 600;
-  white-space: nowrap;
-}
+/* returnLineBox and friends moved to
+   src/components/ReturnLineBox/ReturnLineBox.module.css (2026-08-27) — that
+   component has its own module and no longer imports this one. */
 
 .docNumber {
   font-weight: 600;
@@ -1380,4 +1343,29 @@
   font: var(--text-h4);
   font-weight: 700;
   color: var(--state-error);
+}
+
+.hints {
+  display: flex;
+  flex-direction: column;
+}
+
+.infoHint {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  font: var(--text-caption);
+}
+
+.iconWrapper {
+  flex-shrink: 0;
+  padding-top: 2px;
+}
+
+.separator {
+  height: 1px;
+  background: var(--border-subtle);
+  flex-shrink: 0;
+  flex: 1;
 }

@@ -23,6 +23,10 @@
   border-color: color-mix(in srgb, var(--border-default) 40%, transparent);
 }
 
+.orderGroup:hover .totalRow {
+  border-color: color-mix(in srgb, var(--border-default) 40%, transparent);
+}
+
 .orderGroup tr:first-child td:first-child {
   border-top-left-radius: var(--radius-md);
 }
@@ -90,19 +94,56 @@
 }
 
 .lineRow {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr 50px 60px 140px 140px;
   align-items: center;
   gap: var(--space-md);
 }
 
 .lineName {
-  width: 480px;
   font: var(--text-body);
   color: var(--text-primary);
 }
 
 .lineQty {
   color: var(--text-muted);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.lineUnit {
+  color: var(--text-muted);
+}
+
+.lineUnitPrice {
+  color: var(--text-muted);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.lineSubtotal {
+  color: var(--text-primary);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.totalRow {
+  border-top: 1px solid var(--border-subtle);
+  padding-top: var(--space-sm);
+  margin-top: var(--space-xs);
+}
+
+.totalLabel {
+  color: var(--text-secondary);
+  text-align: right;
+  font-weight: 500;
+}
+
+.totalValue {
+  color: var(--text-primary);
+  text-align: right;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Status cell — stretches the StatusPill so its own internal Replacement

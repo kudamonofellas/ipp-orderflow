@@ -19,6 +19,12 @@
   box-shadow: var(--focus-ring);
 }
 
+/* ===== Content alignment — default (center) needs no class, since
+   .button's own justify-content already centers everything. ===== */
+.alignLeft {
+  justify-content: flex-start;
+}
+
 /* ===== Sizes ===== */
 .sm {
   min-height: 32px;

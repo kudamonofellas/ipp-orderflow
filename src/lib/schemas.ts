@@ -217,6 +217,7 @@ export const OrderLinesCollectionSchema = z.object({
   // step — independent of other lines on the same order (see the
   // per-line-box UI in OrderDetail.tsx).
   return_verified: z.boolean().nullable().optional(),
+  return_verified_at: z.string().nullable().optional(),
 });
 
 /** Directus `order_history` collection row (append-only). */

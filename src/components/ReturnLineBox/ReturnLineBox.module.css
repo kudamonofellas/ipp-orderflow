@@ -1,0 +1,164 @@
+/* One bordered box per returned line, shared between the direct
+   (isReturned-stage) and parallel (Incoming Return) receive flows in
+   OrderDetail.tsx. */
+.returnLineBox {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+}
+
+.returnLineBox + .returnLineBox {
+  margin-top: var(--space-sm);
+}
+
+.returnLineName {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* Kept-by-customer / returned / confirmed pills — matches the prototype's
+   own keptOf()/returned split (Dev-OrderDetail.jsx:1092,1121-1126), styled
+   per context/designs/customer-return/customer_return_admin_04_1.png. */
+.returnPill {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-sm) var(--space-md);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.returnPillLabel {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+/* ── Shared primitives duplicated from OrderDetail.module.css — same
+   patterns used throughout that file. Kept here too rather than
+   cross-importing OrderDetail's module, since this component's whole point
+   is to not depend on its parent page's module. ── */
+
+.muted {
+  font: var(--text-body);
+  color: var(--text-muted);
+}
+
+.detailValue {
+  font: var(--text-body);
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.cardActions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+}
+
+.thumbnailsContainer {
+  display: flex;
+  flex: 1;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.thumbnailItem {
+  position: relative;
+  width: 56px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-default);
+  cursor: pointer;
+  background: var(--bg-surface-hover);
+}
+
+.thumbnailImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  border-radius: calc(var(--radius-sm) - 1px);
+}
+
+.thumbnailHoverTrash {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition:
+    opacity 0.15s ease,
+    background-color 0.15s ease;
+  z-index: 1;
+}
+
+.thumbnailHoverTrash:hover {
+  background: var(--state-error, #d13c3c);
+}
+
+.thumbnailItem:hover .thumbnailHoverTrash {
+  opacity: 1;
+}
+
+/* Touch devices have no hover state — always show the badge so it's reachable */
+@media (hover: none) {
+  .thumbnailHoverTrash {
+    opacity: 1;
+  }
+}
+
+.undoRow {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex: 1;
+}
+
+.inlineButton {
+  padding: 0 !important;
+  background: none !important;
+  height: auto !important;
+  min-height: 0 !important;
+  line-height: 1 !important;
+}
+
+.editInput {
+  background: var(--bg-surface-hover);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: 6px 10px;
+  font: var(--text-body);
+  color: var(--text-primary);
+  width: 100%;
+  height: 40px;
+  box-sizing: border-box;
+}
+
+.editInput:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  background: var(--bg-surface);
+}

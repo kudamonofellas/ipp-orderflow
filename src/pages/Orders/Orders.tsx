@@ -236,8 +236,10 @@ export function Orders() {
               aria-expanded={stageOpen}
               onClick={() => setStageOpen((o) => !o)}
             >
-              {t(STAGE_OPTIONS.find((o) => o.key === stage)?.label ||
-                "All stages")}
+              {t(
+                STAGE_OPTIONS.find((o) => o.key === stage)?.label ||
+                  "All stages",
+              )}
             </Button>
             {stageOpen && (
               <div
@@ -250,6 +252,7 @@ export function Orders() {
                     key={opt.key}
                     type="button"
                     variant="ghost"
+                    align="left"
                     className={[
                       styles.dropdownItem,
                       stage === opt.key ? styles.dropdownItemActive : "",
@@ -299,7 +302,8 @@ export function Orders() {
       <Card>
         <div className={styles.headerWrap}>
           <h3 className={styles.heading}>
-            {t(stageCopy.headline)} <span className={styles.count}>{total}</span>
+            {t(stageCopy.headline)}{" "}
+            <span className={styles.count}>{total}</span>
           </h3>
         </div>
 
@@ -316,13 +320,48 @@ export function Orders() {
                 <thead>
                   <tr>
                     <th className={styles.arrowHead} aria-label={t("Expand")} />
-                    <SortableTh label={t("Order ID")} sortKey="no" activeSort={activeSort} onSort={handleSort} />
-                    <SortableTh label={t("Stage")} sortKey="stage" activeSort={activeSort} onSort={handleSort} />
-                    <SortableTh label={t("Order Date")} sortKey="order_date" activeSort={activeSort} onSort={handleSort} />
-                    <SortableTh label={t("Delivery Date")} sortKey="delivery_date" activeSort={activeSort} onSort={handleSort} />
-                    <SortableTh label={t("Sales Rep")} sortKey="sales" activeSort={activeSort} onSort={handleSort} />
-                    <SortableTh label={t("Customer")} sortKey="customer_name" activeSort={activeSort} onSort={handleSort} />
-                    <SortableTh label={t("Items")} sortKey="items" activeSort={activeSort} onSort={handleSort} />
+                    <SortableTh
+                      label={t("Order ID")}
+                      sortKey="no"
+                      activeSort={activeSort}
+                      onSort={handleSort}
+                    />
+                    <SortableTh
+                      label={t("Stage")}
+                      sortKey="stage"
+                      activeSort={activeSort}
+                      onSort={handleSort}
+                    />
+                    <SortableTh
+                      label={t("Order Date")}
+                      sortKey="order_date"
+                      activeSort={activeSort}
+                      onSort={handleSort}
+                    />
+                    <SortableTh
+                      label={t("Delivery Date")}
+                      sortKey="delivery_date"
+                      activeSort={activeSort}
+                      onSort={handleSort}
+                    />
+                    <SortableTh
+                      label={t("Sales Rep")}
+                      sortKey="sales"
+                      activeSort={activeSort}
+                      onSort={handleSort}
+                    />
+                    <SortableTh
+                      label={t("Customer")}
+                      sortKey="customer_name"
+                      activeSort={activeSort}
+                      onSort={handleSort}
+                    />
+                    <SortableTh
+                      label={t("Items")}
+                      sortKey="items"
+                      activeSort={activeSort}
+                      onSort={handleSort}
+                    />
                   </tr>
                 </thead>
                 {displayOrders.map((order: OpenOrder) => (

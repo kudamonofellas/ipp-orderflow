@@ -9,6 +9,8 @@ import type { OpenOrder } from "../../types/dashboard";
 import styles from "./OrderRow.module.css";
 
 const currency = new Intl.NumberFormat("id-ID", {
+  style: "currency",
+  currency: "IDR",
   minimumFractionDigits: 0,
 });
 
@@ -28,6 +30,11 @@ export function OrderRow({ order }: { order: OpenOrder }) {
   const lines = order.lines ?? [];
   const count = lines.length;
   const hasItems = count > 0;
+  const orderTotal = lines.reduce(
+    (sum, line) =>
+      sum + (line.price ?? 0) * (line.qty ?? 0),
+    0,
+  );
   const subLabel = dispatchSubLabel({
     stage: order.status,
     taken_by: order.takenBy,
@@ -89,25 +96,41 @@ export function OrderRow({ order }: { order: OpenOrder }) {
         <tr className={styles.linesRow}>
           <td colSpan={8} className={styles.linesCell}>
             <div className={styles.lines}>
-              {lines.map((line) => (
-                <div key={line.id} className={styles.lineRow}>
-                  <span className={styles.lineName}>
-                    {line.qty != null && line.qty > 0 && (
-                      <span className={styles.lineQty}>
-                        {line.qty}
-                        {line.unit ? ` ${line.unit}` : ""}
-                        {" — "}
+              {lines.map((line) => {
+                const hasPrice = line.price != null && line.price > 0;
+                const qty = line.qty ?? 0;
+                const subtotal = hasPrice ? (line.price ?? 0) * qty : null;
+                return (
+                  <div key={line.id} className={styles.lineRow}>
+                    <span className={styles.lineName}>{line.name}</span>
+                    <span className={styles.lineQty}>
+                      {qty > 0 ? qty : ""}
+                    </span>
+                    <span className={styles.lineUnit}>{line.unit ?? ""}</span>
+                    {canSeePrices && (
+                      <span className={styles.lineUnitPrice}>
+                        {hasPrice ? `@ ${currency.format(line.price!)}` : ""}
                       </span>
                     )}
-                    {line.name}
+                    {canSeePrices && (
+                      <span className={styles.lineSubtotal}>
+                        {subtotal != null ? currency.format(subtotal) : ""}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+              {canSeePrices && orderTotal > 0 && (
+                <div className={`${styles.lineRow} ${styles.totalRow}`}>
+                  <span className={styles.lineName} />
+                  <span className={styles.lineQty} />
+                  <span className={styles.lineUnit} />
+                  <span className={styles.totalLabel}>{t("Total")}</span>
+                  <span className={styles.totalValue}>
+                    {currency.format(orderTotal)}
                   </span>
-                  {canSeePrices && line.price != null && line.price > 0 && (
-                    <span className={styles.lineAmount}>
-                      {currency.format(line.price)}
-                    </span>
-                  )}
                 </div>
-              ))}
+              )}
             </div>
           </td>
         </tr>

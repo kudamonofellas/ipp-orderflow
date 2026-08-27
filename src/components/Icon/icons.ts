@@ -64,6 +64,7 @@ export const ICONS = {
   tick: "hugeicons:tick-02",
   loaf: "hugeicons:steak",
   box: "hugeicons:package",
+  packageDelivered: "hugeicons:package-delivered",
   pack: "hugeicons:packaging",
   language: "hugeicons:language-square",
   download: "hugeicons:download-01",

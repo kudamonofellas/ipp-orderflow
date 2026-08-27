@@ -1,0 +1,81 @@
+/* Layered on top of Button.module.css's own classes (passed in alongside
+   these) — this file only adds what Button doesn't already cover: growing
+   to fit inline thumbnails, and the thumbnails themselves. */
+.wrapper {
+  cursor: pointer;
+  flex-wrap: wrap;
+  height: auto;
+  justify-content: space-between;
+}
+
+.row {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.thumbnails {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  flex-wrap: wrap;
+}
+
+.thumbnailItem {
+  position: relative;
+  display: block;
+  width: 56px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface);
+  cursor: pointer;
+}
+
+.thumbnailImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  border-radius: calc(var(--radius-sm) - 1px);
+}
+
+.thumbnailHoverTrash {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition:
+    opacity 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.thumbnailHoverTrash:hover {
+  background: var(--state-error, #d13c3c);
+}
+
+.thumbnailItem:hover .thumbnailHoverTrash {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .thumbnailHoverTrash {
+    opacity: 1;
+  }
+}

@@ -13,6 +13,11 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   icon?: IconName;
   iconPosition?: "left" | "right";
   iconClassName?: string;
+  /** Alignment of the icon+label content within the button box — most
+   *  useful paired with `buttonStyle="fullWidth"`, where centered content
+   *  otherwise floats in the middle of the extra space.
+   *  @default "center" */
+  align?: "left" | "center";
 }
 
 const ICON_SIZES = {
@@ -34,6 +39,7 @@ export function Button({
   icon,
   iconPosition = "left",
   iconClassName,
+  align = "center",
   ...rest
 }: ButtonProps) {
   const styleClass =
@@ -49,6 +55,7 @@ export function Button({
     iconOnly && styles.iconOnly,
     className,
     isActive ? styles.active : "",
+    align === "left" ? styles.alignLeft : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -62,12 +69,7 @@ export function Button({
   ) : null;
 
   return (
-    <button
-      type={type}
-      className={classes}
-      style={style} // <-- 2. Explicitly apply it here, before ...rest
-      {...rest}
-    >
+    <button type={type} className={classes} style={style} {...rest}>
       {iconPosition === "left" && iconElement}
       {!iconOnly && children}
       {iconPosition === "right" && iconElement}
