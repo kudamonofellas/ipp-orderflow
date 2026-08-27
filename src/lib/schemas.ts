@@ -114,6 +114,7 @@ export const OrdersCollectionSchema = z.object({
   undo_snapshot: UndoSnapshotSchema.nullable().optional(),
   docs_returned: z.boolean().nullable().optional(),
   return_received: z.boolean().nullable().optional(),
+  return_received_at: z.string().nullable().optional(),
   return_settle: z.string().nullable().optional(),
   return_doc: z.string().nullable().optional(),
   return_inbound: z.boolean().nullable().optional(),
