@@ -42,7 +42,7 @@ export type Stage = PipelineStage | ReturnStage;
 /** Ordered main-pipeline stages with their display labels. */
 export const PIPELINE_STAGES: { key: PipelineStage; label: string }[] = [
   { key: 'intake', label: 'New Orders' },
-  { key: 'cold', label: 'Cold Storage Picking' },
+  { key: 'cold', label: 'Cold Storage' },
   { key: 'finance', label: 'Finance Review' },
   { key: 'production', label: 'Processing' },
   { key: 'packing', label: 'Packing' },
@@ -77,7 +77,7 @@ export const STAGE_LABELS: Record<Stage, string> = {
  * same predicate `OrderDetail.tsx`'s `handoffMode` already computes — don't
  * fork a second copy of this check anywhere.
  */
-export type DispatchSubStatus = 'out_for_delivery' | 'awaiting_driver';
+export type DispatchSubStatus = 'out_for_delivery' | 'awaiting_pickup';
 
 export function dispatchSubStatus(order: {
   stage?: string | null;
@@ -88,12 +88,12 @@ export function dispatchSubStatus(order: {
   if (order.stage !== 'dispatch') return null;
   return order.taken_by || order.pickup || order.third_party
     ? 'out_for_delivery'
-    : 'awaiting_driver';
+    : 'awaiting_pickup';
 }
 
 export const DISPATCH_SUBSTATUS_LABELS: Record<DispatchSubStatus, string> = {
   out_for_delivery: 'Out for delivery',
-  awaiting_driver: 'Awaiting driver',
+  awaiting_pickup: 'Awaiting pickup',
 };
 
 /**

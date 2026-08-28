@@ -7,7 +7,7 @@ interface StatusPillProps {
   /** The status string from your database, e.g. "intake", "delivered" */
   status?: string | null;
   /** A more specific label that replaces the generic stage label when
-   *  present (e.g. dispatch's "Out for delivery" / "Awaiting driver" from
+   *  present (e.g. dispatch's "Out for delivery" / "Awaiting pickup" from
    *  `dispatchSubLabel()` in lib/pipeline.ts) — the pill always shows
    *  exactly one label, never both. Colour still comes from `status`
    *  (the role that owns it), regardless of which text is shown. */

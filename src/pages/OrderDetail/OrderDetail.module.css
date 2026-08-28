@@ -52,11 +52,12 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-md);
-  margin-bottom: var(--space-sm);
 }
 
-.proofHeaderRow .heading {
-  margin-bottom: 0;
+.proofRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .proofsContainer {
@@ -948,6 +949,12 @@
   cursor: pointer;
 }
 
+.cutTaskRowDone {
+  border-color: var(--accnet-primary);
+  background-color: var(--bg-surface-hover-dark);
+  color: var(--accent-primary);
+}
+
 .packRow {
   display: flex;
   align-items: center;
@@ -1171,6 +1178,10 @@
 /* Read-only "who owns this stage" notice — shown to a role that isn't the
    stage's actor and can't advance it (see ACTOR in lib/pipeline.ts). */
 .actorNotice {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-sm);
   border-radius: var(--radius-md);
   padding: var(--space-sm) var(--space-md);
   margin-bottom: var(--space-md);
@@ -1184,26 +1195,6 @@
   background-color: var(--bg-surface-hover-dark);
   border-color: var(--accent-primary);
   color: var(--accent-primary);
-}
-
-.needsWeighingBanner {
-  border-radius: var(--radius-md);
-  padding: var(--space-sm) var(--space-md);
-  margin-bottom: var(--space-md);
-  border: 1px solid var(--state-warning);
-  background: color-mix(in srgb, var(--state-warning) 10%, var(--bg-surface));
-}
-
-.needsWeighingRow {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-sm);
-}
-
-.needsWeighingText {
-  font: var(--text-body);
-  color: var(--state-warning);
-  flex: 1;
 }
 
 /* Notes section */
@@ -1237,13 +1228,6 @@
   outline: none;
   border-color: var(--accent-primary);
   background: var(--bg-surface);
-}
-
-.deliveryActions {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-md);
-  width: auto;
 }
 
 .thirdPartyForm {
@@ -1304,13 +1288,7 @@
 /* On hold card banner */
 
 .warningCard {
-  background-color: color-mix(
-    in srgb,
-    var(--state-warning),
-    transparent 93%
-  ) !important;
   border-color: var(--text-state-warning);
-  color: var(--text-state-warning);
 }
 
 .warningHeader {

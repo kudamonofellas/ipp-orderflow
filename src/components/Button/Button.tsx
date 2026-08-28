@@ -18,6 +18,12 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
    *  otherwise floats in the middle of the extra space.
    *  @default "center" */
   align?: "left" | "center";
+  /** Sentiment color swapped into whichever `variant` is active — fill for
+   *  `primary`, border+text for `secondary`, text for `tertiary`/`ghost`.
+   *  Orthogonal to `variant`, which controls structure (filled/outlined/
+   *  plain/transparent), not color.
+   *  @default "primary" */
+  tone?: "primary" | "neutral" | "success" | "warning" | "error";
 }
 
 const ICON_SIZES = {
@@ -40,6 +46,7 @@ export function Button({
   iconPosition = "left",
   iconClassName,
   align = "center",
+  tone = "primary",
   ...rest
 }: ButtonProps) {
   const styleClass =
@@ -51,6 +58,7 @@ export function Button({
     styles.button,
     styles[variant],
     styles[size],
+    styles[`tone-${tone}`],
     styleClass,
     iconOnly && styles.iconOnly,
     className,

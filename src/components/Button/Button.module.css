@@ -45,14 +45,51 @@
   font-weight: 500;
 }
 
+/* ===== Tones =====
+   Sentiment color swapped into whichever variant is active below. Each tone
+   sets the same three custom properties on the button element, so the
+   variant rules only ever reference --btn-accent/--btn-accent-dark/
+   --btn-on-accent — never a hardcoded palette color — and stay unaware of
+   which tone is active. `tone` defaults to "primary" in Button.tsx, so one
+   of these is always present. */
+.tone-primary {
+  --btn-accent: var(--accent-primary);
+  --btn-accent-dark: var(--accent-primary-dark);
+  --btn-on-accent: var(--text-on-accent);
+}
+
+.tone-neutral {
+  --btn-accent: var(--text-primary);
+  --btn-accent-dark: var(--text-primary);
+  --btn-on-accent: var(--bg-base);
+}
+
+.tone-success {
+  --btn-accent: var(--state-success);
+  --btn-accent-dark: color-mix(in srgb, var(--state-success), black 15%);
+  --btn-on-accent: var(--text-on-accent);
+}
+
+.tone-warning {
+  --btn-accent: var(--state-warning);
+  --btn-accent-dark: color-mix(in srgb, var(--state-warning), white 15%);
+  --btn-on-accent: var(--text-on-accent);
+}
+
+.tone-error {
+  --btn-accent: var(--state-error);
+  --btn-accent-dark: color-mix(in srgb, var(--state-error), black 15%);
+  --btn-on-accent: var(--text-on-accent);
+}
+
 /* ===== Variants ===== */
 .primary {
-  background: var(--accent-primary);
-  color: var(--text-on-accent);
+  background: var(--btn-accent);
+  color: var(--btn-on-accent);
 }
 
 .primary:hover {
-  background: var(--accent-primary-dark);
+  background: var(--btn-accent-dark);
 }
 
 .primary:disabled {
@@ -63,15 +100,14 @@
 
 .secondary {
   background: var(--bg-surface);
-  border: 1px solid var(--accent-primary);
-  color: var(--accent-primary);
+  border: 1px solid var(--btn-accent);
+  color: var(--btn-accent);
 }
 
 .secondary:hover {
-  background: var(--bg-surface-hover);
-  border-color: var(--accent-primary);
-  color: var(--accent-primary);
-
+  background: color-mix(in srgb, var(--btn-accent) 10%, transparent);
+  border-color: var(--btn-accent);
+  color: var(--btn-accent);
 }
 
 .secondary:disabled {
@@ -83,18 +119,18 @@
 
 .secondary.active {
   background: var(--bg-surface-hover-dark);
-  border-color: var(--accent-primary);
-  color: var(--accent-primary);
+  border-color: var(--btn-accent);
+  color: var(--btn-accent);
 }
 
 .tertiary {
   background: var(--bg-surface);
-  color: var(--accent-primary);
+  color: var(--btn-accent);
   padding: 0%;
 }
 
 .tertiary:hover {
-  color: color-mix(in srgb, var(--accent-primary), transparent 30%);
+  color: color-mix(in srgb, var(--btn-accent), transparent 30%);
 }
 
 .ghost {
@@ -104,12 +140,12 @@
 
 .ghost:hover {
   background: var(--bg-surface-hover);
-  color: var(--accent-primary);
+  color: var(--btn-accent);
 }
 
 .ghost.active {
   background: var(--bg-surface-hover-dark);
-  color: var(--accent-primary);
+  color: var(--btn-accent);
 }
 
 .fullWidth,
@@ -127,7 +163,7 @@
   justify-content: center;
   align-items: center;
   flex-shrink: 0;
-  color: var(--accent-primary);
+  color: var(--btn-accent);
 }
 
 .sm.iconOnly {

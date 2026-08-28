@@ -68,7 +68,7 @@ Weighs orders, attaches photos, manages packing. Does **not** create orders or t
 | `products` | ❌ | ✅ | ❌ | ❌ | Read-only — needs to match lines to products |
 | `messages` | ❌ | ✅ | ❌ | ❌ | Read-only |
 | `attachments` | ❌ | ✅ | ❌ | ❌ | Read-only |
-| `line_cuts` | ❌ | ✅ | ✅ (field only) | ❌ | Read; can update `done` only |
+| `line_cuts` | ❌ | ✅ | ✅ (field only) | ❌ | Read; can update `done` only — **the `read` grant was actually missing live until 2026-08-28** (only `update` on `done` existed), despite this doc claiming it since the row was first written; the per-line cutting-instruction display (`OrderDetail.tsx`, unconditional — "shown for every line, weighed or not", no role gate) was silently empty for Warehouse the whole time |
 | `purchase_orders` | ❌ | ✅ | ❌ | ❌ | Read-only — sees the PO |
 | `return_documents` | ❌ | ✅ | ❌ | ❌ | Read-only |
 | `role_permissions` | ❌ | ❌ | ❌ | ❌ | No access |
@@ -87,7 +87,7 @@ Creates cut instructions, marks cutting progress.
 |---|:---:|:---:|:---:|:---:|---|
 | `orders` | ❌ | ✅ | ✅ (field only) | ❌ | Reads all; can update only: `cutting_started`, `stage`, `cutting_started_at`, `cutting_started_by`, `undo_snapshot` (2026-08-19 — `stage` was missing entirely, so Production could never actually advance production→packing despite owning `cutProduction`; every stage-advance write was rejected outright. `undo_snapshot` added same day for the same reason as Warehouse's.), `reweigh_from` (2026-08-21 — new field; Production reads it to route a re-weigh detour's cutting-done straight back to origin, and clears it once reached) |
 | `order_lines` | ❌ | ✅ | ❌ | ❌ | Read-only — sees what to cut |
-| `line_cuts` | ✅ | ✅ | ✅ | ✅ | Full CRUD — their core job |
+| `line_cuts` | ✅ | ✅ | ✅ | ✅ | Full CRUD — their core job — **the `read` grant was actually missing live until 2026-08-28** (only `create`/`delete`/`update` existed), despite this doc claiming it; Production could create and delete cuts but never read them back — the initial-load `readLineCuts()` call would have silently failed for every Production session the whole time |
 | `order_history` | ✅ | ✅ | ❌ | ❌ | Append-only — logs cutting actions |
 | `customers` | ❌ | ✅ | ❌ | ❌ | Read-only |
 | `products` | ❌ | ✅ | ❌ | ❌ | Read-only |
@@ -127,8 +127,8 @@ Approves/rejects payment (and reconciles COD cash — Cash-up shares this role's
 | `role_permissions` | ❌ | ❌ | ❌ | ❌ | No access |
 | `settings` | ❌ | ✅ | ❌ | ❌ | Read-only |
 | `courier_locations` | ❌ | ❌ | ❌ | ❌ | No access |
-| `line_cuts` | ❌ | ❌ | ❌ | ❌ | No access |
-| `line_weighings` | ❌ | ❌ | ❌ | ❌ | No access |
+| `line_cuts` | ❌ | ✅ | ❌ | ❌ | Read-only (2026-08-28 — was "No access": Finance couldn't see cutting instructions on the order at all, since the app displays them unconditionally for every role with no capability gate — reported directly as "why does cuttingInstructions not show for Finance") |
+| `line_weighings` | ❌ | ✅ | ❌ | ❌ | Read-only (2026-08-27 — was "No access": a weighed line's total kg rendered as 0 for Finance/Courier while every other role saw the real value, since the app computes the displayed total from `line_weighings` rows, not `order_lines.weight` directly — reported directly) |
 | `line_photos` | ❌ | ✅ | ❌ | ❌ | Read-only — corrected here (2026-08-20); Finance was actually granted this earlier (QA batch #2, 2026-08-19, "Finance can see item photo attachments") but this doc row was never updated to match |
 | `line_weighing_photos` | ❌ | ✅ | ❌ | ❌ | Read-only (2026-08-20) — same reasoning as `line_photos` above |
 | `line_return_photos` | ❌ | ❌ | ❌ | ❌ | No access |
@@ -158,9 +158,10 @@ Picks up, delivers, uploads 3 proof photos, broadcasts GPS.
 | `role_permissions` | ❌ | ❌ | ❌ | ❌ | No access |
 | `settings` | ❌ | ✅ | ❌ | ❌ | Read-only — needs dispatch_proof_required |
 | `products` | ❌ | ❌ | ❌ | ❌ | No access |
-| `line_cuts` | ❌ | ❌ | ❌ | ❌ | No access |
-| `line_weighings` | ❌ | ❌ | ❌ | ❌ | No access |
-| `line_photos` | ❌ | ❌ | ❌ | ❌ | No access |
+| `line_cuts` | ❌ | ✅ | ❌ | ❌ | Read-only (2026-08-28 — was "No access", same class of gap as Finance above: cutting instructions never displayed for Courier, no capability gate in the app to explain it) |
+| `line_weighings` | ❌ | ✅ | ❌ | ❌ | Read-only (2026-08-27 — was "No access", the exact bug reported: a weighed line's total kg rendered as 0 for Courier/Finance while every other role saw the real value, since the app computes the displayed total from `line_weighings` rows, not `order_lines.weight` directly) |
+| `line_photos` | ❌ | ✅ | ❌ | ❌ | Read-only (2026-08-27 — same reasoning; every other role already had this) |
+| `line_weighing_photos` | ❌ | ✅ | ❌ | ❌ | Read-only (2026-08-27 — same reasoning; every other role already had this) |
 | `line_return_photos` | ❌ | ❌ | ❌ | ❌ | No access |
 | `draft_weighings` | ❌ | ❌ | ❌ | ❌ | No access |
 
@@ -179,10 +180,10 @@ Picks up, delivers, uploads 3 proof photos, broadcasts GPS.
 | `order_lines` | CRUD | CRUD | CRUD | R | R | R |
 | `customers` | CRUD | CRUD | R | R | R | R |
 | `products` | CRUD | CRUD | R | R | R | — |
-| `line_cuts` | CRUD | CRUD | R + partial U | CRUD | — | — |
-| `line_weighings` | CRUD | CRUD | CRUD | R | — | — |
-| `line_photos` | CRUD | CRUD | CRUD | R | R | — |
-| `line_weighing_photos` | CRUD | CRUD | CRUD | R | R | — |
+| `line_cuts` | CRUD | CRUD | R + partial U | CRUD | R | R |
+| `line_weighings` | CRUD | CRUD | CRUD | R | R | R |
+| `line_photos` | CRUD | CRUD | CRUD | R | R | R |
+| `line_weighing_photos` | CRUD | CRUD | CRUD | R | R | R |
 | `line_return_photos` | CRUD | CRUD | CRUD | R | — | — |
 | `order_history` | CRUD | CR | CR | CR | CR | CR |
 | `delivery_proofs` | CRUD | R | CRU | R | — | CRU |

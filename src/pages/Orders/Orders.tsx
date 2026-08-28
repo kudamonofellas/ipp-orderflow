@@ -43,8 +43,8 @@ const STAGE_COPY: Record<string, { headline: string; empty: string }> = {
   today: { headline: "New Orders Today", empty: "No orders created today." },
   intake: { headline: "New Orders", empty: "No new orders." },
   cold: {
-    headline: "Cold Storage Picking",
-    empty: "No orders in cold storage picking.",
+    headline: "Cold Storage",
+    empty: "No orders in cold storage.",
   },
   finance: {
     headline: "Finance Review",

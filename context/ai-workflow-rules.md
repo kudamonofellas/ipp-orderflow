@@ -33,6 +33,15 @@ If a change cannot be verified end to end quickly, the scope is too broad — sp
 - Do not invent pipeline states — use the enum in `architecture.md` Invariant #4
 - Do not invent roles — use the six in `architecture.md` (Owner, Admin, Warehouse, Production, Finance, Courier)
 
+## Prototype Fidelity
+
+A reference prototype lives at `IPP-OrderFlow-COMPLETE-2026-07-05/IPP-OrderFlow/src/` (`Dev-OrderDetail.jsx`, `Dev-Home.jsx`, `Dev-domain.js`, etc.) — this is the actual source of truth for role gates, capability defaults, stage-transition rules, copy strings, and UI behavior, not just a rough reference.
+
+- Before implementing or fixing any role-gated behavior (who can see/do what, at which stage), **read the actual prototype source file directly** — grep/Read the exact function or JSX block — rather than relying on memory of what it "probably" does or how a similar-sounding feature works elsewhere in this port. This project has repeatedly found real discrepancies this way (e.g. a capability the port granted beyond what the prototype's own gate allows) that would have been missed by assumption.
+- When reporting a fix, cite the exact file and line (`Dev-OrderDetail.jsx:151`, `Dev-domain.js:206`) the behavior was confirmed against — not "the prototype does X" without a pointer to where.
+- A capability or UI behavior this port has that the prototype's own gate doesn't grant is a real discrepancy to fix, even if it was added deliberately in an earlier session — a past deliberate decision is not itself evidence of prototype fidelity; re-verify it against the source when questioned rather than defending it on the strength of having been intentional once.
+- This does not mean the port must match the prototype in every respect — some port-specific enhancements are legitimate (e.g. per-line independent return confirmation vs. the prototype's order-level-only flag) — but those should be flagged as deliberate divergences in `progress-tracker.md`, not silently assumed equivalent.
+
 ## Protected Files
 
 Do not modify the following unless explicitly instructed:

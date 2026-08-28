@@ -201,7 +201,7 @@ const STAGE_FLOW: Record<
   },
   finance: {
     next: null,
-    prev: null,
+    prev: "cold",
     capability: "approveFinance",
     advanceLabel: "Approve Payment",
   },
@@ -495,6 +495,9 @@ export function OrderDetail() {
   const [financeTiming, setFinanceTiming] = useState<"upfront" | "terms">(
     "upfront",
   );
+  /** Tracks which `${order.id}:${customer.id}` pairing `financeTiming` was
+   *  last resynced from — see the render-time sync below (`customerTimingKey`). */
+  const [syncedTimingKey, setSyncedTimingKey] = useState<string | undefined>();
   const [financeAmount, setFinanceAmount] = useState("");
   const [financeBankRef, setFinanceBankRef] = useState("");
   const [financeVerified, setFinanceVerified] = useState(false);
@@ -741,7 +744,11 @@ export function OrderDetail() {
         filter: {
           _and: [{ order_id: { _in: orderIds } }, { removed: { _neq: true } }],
         },
-        fields: ["order_id", "qty", "price"],
+        // id/name are required by OrderLinesCollectionSchema — omitting them
+        // from `fields` makes Directus drop the keys entirely, which fails
+        // zod validation for the whole array and silently leaves
+        // customerExposure at its stale/initial value instead of erroring.
+        fields: ["id", "name", "order_id", "qty", "price"],
         limit: -1,
       });
       if (cancelled || linesRes.error || !linesRes.data) return;
@@ -762,6 +769,41 @@ export function OrderDetail() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [order?.customer_id, order?.payment_confirmed]);
+
+  /* Pre-fill the Finance gate's Timing toggle from the customer's actual
+   * terms, matching the prototype's own initializer
+   * (`useState(order?.payment.timing || 'upfront')`, Dev-OrderDetail.jsx:71)
+   * — this port's `financeTiming` type has no "cod" option (COD's own
+   * delivery-time capture is its single source of truth, see the state's
+   * doc comment above), so only the "terms" case needs syncing; everything
+   * else defaults to "upfront" as before. Without this, a terms customer's
+   * gate silently opened on "upfront" until the Finance user noticed and
+   * switched it themselves — showing the verify button/gating the Clear
+   * button on a step that terms orders don't have.
+   *
+   * This component instance persists across order navigations (no remount
+   * per order id), so the toggle can't just rely on its `useState`
+   * initializer — it needs an explicit resync. Adjusted here during render
+   * (not via a `useEffect`) per React's own guidance for syncing state to
+   * changed props: a `customerTimingKey` change is caught synchronously in
+   * the same render that produces it, avoiding an extra commit-then-effect
+   * cascade, and re-fires correctly even if `customers` finishes loading
+   * after `order` does (the key only settles once both are present). */
+  const timingCustomer = customers.find(
+    (c) =>
+      (order?.customer_id && c.id === order.customer_id) ||
+      (order?.customer_name &&
+        c.name?.toLowerCase() === order.customer_name.toLowerCase()),
+  );
+  const customerTimingKey = timingCustomer
+    ? `${order?.id}:${timingCustomer.id}`
+    : undefined;
+  if (customerTimingKey && customerTimingKey !== syncedTimingKey) {
+    setSyncedTimingKey(customerTimingKey);
+    if (timingCustomer?.pay_timing === "terms") {
+      setFinanceTiming("terms");
+    }
+  }
 
   /* ────────────── guards ── */
   if (loading)
@@ -858,16 +900,38 @@ export function OrderDetail() {
     ? auth.can(flow.capability) ||
       (HELP_OTHER_STAGES.includes(stage) && auth.can("helpOtherStages"))
     : false;
-  // Previously gated on the generic `sendBackStage` capability alone
-  // (Admin-only by default) — the role that actually owns the current
-  // stage (e.g. Warehouse at `cold`) had no way to correct their own
-  // mistaken advance without an Admin doing it for them. Now also allows
-  // whoever owns this stage (`flow.capability`) or is helping as floor
-  // cover (`helpOtherStages`), matching `canAdvance`'s own pattern above.
+  // This used to extend send-back beyond the generic `sendBackStage`
+  // capability (Admin-only by default, `Dev-domain.js:206` —
+  // `sendBackStage: ['Admin']`) to also let whoever owns the current stage
+  // (`flow.capability`) or is helping as floor cover (`helpOtherStages`)
+  // send their own mistaken advance back a step, matching `canAdvance`'s own
+  // pattern above. Re-verified directly against the prototype's actual
+  // `sendBack` gate (`Dev-OrderDetail.jsx:151` — `can(role, 'sendBackStage',
+  // settings) && !['intake','delivered','cancelled','returned','outstanding',
+  // 'awaiting'].includes(order.stage)`) stage by stage as each one got
+  // reported — `cold→intake` (2026-08-18), `finance→cold` and
+  // `production→cold` (2026-08-28), `packing→production` (2026-08-28), and
+  // now `dispatch→finalise` (2026-08-28, reported directly: "in the
+  // prototype, courier doesn't have the 'send back to print do/si'
+  // button") — every single one confirmed the same thing: the prototype's
+  // gate has zero role-based branching beyond the flat `sendBackStage`
+  // capability, for any stage. There is no prototype transition where a
+  // stage's own owning role gets an automatic send-back exception. Every
+  // forward-pipeline stage is now excluded, leaving the owning-role/
+  // floor-helper carve-out below a no-op everywhere except `delivered` —
+  // kept rather than deleted outright in case a *different*,
+  // deliberately-scoped self-correction feature is wanted later.
+  // `delivered`'s own send-back is the separately-documented "Reopen"
+  // feature (its own design history, not this generic carve-out's original
+  // target) and was left untouched — not reported, not re-verified here.
   const canSendBack = flow?.prev
     ? auth.can("sendBackStage") ||
-      auth.can(flow.capability) ||
-      auth.can("helpOtherStages")
+      (flow.prev !== "intake" &&
+        stage !== "finance" &&
+        stage !== "production" &&
+        stage !== "packing" &&
+        stage !== "dispatch" &&
+        (auth.can(flow.capability) || auth.can("helpOtherStages")))
     : false;
   const canCancel =
     auth.can("cancelOrders") && !isCancelled && !isDelivered && !isReturned;
@@ -2271,7 +2335,7 @@ export function OrderDetail() {
    *  split. */
   async function handleApproveFinance() {
     if (!id || !order) return;
-    if (financeTiming === "upfront" && !financeVerified) return;
+    if (!isCodOrder && financeTiming === "upfront" && !financeVerified) return;
     if (overCreditLimit && !canOverrideCreditLimit) return;
     setApprovingFinance(true);
     const amountNum =
@@ -2293,7 +2357,7 @@ export function OrderDetail() {
       payment_confirmed: true,
       payment_confirmed_at: new Date().toISOString(),
       payment_method: financeMethod,
-      payment_timing: financeTiming,
+      payment_timing: isCodOrder ? "cod" : financeTiming,
       payment_amount: amountNum,
       payment_bank_ref:
         financeMethod === "transfer" ? financeBankRef.trim() || null : null,
@@ -3883,6 +3947,7 @@ export function OrderDetail() {
                       buttonStyle="fullWidth"
                       size="lg"
                       icon="play"
+                      tone="warning"
                       onClick={handleToggleHold}
                     >
                       {t("Resume order")}
@@ -3903,12 +3968,11 @@ export function OrderDetail() {
                 {canReceiveReturn && !order.return_received && (
                   <div className={styles.cardListColumn}>
                     <span className={styles.row}>
-                      <p className={styles.fieldLabel}>
-                        {t("Warehouse — receive & verify")}
-                      </p>
+                      <p className={styles.fieldLabel}>{t("Warehouse ")}</p>
+                      <p className={styles.muted}>— receive & verify</p>
                       <div className={styles.separator}></div>
                     </span>
-                    <p className={styles.muted}>
+                    <p className={styles.secondary}>
                       {t(
                         "Weigh or count what actually came back, then confirm.",
                       )}
@@ -3946,20 +4010,22 @@ export function OrderDetail() {
 
                 {inSettleBucket && (
                   <div className={styles.cardListColumn}>
-                    <span className={styles.row}>
-                      <p className={styles.fieldLabel}>
-                        {t("Admin — update Accurate, then process")}
-                      </p>
-                      <div className={styles.separator}></div>
-                    </span>
+                    {canDecideReturn && (
+                      <span className={styles.row}>
+                        <p className={styles.fieldLabel}>{t("Admin ")}</p>
+                        <p className={styles.muted}>
+                          — update Accurate, then process
+                        </p>
+                        <div className={styles.separator}></div>
+                      </span>
+                    )}
                     {canDecideReturn ? (
                       <>
                         {!order.return_received && (
                           <p>
                             {lines.some(
                               (l) =>
-                                Number(l.returned) > 0 &&
-                                isWeighedUnit(l.unit),
+                                Number(l.returned) > 0 && isWeighedUnit(l.unit),
                             )
                               ? t(
                                   "Goods not back yet — counted quantities are exact; the kg/loaf credit is provisional until the warehouse weighs the return.",
@@ -4093,7 +4159,7 @@ export function OrderDetail() {
                         </div>
                       </>
                     ) : (
-                      <p className="tiny muted">
+                      <p className={styles.secondary}>
                         {order.return_received
                           ? t(
                               "Received — waiting for an admin to update the Accurate documents and decide.",
@@ -4236,25 +4302,80 @@ export function OrderDetail() {
           )}
 
           {showActorNotice && (
-            <Card className={styles.successCard}>
-              {t("This order is currently with")}{" "}
-              <strong>{t(stageActor ?? "")}</strong>.{" "}
-              {"You can view it, but the action is theirs."}
-            </Card>
+            <div className={styles.actorNotice}>
+              <span>
+                This order is currently with <strong>{stageActor}</strong>. You
+                can view it, but the action is theirs.
+              </span>
+            </div>
           )}
+
+          {/* Deliver-to address + Navigate + Collect COD chip */}
+          {stage === "dispatch" &&
+            canAdvance &&
+            handoffMode !== "pickup" &&
+            (canSeeCustomerContact || isStageActor) &&
+            order.customer_address && (
+              <Card className={styles.warningCard}>
+                <div
+                  className={styles.proofHeaderRow}
+                  style={{ paddingBottom: "var(--space-md)" }}
+                >
+                  <div className={styles.row}>
+                    <Icon
+                      name="delivered"
+                      size={20}
+                      style={{ color: "var(--state-warning)", flexShrink: 0 }}
+                    />
+
+                    <p className={styles.warningTitle}>{t("Deliver to")}</p>
+                  </div>
+
+                  {codApplies && codAmount > 0 && (
+                    <span className={styles.codOwedChip}>
+                      {t("Collect COD")} {currency.format(codAmount)}
+                    </span>
+                  )}
+                </div>
+                <div>
+                  <div className={styles.fieldLabel}>
+                    {order.customer_address}
+                  </div>
+                </div>
+
+                <div className={styles.cardActions}>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="md"
+                    icon="navigation"
+                    tone="warning"
+                    onClick={() =>
+                      window.open(
+                        `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.customer_address ?? "")}`,
+                        "_blank",
+                        "noopener",
+                      )
+                    }
+                  >
+                    {t("Navigate")}
+                  </Button>
+                </div>
+              </Card>
+            )}
 
           {/* "Isn't weighed yet" safety net — a kg/gram/loaf line added (or
               unit-changed) after Cold Storage, still in the warehouse.
               Ported from the prototype's own banner (`Dev-OrderDetail.jsx:1314-1321`). */}
           {needsWeighing && (
-            <div className={styles.needsWeighingBanner}>
-              <div className={styles.needsWeighingRow}>
+            <Card className={styles.warningCard}>
+              <div className={styles.row}>
                 <Icon
-                  name="scale"
-                  size={16}
+                  name="weight"
+                  size={20}
                   style={{ color: "var(--state-warning)", flexShrink: 0 }}
                 />
-                <p className={styles.needsWeighingText}>
+                <p className={styles.warningHeader}>
                   <strong>
                     {unweighedAdded.map((l) => l.name).join(", ")}
                   </strong>{" "}
@@ -4262,19 +4383,55 @@ export function OrderDetail() {
                 </p>
               </div>
               {canWeighFix && (
+                <div className={styles.cardActions}>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="md"
+                    icon="arrowRight"
+                    onClick={handleSendToColdToWeigh}
+                    disabled={advancing}
+                    tone="warning"
+                  >
+                    {t("Send to Cold Storage to weigh")}
+                  </Button>
+                </div>
+              )}
+            </Card>
+          )}
+
+          {showFinanceUndoRow && (
+            <Card className={styles.warningCard}>
+              <div className={styles.warningHeader}>
+                <Icon
+                  name="paymentSuccess"
+                  size={20}
+                  style={{ color: "var(--state-warning)" }}
+                />
+                <div className={styles.warningTitle}>
+                  {t("Payment cleared by Finance")}
+                </div>
+              </div>
+              <p>
+                {t("Payment cleared by Finance")} —{" "}
+                {stage === "cold"
+                  ? t("cleared while still at Cold Storage.")
+                  : t("the order has moved on past the gate.")}{" "}
+                {t("Cleared by mistake?")}
+              </p>
+              <div className={styles.cardActions}>
                 <Button
                   type="button"
                   variant="secondary"
-                  size="sm"
-                  icon="arrowRight"
-                  style={{ marginTop: "var(--space-sm)" }}
-                  onClick={handleSendToColdToWeigh}
-                  disabled={advancing}
+                  onClick={handleUndoFinanceClear}
+                  disabled={approvingFinance}
+                  icon="undo"
+                  tone="warning"
                 >
-                  {t("Send to Cold Storage to weigh")}
+                  {t("Undo payment clearance")}
                 </Button>
-              )}
-            </div>
+              </div>
+            </Card>
           )}
 
           {/* Customer Info Card */}
@@ -4394,13 +4551,22 @@ export function OrderDetail() {
                   ? (sendingQtyMap[line.id] ?? qty)
                   : qty;
                 // Ported from the prototype's line-detail gate
-                // (`Dev-OrderDetail.jsx:1425`) — only render the summary
-                // row when it actually has something to show. Previously
-                // unconditional past `intake`, so a plain counted line with
-                // no price and no weight (nothing worth totaling) still
-                // rendered a bare "Total:" with nothing after it.
+                // (`Dev-OrderDetail.jsx:1425`, `l.weight || (priceOk &&
+                // l.price) || ...`) — only render the summary row when it
+                // actually has something to show. Gated on the real
+                // measured-weight VALUE (not just "is this a weighed-unit
+                // line"), matching the prototype's own `l.weight` check —
+                // previously any weighed-unit line (loaf/kg/gram) forced the
+                // row to show even with nothing weighed yet and no price,
+                // rendering a bare "Total:" with nothing after it (at intake
+                // the number is always hidden; past intake, an un-weighed
+                // line still had `totalMeasuredWeight === 0`).
+                const showsWeightTotal =
+                  isWeighedItem &&
+                  stage !== "intake" &&
+                  totalMeasuredWeight > 0;
                 const showLineDetail =
-                  isWeighedItem ||
+                  showsWeightTotal ||
                   (isWeightOnlyUnit(line.unit) && !!line.short) ||
                   (canSeePrices && hasPrice);
 
@@ -5043,136 +5209,40 @@ export function OrderDetail() {
               </div>
             )}
 
-          {/* Documents Section — Admin/Finance/Owner only, matching the
-              prototype's own hardcoded role check (see `canSeeDocuments`'s
-              doc comment above). Previously visible to every role. */}
-          {canSeeDocuments && (
-            <Card>
-              <div className={styles.heading}>
-                {t("Documents")}{" "}
-                <span className={styles.count}>{docEntries.length}</span>
-              </div>
-
-              {docEntries.length === 0 ? (
-                <p className={styles.muted}>{t("No documents logged yet.")}</p>
-              ) : (
-                <div className={styles.docList}>
-                  {docEntries.map((doc) => {
-                    const fileId = doc.document_file ?? doc.file_path;
-                    return (
-                      <div key={doc.id} className={styles.docRow}>
-                        <div className={styles.docTop}>
-                          <span className={styles.docType}>
-                            {doc.doc_type} —{" "}
-                          </span>
-                          <span className={styles.docNumber}>
-                            {doc.number ?? "—"}
-                          </span>
-
-                          {fileId && (
-                            <div
-                              className={styles.thumbnailItem}
-                              style={{ width: 36, height: 36 }}
-                              onClick={() =>
-                                setActiveImageModal({
-                                  url: directusFileUrl(fileId),
-                                  title: `${doc.doc_type} ${doc.number ?? ""}`,
-                                  attachmentId: doc.id ?? undefined,
-                                })
-                              }
-                            >
-                              <img
-                                src={directusFileUrl(fileId)}
-                                alt="doc"
-                                className={styles.thumbnailImg}
-                              />
-                            </div>
-                          )}
-
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            icon="trash"
-                            iconOnly
-                            title={t("Delete document")}
-                            onClick={() =>
-                              doc.id != null && handleDeleteDocument(doc.id)
-                            }
-                          ></Button>
-                        </div>
-
-                        {doc.note && (
-                          <div className={styles.docNote}>{doc.note}</div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {canAddDocs && (
-                <form className={styles.docForm} onSubmit={handleAddDocument}>
-                  <div className={styles.docFormRow}>
-                    <select
-                      className={styles.editInput}
-                      style={{ maxWidth: "120px" }}
-                      value={docType}
-                      onChange={(e) => setDocType(e.target.value)}
-                    >
-                      {DOC_TYPES.map((docTypeOption) => (
-                        <option key={docTypeOption} value={docTypeOption}>
-                          {docTypeOption}
-                        </option>
-                      ))}
-                    </select>
-                    <input
-                      type="text"
-                      className={styles.editInput}
-                      style={{ flex: 1 }}
-                      placeholder={t("Document number")}
-                      value={docNumber}
-                      onChange={(e) => setDocNumber(e.target.value)}
-                      required
-                    />
-                    <input
-                      ref={docFileInputRef}
-                      type="file"
-                      style={{ display: "none" }}
-                      accept="image/*,application/pdf"
-                      onChange={handleDocFileUpload}
-                    />
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="md"
-                      isActive={!!docFileName}
-                      icon={docFileName ? "paperclip" : "add"}
-                      iconOnly
-                      onClick={() => docFileInputRef.current?.click()}
-                    />
-                    <Button
-                      type="submit"
-                      variant="primary"
-                      disabled={savingDoc || !docNumber.trim()}
-                    >
-                      {savingDoc ? "…" : t("+ Add")}
-                    </Button>
-                  </div>
-                  <input
-                    type="text"
-                    className={styles.editInput}
-                    placeholder={t("Put notes here...")}
-                    value={docNote}
-                    onChange={(e) => setDocNote(e.target.value)}
-                  />
-                </form>
-              )}
-            </Card>
-          )}
-
           {/* Stage Action Controls */}
-          {!isCancelled && !isHold && (
+          {/* Mirrors every top-level gate inside the block below — the div
+           *  itself has no visible content of its own, so it must only
+           *  render when at least one child actually would. Keep this in
+           *  sync if a new top-level card/row is added or removed below. */}
+          {(() => {
+            const showAdvanceButton =
+              !!flow?.next &&
+              canAdvance &&
+              stage !== "dispatch" &&
+              stage !== "production" &&
+              stage !== "packing" &&
+              stage !== "cold" &&
+              stage !== "finalise";
+            const showStageActions =
+              showAdvanceButton ||
+              (stage === "cold" && canWeighHere) ||
+              (stage === "production" && canCutHere) ||
+              (stage === "packing" && canAdvance) ||
+              (stage === "finalise" && canAdvance) ||
+              (stage === "dispatch" && canAdvance) ||
+              showCodRow ||
+              showDocsRow ||
+              showTermsRow ||
+              (isDelivered && !!order.docs_returned) ||
+              showTermsPaidNotice ||
+              showFinanceGateForm ||
+              (canUndo && !!order.undo_snapshot) ||
+              (canTrackCourier &&
+                handoffMode === "delivery" &&
+                !!order.taken_by) ||
+              showRefuseForm;
+            return !isCancelled && !isHold && showStageActions;
+          })() && (
             <div className={styles.stageActions}>
               {flow?.next &&
                 canAdvance &&
@@ -5301,7 +5371,7 @@ export function OrderDetail() {
                           <>
                             <Button
                               type="button"
-                              variant="secondary"
+                              variant="primary"
                               icon="knife"
                               size="lg"
                               onClick={handleStartCutting}
@@ -5336,7 +5406,7 @@ export function OrderDetail() {
                               <div className={styles.cardListColumn}>
                                 <label
                                   key={t.cut.id}
-                                  className={styles.cutTaskRow}
+                                  className={`${styles.cutTaskRow} ${done ? styles.cutTaskRowDone : ""}`}
                                 >
                                   <Icon name="loaf" />
                                   <span style={{ flex: 1 }}>{cutLabel}</span>
@@ -5451,8 +5521,9 @@ export function OrderDetail() {
                       <Button
                         type="button"
                         variant="primary"
-                        size="lg"
+                        size="md"
                         buttonStyle="fullWidth"
+                        icon="tick"
                         onClick={handleFinaliseAdvance}
                         disabled={advancing}
                       >
@@ -5471,12 +5542,12 @@ export function OrderDetail() {
               {stage === "dispatch" && canAdvance && !handoffMode && (
                 <Card>
                   <div className={styles.heading}>{t("Delivery")}</div>
-                  <div className={styles.deliveryActions}>
+                  <div className={styles.cardActions}>
                     <Button
                       type="button"
                       variant="primary"
-                      icon="navigation"
-                      size="lg"
+                      icon="delivered"
+                      size="md"
                       buttonStyle="fullWidth"
                       onClick={handleChooseOwnCourier}
                       disabled={choosingMode}
@@ -5487,7 +5558,8 @@ export function OrderDetail() {
                       type="button"
                       variant="secondary"
                       buttonStyle="fullWidth"
-                      size="lg"
+                      icon="pickup"
+                      size="md"
                       onClick={handleChoosePickup}
                       disabled={choosingMode}
                     >
@@ -5497,7 +5569,8 @@ export function OrderDetail() {
                       type="button"
                       variant="secondary"
                       buttonStyle="fullWidth"
-                      size="lg"
+                      icon="scooter"
+                      size="md"
                       isActive={showThirdPartyForm}
                       onClick={() => setShowThirdPartyForm((v) => !v)}
                       disabled={choosingMode}
@@ -5551,18 +5624,23 @@ export function OrderDetail() {
                           ? `${t("Handed to")} ${order.courier_service ?? ""}`
                           : t("Delivery proof")}
                     </span>
-                    {condPhotos.length > 0 && (
-                      <Button
-                        type="button"
-                        variant="tertiary"
-                        size="md"
-                        icon="reload"
-                        onClick={handleChangeMethod}
-                        disabled={submittingProof || choosingMode}
-                      >
-                        {t("Change method")}
-                      </Button>
-                    )}
+                    {/* Ported from the prototype's own gate
+                        (`Dev-OrderDetail.jsx:883`) — unconditional for
+                        whoever can act on this dispatch, never gated on
+                        whether a photo happens to be staged yet. Previously
+                        required `condPhotos.length > 0` here, which hid the
+                        button on a freshly-opened proof capture with
+                        nothing uploaded yet — reported directly. */}
+                    <Button
+                      type="button"
+                      variant="tertiary"
+                      size="md"
+                      icon="undo"
+                      onClick={handleChangeMethod}
+                      disabled={submittingProof || choosingMode}
+                    >
+                      {t("Change method")}
+                    </Button>
                   </div>
                   {handoffMode === "delivery" && (
                     <div className={styles.secondary}>
@@ -5653,6 +5731,28 @@ export function OrderDetail() {
                         />
                       </div>
                     </div>
+
+                    {/* SOP hint — ported from the prototype's own copy
+                        (`Dev-OrderDetail.jsx:891`), shown for exactly the
+                        cases where the receiver/name/signed fields below are
+                        still hidden (condition photo not yet staged; not
+                        applicable to `third`, which has no such fields to
+                        reveal in this port's simplified single-photo
+                        hand-off flow). */}
+                    {condPhotos.length === 0 && handoffMode !== "third" && (
+                      <div className={styles.infoHint}>
+                        <Icon
+                          name="infoCircle"
+                          size={14}
+                          style={{ color: "var(--text-muted)" }}
+                        />
+                        <p className={styles.secondary}>
+                          {t(
+                            "Photograph the item condition first — then record who received it, or process a return.",
+                          )}
+                        </p>
+                      </div>
+                    )}
 
                     {condPhotos.length > 0 && handoffMode !== "third" && (
                       <>
@@ -6181,13 +6281,12 @@ export function OrderDetail() {
                     <Card
                       style={{
                         marginBottom: "var(--space-md)",
-                        backgroundColor: "var(--bg-surface-hover)",
                         borderColor: overCreditLimit
                           ? "var(--state-error)"
                           : "var(--border-default)",
                       }}
                     >
-                      <div className={styles.proofHeaderRow}>
+                      <div className={styles.proofRow}>
                         <span className={styles.secondary}>
                           {t("Account exposure (in flight)")}
                         </span>
@@ -6195,7 +6294,7 @@ export function OrderDetail() {
                           {currency.format(customerExposure)}
                         </span>
                       </div>
-                      <div className={styles.proofHeaderRow}>
+                      <div className={styles.proofRow}>
                         <span className={styles.secondary}>
                           {t("Credit limit")}
                         </span>
@@ -6297,39 +6396,46 @@ export function OrderDetail() {
                   )}
 
                   <div className={styles.financeGateActions}>
-                    {financeTiming === "upfront" && !financeVerified && (
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        buttonStyle="fullWidth"
-                        size="lg"
-                        icon={
-                          financeMethod === "transfer"
-                            ? "paymentSuccess"
-                            : "cash"
-                        }
-                        onClick={() => setFinanceVerified(true)}
-                      >
-                        {financeMethod === "transfer"
-                          ? t("I verify it in our bank")
-                          : t("Cash received")}
-                      </Button>
-                    )}
-                    {financeTiming === "upfront" && financeVerified && (
-                      <div className={styles.financeVerifiedChip}>
-                        <Icon name="check" size={16} />
-                        {t("Payment confirmed")}
-                      </div>
-                    )}
+                    {!isCodOrder &&
+                      financeTiming === "upfront" &&
+                      !financeVerified && (
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          buttonStyle="fullWidth"
+                          size="lg"
+                          icon={
+                            financeMethod === "transfer"
+                              ? "paymentSuccess"
+                              : "cash"
+                          }
+                          onClick={() => setFinanceVerified(true)}
+                        >
+                          {financeMethod === "transfer"
+                            ? t("I verify it in our bank")
+                            : t("Cash received")}
+                        </Button>
+                      )}
+                    {!isCodOrder &&
+                      financeTiming === "upfront" &&
+                      financeVerified && (
+                        <div className={styles.financeVerifiedChip}>
+                          <Icon name="check" size={16} />
+                          {t("Payment confirmed")}
+                        </div>
+                      )}
 
                     <Button
                       type="button"
                       variant="primary"
                       buttonStyle="fullWidth"
+                      size="lg"
                       icon="check"
                       disabled={
                         approvingFinance ||
-                        (financeTiming === "upfront" && !financeVerified) ||
+                        (!isCodOrder &&
+                          financeTiming === "upfront" &&
+                          !financeVerified) ||
                         (overCreditLimit && !canOverrideCreditLimit)
                       }
                       onClick={handleApproveFinance}
@@ -6340,30 +6446,6 @@ export function OrderDetail() {
                     </Button>
                   </div>
                 </Card>
-              )}
-              {showFinanceUndoRow && (
-                <div className={styles.undoRow}>
-                  <div className={styles.left}>
-                    <Icon name="infoCircle" />
-                    <p>
-                      <b>{t("Payment cleared by Finance")}</b> —{" "}
-                      {stage === "cold"
-                        ? t("cleared while still at Cold Storage.")
-                        : t("the order has moved on past the gate.")}{" "}
-                      {t("Cleared by mistake?")}
-                    </p>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    className={styles.inlineButton}
-                    onClick={handleUndoFinanceClear}
-                    disabled={approvingFinance}
-                  >
-                    <Icon name="undo" size={16} />
-                    {t("Undo payment clearance")}
-                  </Button>
-                </div>
               )}
 
               {canUndo && order.undo_snapshot && (
@@ -6485,6 +6567,134 @@ export function OrderDetail() {
             </div>
           )}
 
+          {/* Documents Section — Admin/Finance/Owner only, matching the
+              prototype's own hardcoded role check (see `canSeeDocuments`'s
+              doc comment above). Previously visible to every role. */}
+          {canSeeDocuments && (
+            <Card>
+              <div className={styles.heading}>
+                {t("Documents")}{" "}
+                <span className={styles.count}>{docEntries.length}</span>
+              </div>
+
+              {docEntries.length === 0 ? (
+                <p className={styles.muted}>{t("No documents logged yet.")}</p>
+              ) : (
+                <div className={styles.docList}>
+                  {docEntries.map((doc) => {
+                    const fileId = doc.document_file ?? doc.file_path;
+                    return (
+                      <div key={doc.id} className={styles.docRow}>
+                        <div className={styles.docTop}>
+                          <span className={styles.docType}>
+                            {doc.doc_type} —{" "}
+                          </span>
+                          <span className={styles.docNumber}>
+                            {doc.number ?? "—"}
+                          </span>
+
+                          {fileId && (
+                            <div
+                              className={styles.thumbnailItem}
+                              style={{ width: 36, height: 36 }}
+                              onClick={() =>
+                                setActiveImageModal({
+                                  url: directusFileUrl(fileId),
+                                  title: `${doc.doc_type} ${doc.number ?? ""}`,
+                                  attachmentId: doc.id ?? undefined,
+                                })
+                              }
+                            >
+                              <img
+                                src={directusFileUrl(fileId)}
+                                alt="doc"
+                                className={styles.thumbnailImg}
+                              />
+                            </div>
+                          )}
+
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            icon="trash"
+                            iconOnly
+                            title={t("Delete document")}
+                            onClick={() =>
+                              doc.id != null && handleDeleteDocument(doc.id)
+                            }
+                          ></Button>
+                        </div>
+
+                        {doc.note && (
+                          <div className={styles.docNote}>{doc.note}</div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {canAddDocs && (
+                <form className={styles.docForm} onSubmit={handleAddDocument}>
+                  <div className={styles.docFormRow}>
+                    <select
+                      className={styles.editInput}
+                      style={{ maxWidth: "120px" }}
+                      value={docType}
+                      onChange={(e) => setDocType(e.target.value)}
+                    >
+                      {DOC_TYPES.map((docTypeOption) => (
+                        <option key={docTypeOption} value={docTypeOption}>
+                          {docTypeOption}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="text"
+                      className={styles.editInput}
+                      style={{ flex: 1 }}
+                      placeholder={t("Document number")}
+                      value={docNumber}
+                      onChange={(e) => setDocNumber(e.target.value)}
+                      required
+                    />
+                    <input
+                      ref={docFileInputRef}
+                      type="file"
+                      style={{ display: "none" }}
+                      accept="image/*,application/pdf"
+                      onChange={handleDocFileUpload}
+                    />
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="md"
+                      isActive={!!docFileName}
+                      icon={docFileName ? "paperclip" : "add"}
+                      iconOnly
+                      onClick={() => docFileInputRef.current?.click()}
+                    />
+                    <Button
+                      type="submit"
+                      variant="primary"
+                      disabled={savingDoc || !docNumber.trim()}
+                    >
+                      {savingDoc ? "…" : t("+ Add")}
+                    </Button>
+                  </div>
+                  <input
+                    type="text"
+                    className={styles.editInput}
+                    placeholder={t("Put notes here...")}
+                    value={docNote}
+                    onChange={(e) => setDocNote(e.target.value)}
+                  />
+                </form>
+              )}
+            </Card>
+          )}
+
           {/*
             Order Actions — every cross-stage override lives here, same place
             at every stage (Reorder / Put on hold / Send back / Restore /
@@ -6561,6 +6771,7 @@ export function OrderDetail() {
                   variant="secondary"
                   size="lg"
                   icon="close"
+                  tone="error"
                   onClick={handleCancel}
                   disabled={cancelling}
                 >

@@ -63,6 +63,12 @@
   --accent-primary-light: #2291b9;
   --accent-primary-dark: #082f3d;
   --text-on-accent: #ffffff;
+  /* Text color for content sitting on a SOLID --state-warning fill (e.g. a
+     warning-tone filled Button) — deliberately not redefined in the dark
+     theme block below: both theme's warning ambers (#f59e0b / #fbbf24) are
+     light/bright, so dark text reads correctly on either one regardless of
+     overall app theme. */
+  --text-on-warning: #1a1d1f;
 
   --accent-secondary: #18295e;
 

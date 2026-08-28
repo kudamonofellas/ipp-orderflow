@@ -70,7 +70,7 @@ export interface OpenOrder {
   lines: OpenOrderLine[];
   /** Hand-off fields — only meaningful when status === 'dispatch'. Carried
    *  through so the shared row renderer can derive the dispatch sub-status
-   *  label ("Out for delivery" / "Awaiting driver") via `dispatchSubStatus()`
+   *  label ("Out for delivery" / "Awaiting pickup") via `dispatchSubStatus()`
    *  (lib/pipeline.ts) instead of the hook precomputing it. */
   takenBy: string | null;
   pickup: boolean;

@@ -21,6 +21,7 @@ All components must use these CSS custom property tokens — no hardcoded hex va
 | Primary accent       | `--accent-primary`      | `#0C4458`                           | Primary buttons, active nav, brand color    |
 | Primary accent hover | `--accent-primary-dark` | `#082F3D`                           | Hover state for primary actions             |
 | Accent on primary    | `--text-on-accent`      | `#FFFFFF`                           | Text on primary accent backgrounds          |
+| Text on warning       | `--text-on-warning`     | `#1A1D1F`                           | Text on a solid `--state-warning` fill (e.g. Button's `tone="warning"`) — same value in both themes, since both theme's warning ambers are light/bright enough to need the same dark text |
 | Border default       | `--border-default`      | `#D6D6D6`                           | Default borders for cards, inputs, dividers |
 | Border subtle        | `--border-subtle`       | `#F0F5F5`                           | Very subtle dividers                        |
 | State error          | `--state-error`         | `#DC2626`                           | Error messages, destructive actions         |
@@ -61,6 +62,7 @@ All components must use these CSS custom property tokens — no hardcoded hex va
 | Primary accent       | `--accent-primary`      | `#57B3CD` | Primary buttons, active nav, brand color    |
 | Primary accent hover | `--accent-primary-dark` | `#1E4D5C` | Hover state for primary actions             |
 | Accent on primary    | `--text-on-accent`      | `#FFFFFF` | Text on primary accent backgrounds          |
+| Text on warning       | `--text-on-warning`     | `#1A1D1F` | Text on a solid `--state-warning` fill — deliberately not redefined here, see the light-theme row |
 | Border default       | `--border-default`      | `#2C3035` | Default borders for cards, inputs, dividers |
 | Border subtle        | `--border-subtle`       | `#24272A` | Very subtle dividers                        |
 | Surface hover (alt)  | `--bg-surface-hover-dark` | `#16333D` | Secondary hover tint (rarely used)         |
@@ -137,7 +139,7 @@ All components must use these CSS custom property tokens — no hardcoded hex va
 
 ### Component Patterns (to be built)
 
-- **Button** — solid primary (teal), ghost (transparent hover), outline, icon-only
+- **Button** — solid primary (teal), ghost (transparent hover), outline, icon-only. `variant` (primary/secondary/tertiary/ghost) controls structure; a separate `tone` prop (primary/neutral/success/warning/error, default primary) controls sentiment color, orthogonally — the two compose freely (e.g. `variant="secondary" tone="error"`). Implemented via CSS custom properties (`--btn-accent`/`--btn-accent-dark`/`--btn-on-accent`) set per tone, referenced by every variant rule — see `src/components/Button/`.
 - **Card** — white surface, 12px radius, subtle shadow, 16px padding
 - **Badge** — rounded pill, light background, medium text
 - **Avatar** — circular, initials fallback, 40px default size
