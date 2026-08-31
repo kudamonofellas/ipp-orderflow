@@ -47,10 +47,18 @@
 }
 
 /* ===== Delivery proof (capture + read-only record) ===== */
-.proofHeaderRow {
+.headerRow {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: var(--space-md);
+  padding-bottom: var(--space-md);
+}
+
+.headerRowLeft {
+  padding-bottom: var(--space-md);
+  display: flex;
+  align-items: center;
   gap: var(--space-md);
 }
 
@@ -58,13 +66,6 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-}
-
-.proofsContainer {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-md);
-  padding: var(--space-md) 0;
 }
 
 .proofFieldRow {
@@ -139,7 +140,7 @@
   border: 1px solid color-mix(in srgb, var(--state-warning) 33%, transparent);
 }
 
-.codOutcome {
+.outcomeRow {
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);
@@ -157,13 +158,6 @@
   display: flex;
   gap: var(--space-xs);
   flex-wrap: wrap;
-}
-
-.proofActions {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
-  margin-top: var(--space-md);
 }
 
 .proofActionsRow {
@@ -231,13 +225,17 @@
   letter-spacing: var(--tracking-wide);
 }
 
+.sectionTitle {
+  font: var(--text-h3);
+  font-weight: 600;
+}
+
 .body {
   font: var(--text-body);
   color: var(--text-primary);
 }
 
 .muted {
-  font: var(--text-body);
   color: var(--text-muted);
 }
 
@@ -1004,7 +1002,6 @@
 }
 
 .secondary {
-  font: var(--text-primary);
   color: var(--text-secondary);
 }
 
@@ -1299,7 +1296,7 @@
 }
 
 .warningTitle {
-  font: var(--text-h4);
+  font: var(--text-h3);
   font-weight: 700;
   color: var(--text-state-warning);
 }

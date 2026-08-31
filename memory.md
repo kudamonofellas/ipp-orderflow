@@ -38,11 +38,31 @@ Last updated: 2026-08-21T16:40 WIB
 - **Signed DO/SI not returned badge**: Added `pendingDocs` badge on order rows (`StatusPill.tsx`, `OrderRow.tsx`, `useOrders.ts`, `dashboard.ts`).
 - **Prototype On Hold Model**: Reverted hold behavior to match the prototype's boolean `hold` model (`hold: true/false` flag on `orders` without mutating `stage` to `outstanding`). Freezes stage actions and renders the prominent amber **"On hold"** card banner at the very top replacing the stepper (matching `stage === "delivered"` banner placement), while preserving the real pipeline stage. Fixed hold/resume toggle to not write an `undo_snapshot` or trigger stage-undo banners. Positioned `subStatusBadges` (`On hold`, `Replacement`, `Signed DO/SI not returned yet`) in a neat row directly underneath the main `StatusPill` within the Stage column, with a unified 64px row height across all order table rows.
 
+**7. Dispatch Hand-off Flow Refinement (`OrderDetail.tsx`, `schemas.ts`, `icons.ts`, `translations.ts`)**
+- **Part 1 (Address Block Gating)**: Deliver-to address block now strictly gated on `handoffMode === "delivery" || handoffMode === "third"`. When no method is chosen (`handoffMode === null`), the address/Navigate block is hidden and only the 3-way handoff chooser renders.
+- **Part 2 (Third-Party Delivery Tracking & Close-the-Loop)**:
+  - Added `courier_tracking_ref` schema field; splits service name and tracking ref.
+  - Third-party tracking link: Paxel renders deep link (`https://paxel.co.id/tracking/{ref}`), other services (Gojek, Grab, Lalamove, Other) render copyable reference text + "Copy ref" button.
+  - Third-party address block renamed to "Handover destination" and hides the Navigate button & COD chips.
+  - **Prototype Parity**: Handover Proof card layout matches prototype with 4 sequential fields:
+    1. `Item condition photo (pickup)` (`condPhotos`)
+    2. `Photo of the package / courier` (`recvPhotos`)
+    3. `Driver name (optional)` (`receiverName` input)
+    4. `Signed invoice` (`signedPhotos`)
+  - Primary button is `Mark handed over` (enabled once condition photo is staged, other fields optional). Sub-action row cleanly presents `Customer refused / returned` only (omitting own-courier retry).
+  - Submitting marks the order `delivered` and history as `Delivered via {service} — confirmed`.
+- **Part 3 (Customer Pickup "Ready for pickup" & Notify Flow)**:
+  - Added `ready_for_pickup` and `ready_at` schema fields.
+  - Pickup card shows warehouse pickup location and operational hours instead of customer delivery address.
+  - Added "Mark ready for pickup" action which transitions to a "Ready for pickup" badge + "Notify customer (WhatsApp)" button (copies pre-formatted Indonesian WA message and opens `wa.me` if phone is on file).
+  - COD chip relabeled to "Collect payment at handover" for pickup orders.
+
 ## Current state
 
 - ✅ TypeScript (`npx tsc -b` / `tsc --noEmit`) — **0 errors**
-- ✅ Production build (`npm run build`) — **Clean build in 3.13s**
-- ✅ On-hold boolean model matching prototype implemented and verified
+- ✅ Production build (`npm run build`) — **Clean build**
+- ✅ ESLint (`npm run lint`) — **0 errors**
+- ✅ Dispatch hand-off complete: explicit gating, third-party tracking & confirm, and customer pickup notification flow verified.
 
 ## Next session starts with
 

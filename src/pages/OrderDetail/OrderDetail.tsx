@@ -78,7 +78,7 @@ import {
   type ReturnStage,
 } from "../../lib/pipeline";
 import { redactHistoryPrices } from "../../lib/redactHistory";
-import { formatClock } from "../../lib/format";
+import { formatClock, formatTakenAt } from "../../lib/format";
 import { ReturnLineBox } from "../../components/ReturnLineBox/ReturnLineBox";
 import { dateCode } from "../../lib/orderNo";
 import { ImageDetailsModal } from "../../components/ImageDetailsModal/ImageDetailsModal";
@@ -283,21 +283,6 @@ function formatDate(iso: string | null | undefined, withTime = false): string {
   });
 }
 
-/** "Tuesday 11 August 2026  13:52" — the delivery-proof "taken by" timestamp format. */
-function formatTakenAt(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  const weekday = d.toLocaleDateString("en-US", { weekday: "long" });
-  const month = d.toLocaleDateString("en-US", { month: "long" });
-  const time = d.toLocaleTimeString("en-GB", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
-  return `${weekday} ${d.getDate()} ${month} ${d.getFullYear()}  ${time}`;
-}
-
 /** Best-effort GPS fix — resolves `null` on denial/timeout/unsupported
  *  browser rather than rejecting, so callers never need a try/catch just to
  *  keep going without a location. Never blocks the caller's own action. */
@@ -443,6 +428,7 @@ export function OrderDetail() {
     THIRD_PARTY_SERVICES[0],
   );
   const [thirdPartyRef, setThirdPartyRef] = useState("");
+  const [copiedTrackingRef, setCopiedTrackingRef] = useState(false);
 
   /* ── delivery proof (Mark as Delivered / picked up / handed over) state ──
    * Multiple photos per slot, staged locally (uploaded to Directus Files but
@@ -1073,6 +1059,18 @@ export function OrderDetail() {
           ? "pickup"
           : "third"
       : null;
+
+  const rawThirdPartyService = order.courier_service ?? "";
+  const parsedThirdPartyRef =
+    order.courier_tracking_ref ??
+    (rawThirdPartyService.includes(" · ")
+      ? rawThirdPartyService.split(" · ")[1]
+      : "");
+  const parsedThirdPartyService = order.courier_tracking_ref
+    ? rawThirdPartyService
+    : rawThirdPartyService.includes(" · ")
+      ? rawThirdPartyService.split(" · ")[0]
+      : rawThirdPartyService;
 
   // Who currently "has the ball" for this stage (ported from the prototype's
   // ACTOR — see F-04-adjacent "Stage → actor" gap in prototype-audit.md).
@@ -2011,8 +2009,11 @@ export function OrderDetail() {
         ? {
             taken_by: null,
             pickup: false,
+            ready_for_pickup: false,
+            ready_at: null,
             third_party: false,
             courier_service: null,
+            courier_tracking_ref: null,
           }
         : {}),
     };
@@ -2178,10 +2179,15 @@ export function OrderDetail() {
   }
 
   function handleConfirmThirdParty() {
-    const service = `${thirdPartyService}${thirdPartyRef.trim() ? ` · ${thirdPartyRef.trim()}` : ""}`;
+    const svc = thirdPartyService;
+    const ref = thirdPartyRef.trim();
     commitHandoff(
-      { third_party: true, courier_service: service },
-      `Handover: 3rd-party — ${service}`,
+      {
+        third_party: true,
+        courier_service: svc,
+        courier_tracking_ref: ref || null,
+      },
+      `Handover: 3rd-party — ${svc}${ref ? ` · ${ref}` : ""}`,
     );
   }
 
@@ -2192,8 +2198,11 @@ export function OrderDetail() {
       {
         taken_by: null,
         pickup: false,
+        ready_for_pickup: false,
+        ready_at: null,
         third_party: false,
         courier_service: null,
+        courier_tracking_ref: null,
       },
       "Handover method reset",
     );
@@ -2206,11 +2215,21 @@ export function OrderDetail() {
       {
         taken_by: null,
         pickup: false,
+        ready_for_pickup: false,
+        ready_at: null,
         third_party: false,
         courier_service: null,
+        courier_tracking_ref: null,
       },
       "Delivery attempt failed — retrying",
     );
+  }
+
+  function handleCopyTrackingRef() {
+    if (!parsedThirdPartyRef) return;
+    navigator.clipboard.writeText(parsedThirdPartyRef);
+    setCopiedTrackingRef(true);
+    setTimeout(() => setCopiedTrackingRef(false), 2500);
   }
 
   async function handleConfirmDocsReturned() {
@@ -2601,7 +2620,12 @@ export function OrderDetail() {
     const codShort = codApplies && codOutcome !== "full";
     let nextStage: string;
     let historyWhat: string;
-    if (!codApplies) {
+    if (handoffMode === "third") {
+      nextStage = "delivered";
+      const svc =
+        parsedThirdPartyService || order.courier_service || "3rd-party";
+      historyWhat = `Delivered via ${svc} — confirmed`;
+    } else if (!codApplies) {
       nextStage = "delivered";
       historyWhat = `Stage advanced: ${stage} → delivered`;
     } else if (!codShort) {
@@ -2832,8 +2856,11 @@ export function OrderDetail() {
         ? {
             taken_by: null,
             pickup: false,
+            ready_for_pickup: false,
+            ready_at: null,
             third_party: false,
             courier_service: null,
+            courier_tracking_ref: null,
           }
         : {}),
     };
@@ -3963,7 +3990,9 @@ export function OrderDetail() {
             </Card>
           ) : isReturned && !isCancelled ? (
             <Card className={styles.errorCard}>
-              <div className={styles.heading}>Customer return</div>
+              <div className={styles.headerRow}>
+                <h3 className={styles.sectionTitle}>Customer return</h3>
+              </div>
               <div className={styles.cardContent}>
                 {canReceiveReturn && !order.return_received && (
                   <div className={styles.cardListColumn}>
@@ -4121,13 +4150,13 @@ export function OrderDetail() {
                             !selectedDoc.replacement &&
                             selectedDoc.key !== "revise-return" &&
                             !order.return_received && (
-                              <div className={styles.infoHint}>
-                                <p className={styles.secondary}>
-                                  {t(
-                                    "The order closes only after the warehouse receives the goods.",
-                                  )}
-                                </p>
-                              </div>
+                              <p
+                                className={`${styles.secondary} ${styles.infoHint}`}
+                              >
+                                {t(
+                                  "The order closes only after the warehouse receives the goods.",
+                                )}
+                              </p>
                             )}
                           {selectedDoc && (
                             <div className={styles.infoHint}>
@@ -4310,60 +4339,6 @@ export function OrderDetail() {
             </div>
           )}
 
-          {/* Deliver-to address + Navigate + Collect COD chip */}
-          {stage === "dispatch" &&
-            canAdvance &&
-            handoffMode !== "pickup" &&
-            (canSeeCustomerContact || isStageActor) &&
-            order.customer_address && (
-              <Card className={styles.warningCard}>
-                <div
-                  className={styles.proofHeaderRow}
-                  style={{ paddingBottom: "var(--space-md)" }}
-                >
-                  <div className={styles.row}>
-                    <Icon
-                      name="delivered"
-                      size={20}
-                      style={{ color: "var(--state-warning)", flexShrink: 0 }}
-                    />
-
-                    <p className={styles.warningTitle}>{t("Deliver to")}</p>
-                  </div>
-
-                  {codApplies && codAmount > 0 && (
-                    <span className={styles.codOwedChip}>
-                      {t("Collect COD")} {currency.format(codAmount)}
-                    </span>
-                  )}
-                </div>
-                <div>
-                  <div className={styles.fieldLabel}>
-                    {order.customer_address}
-                  </div>
-                </div>
-
-                <div className={styles.cardActions}>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="md"
-                    icon="navigation"
-                    tone="warning"
-                    onClick={() =>
-                      window.open(
-                        `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.customer_address ?? "")}`,
-                        "_blank",
-                        "noopener",
-                      )
-                    }
-                  >
-                    {t("Navigate")}
-                  </Button>
-                </div>
-              </Card>
-            )}
-
           {/* "Isn't weighed yet" safety net — a kg/gram/loaf line added (or
               unit-changed) after Cold Storage, still in the warehouse.
               Ported from the prototype's own banner (`Dev-OrderDetail.jsx:1314-1321`). */}
@@ -4501,8 +4476,9 @@ export function OrderDetail() {
 
           {/* Items Card */}
           <Card>
-            <div className={styles.heading}>
-              {t("Items")} <span className={styles.count}>{lines.length}</span>
+            <div className={styles.headerRowLeft}>
+              <h3 className={styles.sectionTitle}>{t("Items")}</h3>
+              <span className={styles.count}>{lines.length}</span>
             </div>
 
             {/* View Mode Items List */}
@@ -5032,7 +5008,11 @@ export function OrderDetail() {
               (Dev-OrderDetail.jsx:1492-1508). */}
           {order.return_doc && (
             <Card>
-              <div className={styles.heading}>{t("Return settlement")}</div>
+              <div className={styles.headerRow}>
+                <h3 className={styles.sectionTitle}>
+                  {t("Return settlement")}
+                </h3>
+              </div>
               <div className={styles.cardContent}>
                 <div className={styles.docList}>
                   <div className={styles.docRow}>
@@ -5133,7 +5113,9 @@ export function OrderDetail() {
               `order.returnInbound` card (Dev-OrderDetail.jsx:1535-1561). */}
           {!isReturned && order.return_inbound && (
             <Card className={styles.errorCard}>
-              <div className={styles.heading}>Customer return</div>
+              <div className={styles.headerRow}>
+                <h3 className={styles.sectionTitle}>Customer return</h3>
+              </div>
               <p className={styles.fieldLabel}>
                 {t("Warehouse — receive & verify")}
               </p>
@@ -5273,7 +5255,9 @@ export function OrderDetail() {
                   their own Finance-gate form. */}
               {stage === "cold" && canWeighHere && (
                 <Card>
-                  <div className={styles.heading}>{t("Pull & weigh")}</div>
+                  <div className={styles.headerRowLeft}>
+                    <h3 className={styles.sectionTitle}>{t("Pull & weigh")}</h3>
+                  </div>
                   <div className={styles.cardContent}>
                     <div
                       className={styles.financeClearRow}
@@ -5352,7 +5336,9 @@ export function OrderDetail() {
                   the prototype's Production card (Dev-OrderDetail.jsx:744-766). */}
               {stage === "production" && canCutHere && (
                 <Card>
-                  <div className={styles.heading}>{t("Production")}</div>
+                  <div className={styles.headerRowLeft}>
+                    <h3 className={styles.sectionTitle}>{t("Production")}</h3>
+                  </div>
                   <div className={styles.cardContent}>
                     {cutTasks.length > 0 && (
                       <div className={styles.cuttingRow}>
@@ -5390,8 +5376,10 @@ export function OrderDetail() {
                     {(cutTasks.length === 0 || order.cutting_started) && (
                       <div className={styles.cuttingRow}>
                         {cutTasks.length > 0 && (
-                          <div className={styles.sectionHeading}>
-                            {t("Cut · tick each cutting")}
+                          <div className={styles.headerRowLeft}>
+                            <h3 className={styles.sectionTitle}>
+                              {t("Cut · tick each cutting")}
+                            </h3>
                           </div>
                         )}
                         {cutTasks.length === 0 ? (
@@ -5447,7 +5435,11 @@ export function OrderDetail() {
                   "Pack the order" card (Dev-OrderDetail.jsx:769-782). */}
               {stage === "packing" && canAdvance && (
                 <Card>
-                  <div className={styles.heading}>{t("Pack the order")}</div>
+                  <div className={styles.headerRow}>
+                    <h3 className={styles.sectionTitle}>
+                      {t("Pack the order")}
+                    </h3>
+                  </div>
                   <div className={styles.cardContent}>
                     <div className={styles.cardListColumn}>
                       <p className={styles.secondary}>
@@ -5541,7 +5533,7 @@ export function OrderDetail() {
               {/* Hand-off mode chooser — dispatch stage, no mode picked yet */}
               {stage === "dispatch" && canAdvance && !handoffMode && (
                 <Card>
-                  <div className={styles.heading}>{t("Delivery")}</div>
+                  <div className={styles.sectionTitle}>{t("Delivery")}</div>
                   <div className={styles.cardActions}>
                     <Button
                       type="button"
@@ -5613,15 +5605,80 @@ export function OrderDetail() {
                 </Card>
               )}
 
+              {/* Deliver-to address + Navigate + Collect COD chip */}
+              {stage === "dispatch" &&
+                canAdvance &&
+                (handoffMode === "delivery" || handoffMode === "third") &&
+                (canSeeCustomerContact || isStageActor) &&
+                order.customer_address && (
+                  <Card className={styles.warningCard}>
+                    <div
+                      className={styles.headerRow}
+                      style={{ paddingBottom: "var(--space-md)" }}
+                    >
+                      <div className={styles.row}>
+                        <Icon
+                          name="delivered"
+                          size={20}
+                          style={{
+                            color: "var(--state-warning)",
+                            flexShrink: 0,
+                          }}
+                        />
+
+                        <p className={styles.warningTitle}>
+                          {handoffMode === "third"
+                            ? t("Handover destination")
+                            : t("Deliver to")}
+                        </p>
+                      </div>
+
+                      {handoffMode === "delivery" &&
+                        codApplies &&
+                        codAmount > 0 && (
+                          <span className={styles.codOwedChip}>
+                            {t("Collect COD")} {currency.format(codAmount)}
+                          </span>
+                        )}
+                    </div>
+                    <div>
+                      <div className={styles.fieldLabel}>
+                        {order.customer_address}
+                      </div>
+                    </div>
+
+                    {handoffMode === "delivery" && (
+                      <div className={styles.cardActions}>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="md"
+                          icon="navigation"
+                          tone="warning"
+                          onClick={() =>
+                            window.open(
+                              `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.customer_address ?? "")}`,
+                              "_blank",
+                              "noopener",
+                            )
+                          }
+                        >
+                          {t("Navigate")}
+                        </Button>
+                      </div>
+                    )}
+                  </Card>
+                )}
+
               {/* Proof capture — mode chosen, relabeled per mode */}
               {stage === "dispatch" && canAdvance && handoffMode && (
                 <Card>
-                  <div className={styles.proofHeaderRow}>
-                    <span className={styles.heading}>
+                  <div className={styles.headerRow}>
+                    <span className={styles.sectionTitle}>
                       {handoffMode === "pickup"
                         ? t("Proof of pickup")
                         : handoffMode === "third"
-                          ? `${t("Handed to")} ${order.courier_service ?? ""}`
+                          ? t("Handover proof")
                           : t("Delivery proof")}
                     </span>
                     {/* Ported from the prototype's own gate
@@ -5634,6 +5691,7 @@ export function OrderDetail() {
                     <Button
                       type="button"
                       variant="tertiary"
+                      className={styles.inlineButton}
                       size="md"
                       icon="undo"
                       onClick={handleChangeMethod}
@@ -5643,7 +5701,10 @@ export function OrderDetail() {
                     </Button>
                   </div>
                   {handoffMode === "delivery" && (
-                    <div className={styles.secondary}>
+                    <div
+                      className={styles.secondary}
+                      style={{ paddingBottom: "var(--space-md)" }}
+                    >
                       {t("Taken by")}{" "}
                       <strong>{displayName(order.taken_by)}</strong> {t("on")}{" "}
                       {formatTakenAt(
@@ -5653,7 +5714,76 @@ export function OrderDetail() {
                       )}
                     </div>
                   )}
-                  <div className={styles.proofsContainer}>
+                  {handoffMode === "third" && (
+                    <div
+                      className={styles.secondary}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "var(--space-sm)",
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <span style={{ marginBottom: "var(--space-md)" }}>
+                        {t("Handed to")}{" "}
+                        <strong>
+                          {parsedThirdPartyService ||
+                            order.courier_service ||
+                            t("Online courier")}
+                          {parsedThirdPartyRef
+                            ? ` · ${parsedThirdPartyRef}`
+                            : ""}
+                        </strong>
+                      </span>
+                      {parsedThirdPartyRef && (
+                        <>
+                          <span>·</span>
+                          {parsedThirdPartyService.toLowerCase() === "paxel" ? (
+                            <a
+                              href={`https://paxel.co.id/tracking/${encodeURIComponent(parsedThirdPartyRef)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: 4,
+                                color: "var(--accent-primary)",
+                                fontWeight: 600,
+                              }}
+                            >
+                              {t("Track on Paxel")} ↗
+                            </a>
+                          ) : (
+                            <span
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: 6,
+                              }}
+                            >
+                              <span>
+                                {t("Ref:")}{" "}
+                                <strong>{parsedThirdPartyRef}</strong>
+                              </span>
+                              <Button
+                                type="button"
+                                variant="tertiary"
+                                size="sm"
+                                icon={copiedTrackingRef ? "check" : "copy"}
+                                onClick={handleCopyTrackingRef}
+                                className={styles.inlineButton}
+                              >
+                                {copiedTrackingRef
+                                  ? t("Copied")
+                                  : t("Copy ref")}
+                              </Button>
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
+                  <div className={styles.cardContent}>
                     <div
                       className={styles.proofFieldRow}
                       style={{
@@ -5675,7 +5805,9 @@ export function OrderDetail() {
                             }
                           />
                           <span className={styles.fieldLabel}>
-                            {t("Condition photo")}
+                            {handoffMode === "pickup" || handoffMode === "third"
+                              ? t("Item condition photo (pickup)")
+                              : t("Item condition photo")}
                           </span>
                         </div>
                         {condPhotos.length > 0 && (
@@ -5687,7 +5819,11 @@ export function OrderDetail() {
                                 onClick={() =>
                                   setActiveImageModal({
                                     url: p.url,
-                                    title: t("Condition photo"),
+                                    title:
+                                      handoffMode === "pickup" ||
+                                      handoffMode === "third"
+                                        ? t("Item condition photo (pickup)")
+                                        : t("Item condition photo"),
                                     stagedProofSlot: "cond",
                                     stagedProofIndex: i,
                                   })
@@ -5732,21 +5868,15 @@ export function OrderDetail() {
                       </div>
                     </div>
 
-                    {/* SOP hint — ported from the prototype's own copy
-                        (`Dev-OrderDetail.jsx:891`), shown for exactly the
-                        cases where the receiver/name/signed fields below are
-                        still hidden (condition photo not yet staged; not
-                        applicable to `third`, which has no such fields to
-                        reveal in this port's simplified single-photo
-                        hand-off flow). */}
-                    {condPhotos.length === 0 && handoffMode !== "third" && (
-                      <div className={styles.infoHint}>
+                    {/* SOP hint — ported from the prototype's own copy */}
+                    {condPhotos.length === 0 && handoffMode && (
+                      <div className={styles.row}>
                         <Icon
                           name="infoCircle"
-                          size={14}
+                          size={16}
                           style={{ color: "var(--text-muted)" }}
                         />
-                        <p className={styles.secondary}>
+                        <p className={`${styles.infoHint} ${styles.muted}`}>
                           {t(
                             "Photograph the item condition first — then record who received it, or process a return.",
                           )}
@@ -5754,14 +5884,14 @@ export function OrderDetail() {
                       </div>
                     )}
 
-                    {condPhotos.length > 0 && handoffMode !== "third" && (
+                    {condPhotos.length > 0 && (
                       <>
+                        {/* Field 2: Photo of the package / courier / receiver */}
                         <div
                           className={styles.proofFieldRow}
                           style={{
                             borderColor:
-                              recvPhotos.length > 0 &&
-                              receiverName.trim() !== ""
+                              recvPhotos.length > 0
                                 ? "var(--accent-primary)"
                                 : "var(--border-subtle)",
                           }}
@@ -5772,16 +5902,17 @@ export function OrderDetail() {
                                 name="check"
                                 size={18}
                                 className={
-                                  recvPhotos.length > 0 &&
-                                  receiverName.trim() !== ""
+                                  recvPhotos.length > 0
                                     ? styles.proofCheckFilled
                                     : styles.proofCheckEmpty
                                 }
                               />
                               <span className={styles.fieldLabel}>
-                                {handoffMode === "pickup"
-                                  ? t("Photo of who collected")
-                                  : t("Receiver photo")}
+                                {handoffMode === "third"
+                                  ? t("Photo of the package / courier")
+                                  : handoffMode === "pickup"
+                                    ? t("Photo of who collected")
+                                    : t("Receiver photo")}
                               </span>
                             </div>
                             {recvPhotos.length > 0 && (
@@ -5794,9 +5925,13 @@ export function OrderDetail() {
                                       setActiveImageModal({
                                         url: p.url,
                                         title:
-                                          handoffMode === "pickup"
-                                            ? t("Photo of who collected")
-                                            : t("Receiver photo"),
+                                          handoffMode === "third"
+                                            ? t(
+                                                "Photo of the package / courier",
+                                              )
+                                            : handoffMode === "pickup"
+                                              ? t("Photo of who collected")
+                                              : t("Receiver photo"),
                                         stagedProofSlot: "recv",
                                         stagedProofIndex: i,
                                       })
@@ -5841,18 +5976,17 @@ export function OrderDetail() {
                               onClick={() => recvFileInputRef.current?.click()}
                             />
                           </div>
-                          <div
-                            style={{
-                              paddingLeft: "28px",
-                            }}
-                          >
+                          {/* Field 3: Driver name / Collected by / Receiver name input */}
+                          <div className={styles.outcomeRow}>
                             <input
                               type="text"
                               className={styles.editInput}
                               placeholder={
-                                handoffMode === "pickup"
-                                  ? t("Collected by")
-                                  : t("Receiver's name")
+                                handoffMode === "third"
+                                  ? t("Driver name (optional)")
+                                  : handoffMode === "pickup"
+                                    ? t("Collected by")
+                                    : t("Receiver's name")
                               }
                               value={receiverName}
                               onChange={(e) => setReceiverName(e.target.value)}
@@ -5860,6 +5994,7 @@ export function OrderDetail() {
                           </div>
                         </div>
 
+                        {/* Field 4: Signed invoice / doc */}
                         <div
                           className={styles.proofFieldRow}
                           style={{
@@ -5881,9 +6016,11 @@ export function OrderDetail() {
                                 }
                               />
                               <span className={styles.fieldLabel}>
-                                {proofRequired
-                                  ? t("Signed doc")
-                                  : t("Signed doc (optional)")}
+                                {handoffMode === "third"
+                                  ? t("Signed invoice")
+                                  : proofRequired
+                                    ? t("Signed doc (required)")
+                                    : t("Signed doc (optional)")}
                               </span>
                             </div>
                             {signedPhotos.length > 0 && (
@@ -5895,9 +6032,12 @@ export function OrderDetail() {
                                     onClick={() =>
                                       setActiveImageModal({
                                         url: p.url,
-                                        title: proofRequired
-                                          ? t("Signed doc")
-                                          : t("Signed doc (optional)"),
+                                        title:
+                                          handoffMode === "third"
+                                            ? t("Signed invoice")
+                                            : proofRequired
+                                              ? t("Signed doc (required)")
+                                              : t("Signed doc (optional)"),
                                         stagedProofSlot: "signed",
                                         stagedProofIndex: i,
                                       })
@@ -5951,17 +6091,6 @@ export function OrderDetail() {
                       </>
                     )}
 
-                    {condPhotos.length > 0 && handoffMode === "third" && (
-                      <input
-                        type="text"
-                        className={styles.editInput}
-                        placeholder={t("Receiver's name")}
-                        value={receiverName}
-                        onChange={(e) => setReceiverName(e.target.value)}
-                        style={{ width: "100%" }}
-                      />
-                    )}
-
                     {condPhotos.length > 0 && codApplies && (
                       <div
                         className={styles.proofFieldRow}
@@ -5991,7 +6120,7 @@ export function OrderDetail() {
                             </span>
                           </div>
                         </div>
-                        <div className={styles.codOutcome}>
+                        <div className={styles.outcomeRow}>
                           <div className={styles.codSegments}>
                             <Button
                               type="button"
@@ -6069,17 +6198,16 @@ export function OrderDetail() {
                   </div>
 
                   {condPhotos.length > 0 && (
-                    <div className={styles.proofActions}>
+                    <div className={styles.cardActions}>
                       <Button
                         type="button"
                         variant="primary"
-                        size="lg"
                         buttonStyle="fullWidth"
                         icon="tick"
                         onClick={handleConfirmDelivery}
                         disabled={
                           submittingProof ||
-                          !receiverName.trim() ||
+                          (handoffMode !== "third" && !receiverName.trim()) ||
                           (handoffMode !== "third" &&
                             proofRequired &&
                             (recvPhotos.length === 0 ||
@@ -6098,7 +6226,6 @@ export function OrderDetail() {
                         <Button
                           type="button"
                           variant="secondary"
-                          size="lg"
                           buttonStyle="fullWidth"
                           icon="returned"
                           onClick={openRefuseForm}
@@ -6106,17 +6233,18 @@ export function OrderDetail() {
                         >
                           {t("Customer refused / returned")}
                         </Button>
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          size="lg"
-                          buttonStyle="fullWidth"
-                          icon="cancelled"
-                          onClick={handleDeliveryFailed}
-                          disabled={submittingProof || choosingMode}
-                        >
-                          {t("Delivery failed — bring back & retry")}
-                        </Button>
+                        {handoffMode !== "third" && (
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            buttonStyle="fullWidth"
+                            icon="cancelled"
+                            onClick={handleDeliveryFailed}
+                            disabled={submittingProof || choosingMode}
+                          >
+                            {t("Delivery failed — bring back & retry")}
+                          </Button>
+                        )}
                       </div>
                     </div>
                   )}
@@ -6125,8 +6253,10 @@ export function OrderDetail() {
 
               {(showCodRow || showDocsRow || showTermsRow) && (
                 <Card className={styles.followUpsCard}>
-                  <div className={styles.heading}>
-                    <span>{t("Follow-ups pending")}</span>
+                  <div className={styles.headerRowLeft}>
+                    <h3 className={styles.sectionTitle}>
+                      {t("Follow-ups pending")}
+                    </h3>
                   </div>
                   {showCodRow && (
                     <div className={styles.followUpRow}>
@@ -6232,7 +6362,7 @@ export function OrderDetail() {
                     backgroundColor: "var(--bg-surface-hover-dark)",
                   }}
                 >
-                  <div className={styles.proofHeaderRow}>
+                  <div className={styles.headerRow}>
                     <div
                       className={styles.left}
                       style={{ color: "var(--accent-primary)" }}
@@ -6262,10 +6392,8 @@ export function OrderDetail() {
 
               {showFinanceGateForm && (
                 <Card>
-                  <div className={styles.proofHeaderRow}>
-                    <div className={styles.heading} style={{ margin: 0 }}>
-                      <span>{t("Finance gate")}</span>
-                    </div>
+                  <div className={styles.headerRowLeft}>
+                    <h3 className={styles.sectionTitle}>{t("Finance gate")}</h3>
                     {orderIsPriced ? (
                       <span className={styles.fieldLabel}>
                         {currency.format(orderTotal)}
@@ -6475,13 +6603,19 @@ export function OrderDetail() {
               {canTrackCourier &&
                 handoffMode === "delivery" &&
                 order.taken_by && (
-                  <CourierLiveLocation courierId={order.taken_by} />
+                  <CourierLiveLocation
+                    courierId={order.taken_by}
+                    courierName={displayName(order.taken_by)}
+                    pickupGeo={order.pickup_geo}
+                  />
                 )}
 
               {showRefuseForm && (
                 <Card>
-                  <div className={styles.heading}>
-                    <span>{t("Customer refused / returned")}</span>
+                  <div className={styles.headerRowLeft}>
+                    <h3 className={styles.sectionTitle}>
+                      {t("Customer refused / returned")}
+                    </h3>
                   </div>
                   {lines.map((l) => (
                     <div
@@ -6572,8 +6706,8 @@ export function OrderDetail() {
               doc comment above). Previously visible to every role. */}
           {canSeeDocuments && (
             <Card>
-              <div className={styles.heading}>
-                {t("Documents")}{" "}
+              <div className={styles.headerRowLeft}>
+                <h3 className={styles.sectionTitle}>{t("Documents")} </h3>
                 <span className={styles.count}>{docEntries.length}</span>
               </div>
 
@@ -6805,7 +6939,9 @@ export function OrderDetail() {
           >
             {/* Notes Card */}
             <Card className={styles.notesCard}>
-              <h3 className={styles.heading}>{t("Notes")}</h3>
+              <div className={styles.headerRowLeft}>
+                <h3 className={styles.sectionTitle}>{t("Notes")}</h3>
+              </div>
               <div className={styles.notesListScroll}>
                 {history.filter((h) => h.what.startsWith("Note")).length ===
                 0 ? (
@@ -6862,7 +6998,10 @@ export function OrderDetail() {
 
             {/* History Card */}
             <Card className={styles.historyCard}>
-              <h3 className={styles.heading}>{t("History")}</h3>
+              <div className={styles.headerRow}>
+                <h3 className={styles.sectionTitle}>{t("History")}</h3>
+              </div>
+
               <div className={styles.historyListScroll}>
                 {visibleHistory.length === 0 && (
                   <p className={styles.muted}>{t("No history yet.")}</p>

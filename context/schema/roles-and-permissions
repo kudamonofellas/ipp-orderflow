@@ -132,7 +132,7 @@ Approves/rejects payment (and reconciles COD cash — Cash-up shares this role's
 | `line_photos` | ❌ | ✅ | ❌ | ❌ | Read-only — corrected here (2026-08-20); Finance was actually granted this earlier (QA batch #2, 2026-08-19, "Finance can see item photo attachments") but this doc row was never updated to match |
 | `line_weighing_photos` | ❌ | ✅ | ❌ | ❌ | Read-only (2026-08-20) — same reasoning as `line_photos` above |
 | `line_return_photos` | ❌ | ❌ | ❌ | ❌ | No access |
-| `delivery_proofs` | ❌ | ❌ | ❌ | ❌ | No access |
+| `delivery_proofs` | ❌ | ✅ | ❌ | ❌ | Read-only (2026-08-31 — was "No access", reported directly as "Failed to load cash-up: You don't have permission to access this": `useCashUp.ts` reads `delivery_proofs.cash_collected` to show the courier's actually-collected COD amount, unconditionally on every Cash-up load — Finance is this queue's primary user, so the missing grant 403'd the whole page) |
 | `draft_weighings` | ❌ | ❌ | ❌ | ❌ | No access |
 
 **Field-level:** ✅ **Can see `order_lines.price`** — Finance needs this to verify payment amounts. ✅ **Can see `orders.customer_contact` / `customer_email` / `customer_address` / `sales` / `sales_rep` / `sales_phone_number`** — matches the app's `seeCustomerContact` capability default for Finance.
@@ -157,7 +157,7 @@ Picks up, delivers, uploads 3 proof photos, broadcasts GPS.
 | `return_documents` | ❌ | ✅ | ❌ | ❌ | Read-only |
 | `role_permissions` | ❌ | ❌ | ❌ | ❌ | No access |
 | `settings` | ❌ | ✅ | ❌ | ❌ | Read-only — needs dispatch_proof_required |
-| `products` | ❌ | ❌ | ❌ | ❌ | No access |
+| `products` | ❌ | ✅ | ❌ | ❌ | Read-only (2026-08-31 — was "No access", despite Courier's `browseProducts` capability already being `true` client-side (`domain.ts`'s `ALLOW.Courier`) and the route guard already letting them onto the Products page; the live ACL grant to actually read the collection was simply never created, so the page 403'd on data load — reported directly ("Error: You don't have permission to access this")) |
 | `line_cuts` | ❌ | ✅ | ❌ | ❌ | Read-only (2026-08-28 — was "No access", same class of gap as Finance above: cutting instructions never displayed for Courier, no capability gate in the app to explain it) |
 | `line_weighings` | ❌ | ✅ | ❌ | ❌ | Read-only (2026-08-27 — was "No access", the exact bug reported: a weighed line's total kg rendered as 0 for Courier/Finance while every other role saw the real value, since the app computes the displayed total from `line_weighings` rows, not `order_lines.weight` directly) |
 | `line_photos` | ❌ | ✅ | ❌ | ❌ | Read-only (2026-08-27 — same reasoning; every other role already had this) |
@@ -179,14 +179,14 @@ Picks up, delivers, uploads 3 proof photos, broadcasts GPS.
 | `orders` | CRUD | CRUD | R + partial U | R + partial U | R + partial U | R + partial U |
 | `order_lines` | CRUD | CRUD | CRUD | R | R | R |
 | `customers` | CRUD | CRUD | R | R | R | R |
-| `products` | CRUD | CRUD | R | R | R | — |
+| `products` | CRUD | CRUD | R | R | R | R |
 | `line_cuts` | CRUD | CRUD | R + partial U | CRUD | R | R |
 | `line_weighings` | CRUD | CRUD | CRUD | R | R | R |
 | `line_photos` | CRUD | CRUD | CRUD | R | R | R |
 | `line_weighing_photos` | CRUD | CRUD | CRUD | R | R | R |
 | `line_return_photos` | CRUD | CRUD | CRUD | R | — | — |
 | `order_history` | CRUD | CR | CR | CR | CR | CR |
-| `delivery_proofs` | CRUD | R | CRU | R | — | CRU |
+| `delivery_proofs` | CRUD | R | CRU | R | R | CRU |
 | `draft_weighings` | CRUD | R | CRUD | R | — | — |
 | `purchase_orders` | CRUD | CRUD | R | R | R | R |
 | `return_documents` | CRUD | CRUD | R | R | R | R |

@@ -91,8 +91,11 @@ export const OrdersCollectionSchema = z.object({
    *  re-weighed, so the order doesn't re-run stages it already passed. */
   reweigh_from: z.string().nullable().optional(),
   pickup: z.boolean().nullable().optional(),
+  ready_for_pickup: z.boolean().nullable().optional(),
+  ready_at: z.string().nullable().optional(),
   third_party: z.boolean().nullable().optional(),
   courier_service: z.string().nullable().optional(),
+  courier_tracking_ref: z.string().nullable().optional(),
   payment_confirmed: z.boolean().nullable().optional(),
   payment_confirmed_at: z.string().nullable().optional(),
   /** Finance-gate fields — `method`/`timing` mirror the prototype's payment

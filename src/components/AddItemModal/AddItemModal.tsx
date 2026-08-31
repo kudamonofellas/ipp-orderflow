@@ -63,6 +63,7 @@ export function AddItemModal({ open, products, unitOptions, corrections, onClose
     // Fresh manual default every time the modal opens
     useEffect(() => {
         if (open) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setAddItemText('');
             setMatchedItem(defaultResult(products, unitOptions));
             setIsManual(true);

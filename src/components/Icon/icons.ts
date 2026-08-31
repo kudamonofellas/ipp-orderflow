@@ -82,6 +82,8 @@ export const ICONS = {
   backward: "hugeicons:link-backward",
   progress: "hugeicons:time-quarter-02",
   hourglass: "hugeicons:hourglass",
+  copy: "hugeicons:copy-01",
+  share: "hugeicons:share-01",
 } as const;
 
 export type IconName = keyof typeof ICONS;
