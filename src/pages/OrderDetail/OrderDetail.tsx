@@ -255,6 +255,13 @@ const OUTSTANDING_REASONS = [
   { key: "no_cash", label: "No cash on site" },
 ] as const;
 
+/** Shared between `handleDeliveryFailed` (writes) and the derived
+ *  `failedAttempts` list (reads) below — this port has no `orders.
+ *  failed_attempts` array field (the prototype's `failedAttempts[]`),
+ *  so a failed attempt's reason/timestamp round-trips through the
+ *  existing `order_history` log instead of a new schema field. */
+const FAILED_DELIVERY_PREFIX = "Delivery failed — brought back (";
+
 /* ─────────────────────────────────────── helpers ── */
 
 const currency = new Intl.NumberFormat("id-ID", {
@@ -1059,6 +1066,18 @@ export function OrderDetail() {
           ? "pickup"
           : "third"
       : null;
+
+  // Ported from the prototype's `order.failedAttempts[]` (see
+  // `FAILED_DELIVERY_PREFIX` above) — parsed back out of `order_history`
+  // rather than a dedicated array field. Oldest-first, matching the
+  // prototype's own array order (`fa = failedAttempts[length - 1]` there
+  // is "most recent"), so `[length - 1]` below means the same thing.
+  const failedAttempts = history
+    .filter((h) => h.what?.startsWith(FAILED_DELIVERY_PREFIX))
+    .map((h) => ({
+      at: h.at,
+      reason: h.what?.slice(FAILED_DELIVERY_PREFIX.length, -1) ?? "",
+    }));
 
   const rawThirdPartyService = order.courier_service ?? "";
   const parsedThirdPartyRef =
@@ -2208,8 +2227,21 @@ export function OrderDetail() {
     );
   }
 
-  /** The attempt failed before ever confirming (e.g. no one home) — archive whatever was staged and return to the hand-off chooser for a retry. */
+  /** The attempt failed before ever confirming (e.g. no one home) — archive
+   *  whatever was staged and return to the hand-off chooser for a retry.
+   *  Ported from the prototype's `failDelivery()` (`Dev-OrderDetail.jsx:
+   *  491-497`) — asks why, falls back to a generic reason if left blank,
+   *  and logs it in the exact history phrasing (`Delivery failed —
+   *  brought back (${reason})`) the "Attempt N — last attempt failed"
+   *  banner below parses back out of `history`, mirroring the prototype's
+   *  own `failedAttempts[]` array without adding a schema field for it. */
   async function handleDeliveryFailed() {
+    const why = await prompt(
+      t("Why did the delivery fail? (e.g. outlet closed, nobody to receive)"),
+      { title: t("Delivery failed") },
+    );
+    if (why === null) return;
+    const reason = why.trim() || t("could not deliver");
     await archiveDraftAttempt();
     await commitHandoff(
       {
@@ -2221,7 +2253,7 @@ export function OrderDetail() {
         courier_service: null,
         courier_tracking_ref: null,
       },
-      "Delivery attempt failed — retrying",
+      `${FAILED_DELIVERY_PREFIX}${reason})`,
     );
   }
 
@@ -3845,6 +3877,18 @@ export function OrderDetail() {
                     On Hold
                   </div>
                 )}
+                {/* Same condition as the row-level `pendingDocs` badge
+                    (`useOrders.ts`: `currentStage === "delivered" &&
+                    row.docs_returned !== true`) — informational, not
+                    gated on who can confirm it (that's `showDocsRow`,
+                    a separate, capability-gated condition further down
+                    driving the actual action row). */}
+                {isDelivered && !order.docs_returned && (
+                  <div className={`${styles.pill} ${styles.pillWarning}`}>
+                    <Icon name="document" size={16} />
+                    {t("Signed DO/SI not returned yet")}
+                  </div>
+                )}
               </div>
             </div>
           </header>
@@ -3853,102 +3897,201 @@ export function OrderDetail() {
               prominent "done" banner instead of a stepper with nothing left
               to step through. */}
           {stage === "delivered" ? (
-            <Card
-              style={{
-                backgroundColor: "var(--bg-surface-hover-dark)",
-                borderColor: "var(--accent-primary)",
-              }}
-            >
-              <div className={styles.cardContent}>
-                <div className={styles.successCard}>
-                  <div
-                    className={styles.left}
-                    style={{ color: "var(--accent-primary)" }}
-                  >
-                    <Icon name="check" size={24} />
-                    <div className={styles.deliveredBannerTitleColumn}>
-                      <div className={styles.deliveredBannerTitle}>
-                        {t("Delivered & Closed")}
-                      </div>
-                      {order.taken_by && (
-                        <span className={styles.muted}>
-                          {t("by")} {displayName(order.taken_by)}
-                        </span>
-                      )}
-                    </div>
+            <Card className={styles.successCard}>
+              <div className={styles.headerRow}>
+                <div
+                  className={styles.left}
+                  style={{ color: "var(--accent-primary)" }}
+                >
+                  <Icon name="check" size={24} />
+
+                  <div className={styles.deliveredBannerTitle}>
+                    {t("Delivered & Closed")}
                   </div>
-                  {activeProof && (
-                    <div className={styles.thumbnailsContainer}>
-                      {(
-                        [
-                          { key: "cond", label: t("Condition photo") },
-                          {
-                            key: "recv",
-                            label:
-                              handoffMode === "pickup"
-                                ? t("Photo of who collected")
-                                : t("Receiver photo"),
-                          },
-                          { key: "signed", label: t("Signed doc") },
-                        ] as const
-                      ).flatMap(({ key, label }) =>
-                        attachments
-                          .filter(
-                            (a) =>
-                              a.proof_id === activeProof.id &&
-                              a.doc_type === key,
-                          )
-                          .map((a) => (
-                            <div
-                              key={a.id}
-                              className={styles.thumbnailItem}
-                              onClick={() =>
-                                setActiveImageModal({
-                                  url: getAssetUrl(a.document_file ?? ""),
-                                  title: label,
-                                  attachmentId: undefined,
-                                })
-                              }
-                            >
-                              <img
-                                src={getAssetUrl(a.document_file ?? "")}
-                                alt=""
-                                className={styles.thumbnailImg}
-                              />
-                            </div>
-                          )),
-                      )}
-                    </div>
-                  )}
                 </div>
-                {order.deliver_geo && (
-                  <div className={styles.dropLocationRow}>
-                    <span className={styles.dropLocationText}>
-                      <Icon name="location" size={14} />
-                      {dropDistanceM !== null
-                        ? `${t("Dropped at delivery address")} · ~${dropDistanceM}m`
-                        : t("Delivery location captured")}{" "}
-                      · {formatClock(order.deliver_geo.at)}
-                    </span>
-                    <Button
-                      type="button"
-                      variant="tertiary"
-                      className={styles.inlineButton}
-                      onClick={() =>
-                        window.open(
-                          `https://www.google.com/maps/search/?api=1&query=${order.deliver_geo!.lat},${order.deliver_geo!.lng}`,
-                          "_blank",
-                          "noopener",
+                {activeProof && (
+                  <div className={styles.thumbnailsContainer}>
+                    {(
+                      [
+                        { key: "cond", label: t("Condition photo") },
+                        {
+                          key: "recv",
+                          label:
+                            handoffMode === "pickup"
+                              ? t("Photo of who collected")
+                              : t("Receiver photo"),
+                        },
+                        { key: "signed", label: t("Signed doc") },
+                      ] as const
+                    ).flatMap(({ key, label }) =>
+                      attachments
+                        .filter(
+                          (a) =>
+                            a.proof_id === activeProof.id && a.doc_type === key,
                         )
-                      }
-                    >
-                      {t("Map")}
-                    </Button>
+                        .map((a) => (
+                          <div
+                            key={a.id}
+                            className={styles.thumbnailItem}
+                            onClick={() =>
+                              setActiveImageModal({
+                                url: getAssetUrl(a.document_file ?? ""),
+                                title: label,
+                                attachmentId: undefined,
+                              })
+                            }
+                          >
+                            <img
+                              src={getAssetUrl(a.document_file ?? "")}
+                              alt=""
+                              className={styles.thumbnailImg}
+                            />
+                          </div>
+                        )),
+                    )}
                   </div>
                 )}
+              </div>
+              {/* Pickup stamp — ported from the prototype's own persistent
+                  "Driver location" card (`Dev-OrderDetail.jsx:1517-1524`,
+                  `order.pickupGeo || order.deliverGeo`, no role/stage gate
+                  at all). This port had split the pair apart: `deliver_geo`
+                  already lived here (below), but `pickup_geo` only ever
+                  showed inside the trackCourier-gated live-tracking card,
+                  which disappears entirely once `stage !== "dispatch"` —
+                  so the pickup stamp was permanently invisible post-
+                  delivery, to every role, even though the data was still
+                  on the order. Shown here unconditionally (matches the
+                  prototype: no trackCourier check on this card either),
+                  right above `deliver_geo` — same order the prototype
+                  lists "Picked up" before "Delivered". */}
+              {order.pickup_geo && (
+                <div className={styles.rowStretch}>
+                  <div className={styles.left}>
+                    <Icon name="pickup" size={24} />
+                    <div className={styles.column}>
+                      <span className={styles.secondary}>
+                        {t("Picked up at")} {formatClock(order.pickup_geo.at)}
+                      </span>
+                      <div className={styles.locationText}>
+                        {order.taken_by ? (
+                          <span className={styles.secondary}>
+                            {t("by")} {displayName(order.taken_by)}
+                          </span>
+                        ) : (
+                          order.third_party && (
+                            <span className={styles.secondary}>
+                              {t("by")}{" "}
+                              {parsedThirdPartyService ||
+                                order.courier_service ||
+                                t("Online courier")}
+                            </span>
+                          )
+                        )}
+                        <Button
+                          type="button"
+                          variant="tertiary"
+                          className={styles.inlineButton}
+                          onClick={() =>
+                            window.open(
+                              `https://www.google.com/maps/search/?api=1&query=${order.pickup_geo!.lat},${order.pickup_geo!.lng}`,
+                              "_blank",
+                              "noopener",
+                            )
+                          }
+                        >
+                          {t("Map")}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                  {order.deliver_geo ? (
+                    <div className={styles.dropLocationRow}>
+                      <span className={styles.dropLocationText}>
+                        {dropDistanceM !== null
+                          ? `${t("Dropped at delivery address")} · ~${dropDistanceM}m`
+                          : t("Delivery location captured")}{" "}
+                        · {formatClock(order.deliver_geo.at)}
+                      </span>
+                      <Button
+                        type="button"
+                        variant="tertiary"
+                        icon="location"
+                        className={styles.inlineButton}
+                        onClick={() =>
+                          window.open(
+                            `https://www.google.com/maps/search/?api=1&query=${order.deliver_geo!.lat},${order.deliver_geo!.lng}`,
+                            "_blank",
+                            "noopener",
+                          )
+                        }
+                      >
+                        {t("Map")}
+                      </Button>
+                    </div>
+                  ) : (
+                    // Third-party has no GPS drop location (the service — not
+                    // this app — drives the last leg) — shows when it was
+                    // handed over plus the same tracking element (Paxel deep
+                    // link, or a copyable ref) the hand-off/proof cards use,
+                    // in place of the Map button there's no GPS to back.
+                    order.third_party &&
+                    order.delivered_at && (
+                      <div className={styles.dropLocationRow}>
+                        <span className={styles.locationText}>
+                          {t("Handed at")} {formatClock(order.delivered_at)}
+                        </span>
+                        {parsedThirdPartyRef &&
+                          (parsedThirdPartyService.toLowerCase() === "paxel" ? (
+                            <Button
+                              type="button"
+                              variant="tertiary"
+                              className={styles.inlineButton}
+                              onClick={() =>
+                                window.open(
+                                  `https://paxel.co.id/tracking/${encodeURIComponent(parsedThirdPartyRef)}`,
+                                  "_blank",
+                                  "noopener",
+                                )
+                              }
+                            >
+                              {t("Track")}
+                            </Button>
+                          ) : (
+                            <Button
+                              type="button"
+                              variant="tertiary"
+                              icon={copiedTrackingRef ? "check" : "copy"}
+                              className={styles.inlineButton}
+                              onClick={handleCopyTrackingRef}
+                            >
+                              {copiedTrackingRef
+                                ? t("Copied")
+                                : `${t("Ref:")} ${parsedThirdPartyRef}`}
+                            </Button>
+                          ))}
+                      </div>
+                    )
+                  )}
+                </div>
+              )}
+
+              <div className={styles.rowStretch}>
                 {activeProof?.name && (
                   <div className={styles.receivedByRow}>
-                    {t("Received by")} <strong>{activeProof.name}</strong>
+                    {order.third_party ? t("Driver's name") : t("Received by")}{" "}
+                    <strong>{activeProof.name}</strong>
+                  </div>
+                )}
+                {order.docs_returned && (
+                  <div className={styles.row}>
+                    <Icon name="tick" />
+                    <div
+                      className={styles.fieldLabel}
+                      style={{ color: "var(--accent-primary)" }}
+                    >
+                      {t("Signed DO & SI returned")}
+                    </div>
                   </div>
                 )}
               </div>
@@ -4337,42 +4480,6 @@ export function OrderDetail() {
                 can view it, but the action is theirs.
               </span>
             </div>
-          )}
-
-          {/* "Isn't weighed yet" safety net — a kg/gram/loaf line added (or
-              unit-changed) after Cold Storage, still in the warehouse.
-              Ported from the prototype's own banner (`Dev-OrderDetail.jsx:1314-1321`). */}
-          {needsWeighing && (
-            <Card className={styles.warningCard}>
-              <div className={styles.row}>
-                <Icon
-                  name="weight"
-                  size={20}
-                  style={{ color: "var(--state-warning)", flexShrink: 0 }}
-                />
-                <p className={styles.warningHeader}>
-                  <strong>
-                    {unweighedAdded.map((l) => l.name).join(", ")}
-                  </strong>{" "}
-                  — {t("isn't weighed yet (added after Cold Storage).")}
-                </p>
-              </div>
-              {canWeighFix && (
-                <div className={styles.cardActions}>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="md"
-                    icon="arrowRight"
-                    onClick={handleSendToColdToWeigh}
-                    disabled={advancing}
-                    tone="warning"
-                  >
-                    {t("Send to Cold Storage to weigh")}
-                  </Button>
-                </div>
-              )}
-            </Card>
           )}
 
           {showFinanceUndoRow && (
@@ -5001,6 +5108,42 @@ export function OrderDetail() {
               ))}
           </Card>
 
+          {/* "Isn't weighed yet" safety net — a kg/gram/loaf line added (or
+              unit-changed) after Cold Storage, still in the warehouse.
+              Ported from the prototype's own banner (`Dev-OrderDetail.jsx:1314-1321`). */}
+          {needsWeighing && (
+            <Card className={styles.warningCard}>
+              <div className={styles.row}>
+                <Icon
+                  name="weight"
+                  size={20}
+                  style={{ color: "var(--state-warning)", flexShrink: 0 }}
+                />
+                <p className={styles.warningHeader}>
+                  <strong>
+                    {unweighedAdded.map((l) => l.name).join(", ")}
+                  </strong>{" "}
+                  — {t("isn't weighed yet (added after Cold Storage).")}
+                </p>
+              </div>
+              {canWeighFix && (
+                <div className={styles.cardActions}>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="md"
+                    icon="arrowRight"
+                    onClick={handleSendToColdToWeigh}
+                    disabled={advancing}
+                    tone="warning"
+                  >
+                    {t("Send to Cold Storage to weigh")}
+                  </Button>
+                </div>
+              )}
+            </Card>
+          )}
+
           {/* Return Settlement — a persistent, ungated record of how a return
               was settled in Accurate (kept on the order for disputes), unlike
               the Documents section below which is Admin/Finance/Owner only.
@@ -5533,7 +5676,27 @@ export function OrderDetail() {
               {/* Hand-off mode chooser — dispatch stage, no mode picked yet */}
               {stage === "dispatch" && canAdvance && !handoffMode && (
                 <Card>
-                  <div className={styles.sectionTitle}>{t("Delivery")}</div>
+                  <div className={styles.headerRow}>
+                    <h3 className={styles.sectionTitle}>{t("Delivery")}</h3>
+                    {failedAttempts.length > 0 && (
+                      <div className={styles.warningHeader}>
+                        <Icon name="alert" size={16} />
+                        <span>
+                          {t("Attempt")} {failedAttempts.length + 1}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  {failedAttempts.length > 0 && (
+                    <span className={styles.secondary}>
+                      {t("Last attempt failed")}:{" "}
+                      {failedAttempts[failedAttempts.length - 1].reason}
+                      {" · "}
+                      {formatTakenAt(
+                        failedAttempts[failedAttempts.length - 1].at,
+                      )}
+                    </span>
+                  )}
                   <div className={styles.cardActions}>
                     <Button
                       type="button"
@@ -5626,12 +5789,27 @@ export function OrderDetail() {
                           }}
                         />
 
-                        <p className={styles.warningTitle}>
+                        <h3 className={styles.warningTitle}>
                           {handoffMode === "third"
                             ? t("Handover destination")
                             : t("Deliver to")}
-                        </p>
+                          {/* Reworked per follow-up: inline with the title
+                              instead of its own banner line, since the
+                              chooser's separate banner (and the reason/
+                              timestamp it carries) disappears the moment a
+                              method is picked — this reuses the same
+                              `t("Attempt")` wording the chooser's own
+                              banner uses ("Attempt {N}"), rather than a new
+                              English-only ordinal ("2nd attempt") that
+                              wouldn't translate the same way. */}
+                        </h3>
                       </div>
+                      {failedAttempts.length > 0 && (
+                        <span className={styles.warningHeader}>
+                          <Icon name="alert" size={16} />
+                          {t("Attempt")} {failedAttempts.length + 1}
+                        </span>
+                      )}
 
                       {handoffMode === "delivery" &&
                         codApplies &&
@@ -5703,7 +5881,7 @@ export function OrderDetail() {
                   {handoffMode === "delivery" && (
                     <div
                       className={styles.secondary}
-                      style={{ paddingBottom: "var(--space-md)" }}
+                      style={{ marginBottom: "var(--space-sm)" }}
                     >
                       {t("Taken by")}{" "}
                       <strong>{displayName(order.taken_by)}</strong> {t("on")}{" "}
@@ -5716,7 +5894,7 @@ export function OrderDetail() {
                   )}
                   {handoffMode === "third" && (
                     <div
-                      className={styles.secondary}
+                      className={styles.headerRow}
                       style={{
                         display: "flex",
                         alignItems: "center",
@@ -5724,7 +5902,7 @@ export function OrderDetail() {
                         flexWrap: "wrap",
                       }}
                     >
-                      <span style={{ marginBottom: "var(--space-md)" }}>
+                      <span>
                         {t("Handed to")}{" "}
                         <strong>
                           {parsedThirdPartyService ||
@@ -5737,22 +5915,21 @@ export function OrderDetail() {
                       </span>
                       {parsedThirdPartyRef && (
                         <>
-                          <span>·</span>
                           {parsedThirdPartyService.toLowerCase() === "paxel" ? (
-                            <a
-                              href={`https://paxel.co.id/tracking/${encodeURIComponent(parsedThirdPartyRef)}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              style={{
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: 4,
-                                color: "var(--accent-primary)",
-                                fontWeight: 600,
-                              }}
+                            <Button
+                              type="button"
+                              variant="tertiary"
+                              className={styles.inlineButton}
+                              onClick={() =>
+                                window.open(
+                                  `https://paxel.co.id/tracking/${encodeURIComponent(parsedThirdPartyRef)}`,
+                                  "_blank",
+                                  "noopener",
+                                )
+                              }
                             >
-                              {t("Track on Paxel")} ↗
-                            </a>
+                              {t("Track")}
+                            </Button>
                           ) : (
                             <span
                               style={{
@@ -5768,7 +5945,7 @@ export function OrderDetail() {
                               <Button
                                 type="button"
                                 variant="tertiary"
-                                size="sm"
+                                size="md"
                                 icon={copiedTrackingRef ? "check" : "copy"}
                                 onClick={handleCopyTrackingRef}
                                 className={styles.inlineButton}
@@ -6252,12 +6429,13 @@ export function OrderDetail() {
               )}
 
               {(showCodRow || showDocsRow || showTermsRow) && (
-                <Card className={styles.followUpsCard}>
+                <Card className={styles.warningCard}>
                   <div className={styles.headerRowLeft}>
                     <h3 className={styles.sectionTitle}>
                       {t("Follow-ups pending")}
                     </h3>
                   </div>
+                  <div className={styles.cardListColumn}></div>
                   {showCodRow && (
                     <div className={styles.followUpRow}>
                       <Icon
@@ -6280,7 +6458,7 @@ export function OrderDetail() {
                         size="md"
                         onClick={handleReconcileCOD}
                         disabled={reconcilingCod}
-                        style={{ width: "140px" }}
+                        style={{ width: "160px" }}
                       >
                         {reconcilingCod ? t("Saving…") : t("Confirm received")}
                       </Button>
@@ -6305,7 +6483,7 @@ export function OrderDetail() {
                         type="button"
                         variant="secondary"
                         size="md"
-                        style={{ width: "140px" }}
+                        style={{ width: "160px" }}
                         onClick={handleConfirmDocsReturned}
                       >
                         {t("Mark returned")}
@@ -6333,26 +6511,13 @@ export function OrderDetail() {
                         type="button"
                         variant="secondary"
                         size="md"
-                        style={{ width: "140px" }}
+                        style={{ width: "160px" }}
                         onClick={handleTermsPaymentReceived}
                       >
                         {t("Payment received")}
                       </Button>
                     </div>
                   )}
-                </Card>
-              )}
-              {isDelivered && order.docs_returned && (
-                <Card className={styles.successCard}>
-                  <div className={styles.left}>
-                    <Icon name="check" />
-                    <div
-                      className={styles.fieldLabel}
-                      style={{ color: "var(--accent-primary)" }}
-                    >
-                      {t("Signed DO & SI returned")}
-                    </div>
-                  </div>
                 </Card>
               )}
               {showTermsPaidNotice && (

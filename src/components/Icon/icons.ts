@@ -9,6 +9,7 @@
  */
 export const ICONS = {
   arrowRight: "hugeicons:arrow-right-02",
+  arrowUpRight: "hugeicons:arrow-up-right-01",
   dashboard: "hugeicons:dashboard-square-02",
   orders: "hugeicons:license-draft",
   customers: "hugeicons:user-multiple",

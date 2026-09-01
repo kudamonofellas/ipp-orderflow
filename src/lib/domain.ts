@@ -80,10 +80,11 @@ export type Capability =
   | 'browseCustomers'
   | 'browseProducts'
   | 'accessReports'
-  // No live courier-location map exists in the port yet (GPS tracking is a
-  // deferred "Next Up" item, same as the courier hand-off/pickup flow) — this
-  // capability has no UI to gate today. Kept for capability-matrix parity
-  // with the prototype and ready to wire up the moment that feature lands.
+  // Gates the live courier-location map (`CourierLiveLocation.tsx`) shown on
+  // a dispatch-stage order — checked independently of `helpOtherStages`/
+  // `canAdvance`, since Finance can see it without being able to act on
+  // dispatch at all, matching the prototype's own `trackCourier: ['Admin',
+  // 'Finance']` (`Dev-domain.js:193`).
   | 'trackCourier'
   // Decoupled from advanceStage/flow.capability so Owner Settings can grant
   // these independently (Settings-Owner.png "Roles & Permissions" grid).
@@ -93,9 +94,12 @@ export type Capability =
   // Lets a role advance stages outside their own pipeline focus (e.g. Admin
   // covering for Warehouse). Additive to the stage's own owning capability.
   | 'helpOtherStages'
-  // The following have no live UI yet (same "capability exists, feature
-  // doesn't" posture as trackCourier) — added for Owner Settings matrix
-  // parity with the design, ready to wire up when the feature lands.
+  // Decoupled from advanceStage/flow.capability the same way holdResume/
+  // sendBackStage/reopenOrders above are — added for Owner Settings matrix
+  // parity with the prototype's own permission grid (Settings-Owner.png),
+  // each independently grantable. All four now have live UI gating a real
+  // action: docs-returned confirm and credit-limit override (both in
+  // `OrderDetail.tsx`), CSV export and backup/restore (`Settings.tsx`).
   | 'confirmDocsReturned'
   | 'overrideCreditLimit'
   | 'exportCSV'

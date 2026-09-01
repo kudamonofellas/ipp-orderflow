@@ -41,7 +41,7 @@ The order creator and manager. Broad access to order + customer + product data.
 | `line_photos` | ✅ | ✅ | ✅ | ✅ | Full CRUD (2026-08-18) — same floor-helper reason as `line_weighings` |
 | `line_weighing_photos` | ✅ | ✅ | ✅ | ✅ | Full CRUD — same floor-helper reason as `line_weighings` |
 | `line_return_photos` | ✅ | ✅ | ✅ | ✅ | Full CRUD (2026-08-24) — was read-only when this table only held the courier's refusal-evidence photos; Admin also has `processReturns`, and the Awaiting Return/Incoming Return cards' multi-photo weigh-back capture now writes here too, so Admin needs the same CRUD Warehouse already had |
-| `delivery_proofs` | ❌ | ✅ | ❌ | ❌ | Read-only — sees if delivery happened |
+| `delivery_proofs` | ✅ | ✅ | ✅ | ❌ | Read + create/update (2026-08-31 — was read-only, reported directly: "Failed to save delivery proof: You don't have permission to access this" when Admin tried to complete a hand-off as dispatch's floor-helper — `helpOtherStages` already covers `dispatch` client-side (`canAdvance`, `HELP_OTHER_STAGES` in `OrderDetail.tsx`), so Admin can already reach and use the whole Proof Capture card; the write itself just had nowhere to land. Matches Warehouse's own create+update shape below, not Courier's — Admin is covering, not the primary owner) |
 | `draft_weighings` | ❌ | ✅ | ❌ | ❌ | Read-only |
 | `courier_locations` | ❌ | ✅ | ❌ | ❌ | Read-only — sees courier GPS |
 
@@ -145,7 +145,7 @@ Picks up, delivers, uploads 3 proof photos, broadcasts GPS.
 
 | Collection | Create | Read | Update | Delete | Notes |
 |---|:---:|:---:|:---:|:---:|---|
-| `orders` | ❌ | ✅ | ✅ (fields only) | ❌ | Reads dispatch-stage orders; can update only: `taken_by`, `delivered_at`, `stage` (→ `delivered`) |
+| `orders` | ❌ | ✅ | ✅ (fields only) | ❌ | Reads dispatch-stage orders; can update only: `taken_by`, `delivered_at`, `stage` (→ `delivered`), `pickup`, `third_party`, `courier_service`, `pickup_geo`, `deliver_geo`, `undo_snapshot` (grown since this row was first written, never kept in sync — corrected here rather than just appending), `ready_for_pickup`, `ready_at`, `courier_tracking_ref` (2026-08-31 — 3 new order fields created live to match `schemas.ts`, which already referenced them; Courier's own field-restricted grant was extended in the same pass, since a field that now genuinely exists but isn't in a restricted role's allow-list 403s the *whole* write, not just that field — same pitfall as `code-standards.md`'s documented one, one level up: this time the gap was the live schema itself, not just the `fields:[...]` selector) |
 | `delivery_proofs` | ✅ | ✅ | ✅ | ❌ | Full create + update — their core job (3 photos + COD flag) |
 | `courier_locations` | ✅ | ✅ | ✅ | ✅ | Full CRUD — upserts their GPS ping |
 | `order_history` | ✅ | ✅ | ❌ | ❌ | Append-only — logs pickup/delivery |
@@ -186,7 +186,7 @@ Picks up, delivers, uploads 3 proof photos, broadcasts GPS.
 | `line_weighing_photos` | CRUD | CRUD | CRUD | R | R | R |
 | `line_return_photos` | CRUD | CRUD | CRUD | R | — | — |
 | `order_history` | CRUD | CR | CR | CR | CR | CR |
-| `delivery_proofs` | CRUD | R | CRU | R | R | CRU |
+| `delivery_proofs` | CRUD | CRU | CRU | R | R | CRU |
 | `draft_weighings` | CRUD | R | CRUD | R | — | — |
 | `purchase_orders` | CRUD | CRUD | R | R | R | R |
 | `return_documents` | CRUD | CRUD | R | R | R | R |

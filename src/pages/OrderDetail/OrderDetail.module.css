@@ -108,8 +108,15 @@
 .row {
   display: flex;
   flex-direction: row;
-  flex: 1;
   align-items: center;
+  gap: var(--space-sm);
+}
+
+.rowStretch {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
   gap: var(--space-sm);
 }
 
@@ -466,7 +473,7 @@
   border-bottom: 1px solid var(--border-default);
 }
 
-.deliveredBannerTitleColumn {
+.column {
   display: flex;
   flex-direction: column;
   gap: 0;
@@ -491,7 +498,7 @@
   color: var(--text-secondary);
 }
 
-.dropLocationText {
+.locationText {
   font: var(--text-body);
   color: var(--text-secondary);
   display: inline-flex;
@@ -517,12 +524,6 @@
   flex-direction: row;
   align-items: center;
   gap: var(--space-sm);
-}
-
-.followUpsCard {
-  border-color: var(--state-warning);
-  display: flex;
-  flex-direction: column;
 }
 
 /* ===== Finance gate form ===== */
@@ -583,7 +584,7 @@
 }
 
 .followUpRow + .followUpRow {
-  border-top: 1px solid var(--border-default);
+  border-top: 1px solid var(--border-subtle);
 }
 
 .followUpIcon {
