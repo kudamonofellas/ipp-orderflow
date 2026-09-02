@@ -84,6 +84,7 @@ export const ICONS = {
   reload: "hugeicons:refresh-01",
   undo: "hugeicons:undo",
   fileDoc: "hugeicons:file-02",
+  image: "hugeicons:image-02",
   backward: "hugeicons:link-backward",
   progress: "hugeicons:time-quarter-02",
   hourglass: "hugeicons:hourglass",

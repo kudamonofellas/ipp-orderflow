@@ -1,0 +1,80 @@
+.container {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: flex-end;
+  max-width: 200px;
+}
+
+/* Always laid out (even while collapsed, via .hidden below) so it stays
+   measurable — comparing its scrollWidth/clientWidth is how we detect real
+   overflow instead of assuming it. */
+.fullRow {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  align-content: flex-end;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+  overflow: hidden;
+  min-width: 0;
+  flex: 1 1 auto;
+  width: 100%;
+}
+
+.hidden {
+  visibility: hidden;
+}
+
+.thumbnailItem {
+  position: relative;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-default);
+  cursor: pointer;
+  background: var(--bg-surface-hover);
+  overflow: hidden;
+}
+
+.thumbnailImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.collapsedOverlay {
+  position: absolute;
+  top: 0;
+  right: 0;
+}
+
+.moreOverlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 2px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font: var(--text-caption);
+  font-weight: 600;
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-default);
+}
+
+.collapsedOverlay:hover .moreOverlay {
+  opacity: 1;
+}
+
+/* Touch devices have no hover state — always show it so it's reachable,
+   same convention as OrderDetail's .thumbnailHoverTrash. */
+@media (hover: none) {
+  .moreOverlay {
+    opacity: 1;
+    background: rgba(0, 0, 0, 0.45);
+  }
+}

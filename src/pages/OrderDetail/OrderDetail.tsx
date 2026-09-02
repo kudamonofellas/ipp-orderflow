@@ -82,6 +82,7 @@ import { formatClock, formatTakenAt, formatDateShort } from "../../lib/format";
 import { ReturnLineBox } from "../../components/ReturnLineBox/ReturnLineBox";
 import { dateCode } from "../../lib/orderNo";
 import { ImageDetailsModal } from "../../components/ImageDetailsModal/ImageDetailsModal";
+import { Thumbnails } from "../../components/Thumbnails/Thumbnails";
 import styles from "./OrderDetail.module.css";
 
 /**
@@ -358,6 +359,31 @@ interface WeighingLine {
   photos: { id: string; fileId: string; url: string }[];
 }
 
+/** One openable photo in the `<ImageDetailsModal>` — carries whichever
+ *  delete-target ids apply to it (only one group is ever populated per
+ *  entry), read generically by the modal's onDelete wiring below. */
+interface ImageModalEntry {
+  url: string;
+  title: string;
+  attachmentId?: number | string;
+  lineId?: string;
+  photoId?: string;
+  weighingLineId?: string;
+  weighingId?: string;
+  weighingPhotoId?: string;
+  receiveLineId?: string;
+  receivePhotoId?: string;
+  /** A staged (not-yet-confirmed) delivery-proof photo — see handleRemoveStagedProofPhoto. */
+  stagedProofSlot?: "cond" | "recv" | "signed";
+  stagedProofIndex?: number;
+  /** Present when opened from a `Thumbnails` gallery with more than one
+   *  photo — the full sibling list + this entry's position in it, so the
+   *  modal's prev/next buttons can page through without the parent
+   *  re-deriving anything. */
+  gallery?: ImageModalEntry[];
+  galleryIndex?: number;
+}
+
 export function OrderDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -391,21 +417,36 @@ export function OrderDetail() {
 
   /* ── ui state ── */
   const [isPanelOpen, setIsPanelOpen] = useState(true);
-  const [activeImageModal, setActiveImageModal] = useState<{
-    url: string;
-    title: string;
-    attachmentId?: number | string;
-    lineId?: string;
-    photoId?: string;
-    weighingLineId?: string;
-    weighingId?: string;
-    weighingPhotoId?: string;
-    receiveLineId?: string;
-    receivePhotoId?: string;
-    /** A staged (not-yet-confirmed) delivery-proof photo — see handleRemoveStagedProofPhoto. */
-    stagedProofSlot?: "cond" | "recv" | "signed";
-    stagedProofIndex?: number;
-  } | null>(null);
+  const [activeImageModal, setActiveImageModal] =
+    useState<ImageModalEntry | null>(null);
+
+  /** Opens the image modal as a slideshow over `entries` (from a
+   *  `Thumbnails` click) starting at `index`. `activeImageModal` always
+   *  holds the *currently shown* entry's own fields (url/title/delete ids)
+   *  merged with `gallery`/`galleryIndex` — the delete-button logic on the
+   *  `<ImageDetailsModal>` render below reads those per-entry fields
+   *  directly, so paging the slideshow doesn't need its own delete-wiring. */
+  function openImageGallery(entries: ImageModalEntry[], index: number) {
+    if (entries.length === 0) return;
+    setActiveImageModal({
+      ...entries[index],
+      gallery: entries,
+      galleryIndex: index,
+    });
+  }
+
+  function handleImageModalNav(direction: 1 | -1) {
+    setActiveImageModal((prev) => {
+      if (!prev?.gallery || prev.gallery.length === 0) return prev;
+      const len = prev.gallery.length;
+      const nextIndex = ((prev.galleryIndex ?? 0) + direction + len) % len;
+      return {
+        ...prev.gallery[nextIndex],
+        gallery: prev.gallery,
+        galleryIndex: nextIndex,
+      };
+    });
+  }
 
   /* ── action state ── */
   const [advancing, setAdvancing] = useState(false);
@@ -4304,354 +4345,90 @@ export function OrderDetail() {
               prominent "done" banner instead of a stepper with nothing left
               to step through. */}
           {stage === "delivered" ? (
-            <Card
-              className={styles.successCard}
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: "var(--space-md)",
-              }}
-            >
+            <div className={styles.banner}>
               <div className={styles.headerRow} style={{ paddingBottom: 0 }}>
                 <div
-                  className={styles.left}
-                  style={{ color: "var(--accent-primary)" }}
-                >
-                  <Icon name="check" size={24} />
-
-                  <div className={styles.deliveredBannerTitle}>
-                    {t("Delivered & Closed")}
-                  </div>
+                  className={styles.stepLine}
+                  style={{ backgroundColor: "var(--accent-primary)" }}
+                />
+                <div className={styles.successTitle}>
+                  <Icon name="packageDelivered" size={24} />
+                  {t("Delivered & Closed")}
                 </div>
-                {activeProof && (
-                  <div className={styles.thumbnailsContainer}>
-                    {(
-                      [
-                        { key: "cond", label: t("Condition photo") },
-                        {
-                          key: "recv",
-                          label:
-                            handoffMode === "pickup"
-                              ? t("Photo of who collected")
-                              : t("Receiver photo"),
-                        },
-                        { key: "signed", label: t("Signed doc") },
-                      ] as const
-                    ).flatMap(({ key, label }) =>
-                      attachments
-                        .filter(
-                          (a) =>
-                            a.proof_id === activeProof.id && a.doc_type === key,
-                        )
-                        .map((a) => (
-                          <div
-                            key={a.id}
-                            className={styles.thumbnailItem}
-                            onClick={() =>
-                              setActiveImageModal({
-                                url: getAssetUrl(a.document_file ?? ""),
-                                title: label,
-                                attachmentId: undefined,
-                              })
-                            }
-                          >
-                            <img
-                              src={getAssetUrl(a.document_file ?? "")}
-                              alt=""
-                              className={styles.thumbnailImg}
-                            />
-                          </div>
-                        )),
-                    )}
-                  </div>
-                )}
+
+                <div
+                  className={styles.stepLine}
+                  style={{ backgroundColor: "var(--accent-primary)" }}
+                />
               </div>
-
-              {/* Left = "picked up" event, right = "delivery" event —
-                  own-courier is the only mode with both (warehouse pickup
-                  stamp + drop-off), so it's the only one that shows the
-                  separator between two real columns; 3rd-party has no
-                  pickup leg captured at all (goes on the right, as "the
-                  delivery"), customer-pickup has no separate delivery leg
-                  (goes on the left, as "the pickup") — both empty-wrapper
-                  siblings still render on the *other* side so `.rowStretch`
-                  (`justify-content: space-between`) reliably pins the one
-                  real side to its edge instead of collapsing to flex-start
-                  regardless of which side it conceptually belongs on.
-                  Raw `taken_by`/`third_party`/`pickup` fields throughout,
-                  not `handoffMode` (always `null` on a delivered order).
-                  Reported directly ("missing some parts... third party and
-                  the customer itself") — previously the whole right/second
-                  side was nested inside the left side's own `pickup_geo`
-                  check, so it silently never rendered for either mode.
-                  Ported from the prototype's persistent "Driver location"
-                  card (`Dev-OrderDetail.jsx:1517-1524`), no role/stage
-                  gate. */}
-
-              {/* Card's children each get a hairline divider above them
-                  (see `docs_returned`'s own `.rowStretch` below) — this
-                  wrapper must not render at all when neither slot below
-                  has anything to show, or it leaves a second, empty
-                  divider floating above `docs_returned`'s real one with
-                  nothing between them. Reported directly with a
-                  screenshot ("two lines... because there are two
-                  rowStretch div rendered"). Mirrors the exact conditions
-                  each slot's own branches check below. */}
-              {(order.pickup_geo ||
-                (order.third_party && order.delivered_at) ||
-                (order.pickup && order.delivered_at) ||
-                (order.taken_by && order.deliver_geo)) &&
-                (() => {
-                  // Own-courier's delivered info is only ever the RIGHT
-                  // slot when it's paired with a real `pickup_geo` on the
-                  // left — GPS pickup capture is best-effort, so an
-                  // own-courier order can be delivered with no pickup
-                  // stamp at all. Without this, that case rendered the
-                  // delivered block alone on the right (via the empty
-                  // left/right space-between fallback), floating with
-                  // dead space before it instead of starting flush left
-                  // like every other mode's single-event case already
-                  // does. Reported directly with a screenshot. Hoisted so
-                  // the same JSX can appear in either slot without
-                  // duplicating it.
-                  const deliveredBlock = order.taken_by &&
-                    order.deliver_geo && (
-                      <div className={styles.row}>
-                        <Icon name="delivered" size={24} />
-                        <div className={styles.column}>
-                          <span className={styles.secondary}>
-                            {dropDistanceM !== null
-                              ? `${t("Dropped at delivery address")} · ~${dropDistanceM}m`
-                              : t("Delivery location captured")}{" "}
-                            at {formatClock(order.deliver_geo.at)}
-                          </span>
-                          <div className={styles.byRow}>
-                            {activeProof?.name && (
-                              <span>
-                                {t("Received by")}{" "}
-                                <strong>{activeProof.name}</strong>
-                              </span>
-                            )}
-                            <Button
-                              type="button"
-                              variant="tertiary"
-                              className={styles.inlineButton}
-                              onClick={() =>
-                                window.open(
-                                  `https://www.google.com/maps/search/?api=1&query=${order.deliver_geo!.lat},${order.deliver_geo!.lng}`,
-                                  "_blank",
-                                  "noopener",
-                                )
-                              }
-                            >
-                              {t("Map")}
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    );
-
-                  return (
-                    <div className={styles.rowStretch}>
-                      <div>
-                        {order.pickup_geo ? (
-                          <div className={styles.row}>
-                            <Icon name="pickup" size={24} />
-                            <div className={styles.column}>
-                              <span className={styles.secondary}>
-                                {t("Picked up at")}{" "}
-                                {formatClock(order.pickup_geo.at)}
-                              </span>
-                              <div className={styles.byRow}>
-                                {order.taken_by && (
-                                  <span>
-                                    {t("by")}{" "}
-                                    <strong>
-                                      {displayName(order.taken_by)}
-                                    </strong>
-                                  </span>
-                                )}
-                                <Button
-                                  type="button"
-                                  variant="tertiary"
-                                  className={styles.inlineButton}
-                                  onClick={() =>
-                                    window.open(
-                                      `https://www.google.com/maps/search/?api=1&query=${order.pickup_geo!.lat},${order.pickup_geo!.lng}`,
-                                      "_blank",
-                                      "noopener",
-                                    )
-                                  }
-                                >
-                                  {t("Map")}
-                                </Button>
-                              </div>
-                            </div>
-                          </div>
-                        ) : order.third_party ? (
-                          // 3rd-party has no GPS at all (the service — not
-                          // this app — drives the last leg), and no
-                          // separate pickup leg to pair it with on the
-                          // right — this is the order's only event, so it
-                          // sits on the left like the other two modes'
-                          // single events do. Service name + handed-at
-                          // time, plus the same tracking element (Paxel
-                          // deep link, or a copyable ref) the hand-off/
-                          // proof cards use, in place of a Map button
-                          // there's no GPS to back.
-                          order.delivered_at && (
-                            <div className={styles.row}>
-                              <Icon name="scooter" size={24} />
-                              <div className={styles.column}>
-                                <span className={styles.secondary}>
-                                  {t("Handed to")}{" "}
-                                  <strong>
-                                    {parsedThirdPartyService ||
-                                      order.courier_service ||
-                                      t("Online courier")}
-                                  </strong>{" "}
-                                  at {formatClock(order.delivered_at)}
-                                </span>
-                                <div className={styles.byRow}>
-                                  {activeProof?.name && (
-                                    <span>
-                                      {t("Driver's name")}{" "}
-                                      <strong>{activeProof.name}</strong>
-                                    </span>
-                                  )}
-                                  {parsedThirdPartyRef &&
-                                    (parsedThirdPartyService.toLowerCase() ===
-                                    "paxel" ? (
-                                      <Button
-                                        type="button"
-                                        variant="tertiary"
-                                        className={styles.inlineButton}
-                                        onClick={() =>
-                                          window.open(
-                                            `https://paxel.co.id/tracking/${encodeURIComponent(parsedThirdPartyRef)}`,
-                                            "_blank",
-                                            "noopener",
-                                          )
-                                        }
-                                      >
-                                        {t("Track")}
-                                      </Button>
-                                    ) : (
-                                      <Button
-                                        type="button"
-                                        variant="tertiary"
-                                        icon={
-                                          copiedTrackingRef ? "check" : "copy"
-                                        }
-                                        className={styles.inlineButton}
-                                        onClick={handleCopyTrackingRef}
-                                      >
-                                        {copiedTrackingRef
-                                          ? t("Copied")
-                                          : `${t("Ref:")} ${parsedThirdPartyRef}`}
-                                      </Button>
-                                    ))}
-                                </div>
-                              </div>
-                            </div>
-                          )
-                        ) : order.pickup && order.delivered_at ? (
-                          // Customer pickup — collected in person at the
-                          // warehouse, no GPS either (nothing to drive
-                          // to/from). `delivered_at` doubles as the
-                          // "picked up at" moment; `activeProof.name` is
-                          // the "Photo of who collected" name captured at
-                          // proof.
-                          <div className={styles.row}>
-                            <Icon name="pickup" size={24} />
-                            <div className={styles.column}>
-                              <span className={styles.secondary}>
-                                {t("Picked up at")}{" "}
-                                {formatClock(order.delivered_at)}
-                              </span>
-                              {activeProof?.name && (
-                                <div className={styles.byRow}>
-                                  <span>
-                                    {t("Collected by")}{" "}
-                                    <strong>{activeProof.name}</strong>
-                                  </span>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        ) : (
-                          // Own-courier with no captured pickup stamp
-                          // (best-effort GPS capture can simply fail) —
-                          // falls back to showing its delivered info here
-                          // on the left, same as the other single-event
-                          // modes above, instead of floating alone on the
-                          // right. Reported directly with a screenshot.
-                          deliveredBlock
-                        )}
-                      </div>
-
-                      <div>
-                        {/* Only rendered here when there's a real
-                            `pickup_geo` on the left to pair it with —
-                            otherwise `deliveredBlock` already rendered in
-                            the left slot's own fallback branch above. */}
-                        {order.pickup_geo && deliveredBlock}
-                      </div>
-                    </div>
-                  );
-                })()}
-            </Card>
+            </div>
           ) : isHold ? (
-            <Card className={styles.warningCard}>
-              <div className={styles.cardContent}>
+            <div className={styles.banner}>
+              <div className={styles.headerRow} style={{ paddingBottom: 0 }}>
+                <div
+                  className={styles.stepLine}
+                  style={{ backgroundColor: "var(--state-warning)" }}
+                />
                 <div className={styles.warningHeader}>
                   <Icon name="pause" size={20} />
                   <span className={styles.warningTitle}>{t("On hold")}</span>
                 </div>
-
-                {canHold ? (
-                  <div className={styles.cardListColumn}>
-                    <p>
-                      {t(
-                        "This order is paused — the process cannot continue until it is resumed.",
-                      )}
-                    </p>
-                    <Button
-                      type="button"
-                      variant="primary"
-                      buttonStyle="fullWidth"
-                      size="lg"
-                      icon="play"
-                      tone="warning"
-                      onClick={handleToggleHold}
-                    >
-                      {t("Resume order")}
-                    </Button>
-                  </div>
-                ) : (
-                  <p>
-                    This order is paused — the process cannot continue until{" "}
-                    <strong>Admin</strong> or <strong>Owner</strong> resumes it.
-                  </p>
-                )}
+                <div
+                  className={styles.stepLine}
+                  style={{ backgroundColor: "var(--state-warning)" }}
+                />
               </div>
-            </Card>
+
+              {canHold ? (
+                <div className={styles.cardListColumn}>
+                  <p>
+                    {t(
+                      "This order is paused — the process cannot continue until it is resumed.",
+                    )}
+                  </p>
+                  <Button
+                    type="button"
+                    variant="primary"
+                    buttonStyle="fullWidth"
+                    size="lg"
+                    icon="play"
+                    tone="warning"
+                    onClick={handleToggleHold}
+                  >
+                    {t("Resume order")}
+                  </Button>
+                </div>
+              ) : (
+                <p>
+                  This order is paused — the process cannot continue until{" "}
+                  <strong>Admin</strong> or <strong>Owner</strong> resumes it.
+                </p>
+              )}
+            </div>
           ) : isOutstanding ? (
-            <Card className={styles.warningCard}>
-              <div className={styles.cardContent}>
+            <div className={styles.banner}>
+              <div className={styles.headerRow} style={{ paddingBottom: 0 }}>
+                <div
+                  className={styles.stepLine}
+                  style={{ backgroundColor: "var(--state-warning)" }}
+                />
                 <div className={styles.warningHeader}>
                   <Icon name="packageProcess" size={20} />
                   <span className={styles.warningTitle}>
                     {t("Outstanding")}
                   </span>
                 </div>
-                <p>
-                  {t(
-                    "This order is partially fulfilled — a portion of the items has not yet been delivered to the customer.",
-                  )}
-                </p>
+                <div
+                  className={styles.stepLine}
+                  style={{ backgroundColor: "var(--state-warning)" }}
+                />
               </div>
-            </Card>
+              <p>
+                {t(
+                  "This order is partially fulfilled — a portion of the items has not yet been delivered to the customer.",
+                )}
+              </p>
+            </div>
           ) : isReturned && !isCancelled ? (
             <Card className={styles.errorCard}>
               <div className={styles.headerRow}>
@@ -4695,8 +4472,7 @@ export function OrderDetail() {
                       }
                       photos={receivePhotosMap[l.id] ?? []}
                       onUploadPhoto={handleUploadReceiveWeighPhoto}
-                      onRemovePhoto={handleRemoveReceiveWeighPhoto}
-                      onOpenImage={setActiveImageModal}
+                      onOpenImage={openImageGallery}
                       t={t}
                     />
                   ))}
@@ -5320,46 +5096,17 @@ export function OrderDetail() {
                             />
 
                             {w.photos.length > 0 && (
-                              <div
-                                className={styles.thumbnailsContainer}
+                              <Thumbnails
                                 style={{ marginLeft: 28 }}
-                              >
-                                {w.photos.map((p) => (
-                                  <div
-                                    key={p.id}
-                                    className={styles.thumbnailItem}
-                                    onClick={() =>
-                                      setActiveImageModal({
-                                        url: p.url,
-                                        title: `${t("Weighing photo —")} ${line.name}`,
-                                        weighingLineId: line.id,
-                                        weighingId: w.id,
-                                        weighingPhotoId: p.id,
-                                      })
-                                    }
-                                  >
-                                    <img
-                                      src={p.url}
-                                      alt="scale"
-                                      className={styles.thumbnailImg}
-                                    />
-                                    <div
-                                      className={styles.thumbnailHoverTrash}
-                                      title={t("Delete image")}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleRemoveWeighingPhoto(
-                                          line.id,
-                                          w.id,
-                                          p.id,
-                                        );
-                                      }}
-                                    >
-                                      <Icon name="trash" size={14} />
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
+                                photos={w.photos.map((p) => ({
+                                  url: p.url,
+                                  title: `${t("Weighing photo —")} ${line.name}`,
+                                  weighingLineId: line.id,
+                                  weighingId: w.id,
+                                  weighingPhotoId: p.id,
+                                }))}
+                                onOpen={openImageGallery}
+                              />
                             )}
                           </div>
                         ))}
@@ -5416,29 +5163,14 @@ export function OrderDetail() {
                                 {w.weight || "0.00"} kg
                               </span>
                               {w.photos.length > 0 && (
-                                <div
-                                  className={styles.thumbnailsContainer}
+                                <Thumbnails
                                   style={{ marginLeft: "0.5rem" }}
-                                >
-                                  {w.photos.map((p) => (
-                                    <div
-                                      key={p.id}
-                                      className={styles.thumbnailItem}
-                                      onClick={() =>
-                                        setActiveImageModal({
-                                          url: p.url,
-                                          title: `${t("Weighing photo —")} ${line.name}`,
-                                        })
-                                      }
-                                    >
-                                      <img
-                                        src={p.url}
-                                        alt="scale"
-                                        className={styles.thumbnailImg}
-                                      />
-                                    </div>
-                                  ))}
-                                </div>
+                                  photos={w.photos.map((p) => ({
+                                    url: p.url,
+                                    title: `${t("Weighing photo —")} ${line.name}`,
+                                  }))}
+                                  onOpen={openImageGallery}
+                                />
                               )}
                             </div>
                           ))}
@@ -5500,60 +5232,32 @@ export function OrderDetail() {
                               {t("Needs photo")}
                             </span>
                           )}
+                        {/* Delete (via the modal's trash button) only
+                            available during the same window as the upload
+                            button itself (`canWeighHere` — Cold Storage,
+                            weighing role) — previously gated on `stage !==
+                            "delivered"` alone, which let a photo be deleted
+                            at every stage up to delivery (production,
+                            packing, finalise, dispatch, outstanding), not
+                            just at Cold Storage. Reported directly. */}
                         {itemPhotos.length > 0 && (
-                          <div
-                            className={styles.thumbnailsContainer}
+                          <Thumbnails
                             style={{ marginLeft: 28 }}
-                          >
-                            {itemPhotos.map((img) => (
-                              <div
-                                key={img.id}
-                                className={styles.thumbnailItem}
-                                onClick={() =>
-                                  setActiveImageModal(
-                                    canWeighHere
-                                      ? {
-                                          url: img.url,
-                                          title: `${t("Attachment for")} ${line.name}`,
-                                          photoId: img.id,
-                                          lineId: line.id,
-                                        }
-                                      : {
-                                          url: img.url,
-                                          title: `${t("Attachment for")} ${line.name}`,
-                                        },
-                                  )
-                                }
-                              >
-                                <img
-                                  src={img.url}
-                                  alt="thumbnail"
-                                  className={styles.thumbnailImg}
-                                />
-                                {/* Delete only available during the same
-                                  window as the upload button itself
-                                  (`canWeighHere` — Cold Storage, weighing
-                                  role) — previously gated on `stage !==
-                                  "delivered"` alone, which let a photo be
-                                  deleted at every stage up to delivery
-                                  (production, packing, finalise, dispatch,
-                                  outstanding), not just at Cold Storage.
-                                  Reported directly. */}
-                                {canWeighHere && (
-                                  <div
-                                    className={styles.thumbnailHoverTrash}
-                                    title={t("Delete image")}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleRemoveItemPhoto(line.id, img.id);
-                                    }}
-                                  >
-                                    <Icon name="trash" size={14} />
-                                  </div>
-                                )}
-                              </div>
-                            ))}
-                          </div>
+                            photos={itemPhotos.map((img) =>
+                              canWeighHere
+                                ? {
+                                    url: img.url,
+                                    title: `${t("Attachment for")} ${line.name}`,
+                                    photoId: img.id,
+                                    lineId: line.id,
+                                  }
+                                : {
+                                    url: img.url,
+                                    title: `${t("Attachment for")} ${line.name}`,
+                                  },
+                            )}
+                            onOpen={openImageGallery}
+                          />
                         )}
                       </div>
                     )}
@@ -5645,6 +5349,278 @@ export function OrderDetail() {
               ))}
           </Card>
 
+          {/* Delivery Proof card — moved out of the "Delivered & Closed"
+              success banner (which now only holds the headerRow/stepLines
+              title) so this data has its own default-styled Card, placed
+              right after Items. No left/right column split for the
+              pickup/delivery rows anymore — each is its own full-width
+              row (icon + main/secondary text + trailing button), same
+              shape as the Follow-ups pending card's rows below, chosen
+              because both show the same kind of data. */}
+          {stage === "delivered" &&
+            (() => {
+              const deliveryDocPhotos: ImageModalEntry[] = activeProof
+                ? (
+                    [
+                      { key: "cond", label: t("Condition photo") },
+                      {
+                        key: "recv",
+                        label:
+                          handoffMode === "pickup"
+                            ? t("Photo of who collected")
+                            : t("Receiver photo"),
+                      },
+                      { key: "signed", label: t("Signed doc") },
+                    ] as const
+                  ).flatMap(({ key, label }) =>
+                    attachments
+                      .filter(
+                        (a) =>
+                          a.proof_id === activeProof.id && a.doc_type === key,
+                      )
+                      .map((a) => ({
+                        url: getAssetUrl(a.document_file ?? ""),
+                        title: label,
+                      })),
+                  )
+                : [];
+
+              const hasLocationData = !!(
+                order.pickup_geo ||
+                (order.third_party && order.delivered_at) ||
+                (order.pickup && order.delivered_at) ||
+                (order.taken_by && order.deliver_geo)
+              );
+
+              if (deliveryDocPhotos.length === 0 && !hasLocationData) {
+                return null;
+              }
+
+              return (
+                <Card>
+                  <div className={styles.headerRow}>
+                    <h3 className={styles.sectionTitle}>
+                      {t("Delivery proof")}
+                    </h3>
+                  </div>
+
+                  {deliveryDocPhotos.length > 0 && (
+                    <div className={styles.followUpRow}>
+                      <Icon
+                        name="image"
+                        size={24}
+                        className={styles.successIcon}
+                      />
+                      <div className={styles.followUpMain}>
+                        <span className={styles.fieldLabel}>
+                          {t("Delivery documentation")}
+                        </span>
+                      </div>
+                      <Thumbnails
+                        photos={deliveryDocPhotos}
+                        onOpen={openImageGallery}
+                      />
+                    </div>
+                  )}
+
+                  {hasLocationData &&
+                    (() => {
+                      // Hoisted so it can render either as its own row
+                      // (own-courier with no captured pickup stamp) or
+                      // alongside the pickup row (own-courier with both
+                      // legs captured) without duplicating the JSX.
+                      const deliveredRow = order.taken_by &&
+                        order.deliver_geo && (
+                          <div className={styles.followUpRow}>
+                            <Icon
+                              name="delivered"
+                              size={24}
+                              className={styles.successIcon}
+                            />
+                            <div className={styles.followUpMain}>
+                              <span className={styles.fieldLabel}>
+                                {dropDistanceM !== null
+                                  ? `${t("Dropped at delivery address")} · ~${dropDistanceM}m`
+                                  : t("Delivery location captured")}{" "}
+                                at {formatClock(order.deliver_geo.at)}
+                              </span>
+                              {activeProof?.name && (
+                                <span className={styles.secondary}>
+                                  {t("Received by")}{" "}
+                                  <strong>{activeProof.name}</strong>
+                                </span>
+                              )}
+                            </div>
+                            <Button
+                              type="button"
+                              variant="tertiary"
+                              className={styles.inlineButton}
+                              onClick={() =>
+                                window.open(
+                                  `https://www.google.com/maps/search/?api=1&query=${order.deliver_geo!.lat},${order.deliver_geo!.lng}`,
+                                  "_blank",
+                                  "noopener",
+                                )
+                              }
+                            >
+                              {t("Map")}
+                              <Icon name="arrowUpRight" size={16} />
+                            </Button>
+                          </div>
+                        );
+
+                      return (
+                        <>
+                          {order.pickup_geo ? (
+                            <div className={styles.followUpRow}>
+                              <Icon
+                                name="pickup"
+                                size={24}
+                                className={styles.successIcon}
+                              />
+                              <div className={styles.followUpMain}>
+                                <span className={styles.fieldLabel}>
+                                  {t("Picked up at")}{" "}
+                                  {formatClock(order.pickup_geo.at)}
+                                </span>
+                                {order.taken_by && (
+                                  <span className={styles.secondary}>
+                                    {t("by")}{" "}
+                                    <strong>
+                                      {displayName(order.taken_by)}
+                                    </strong>
+                                  </span>
+                                )}
+                              </div>
+                              <Button
+                                type="button"
+                                variant="tertiary"
+                                className={styles.inlineButton}
+                                onClick={() =>
+                                  window.open(
+                                    `https://www.google.com/maps/search/?api=1&query=${order.pickup_geo!.lat},${order.pickup_geo!.lng}`,
+                                    "_blank",
+                                    "noopener",
+                                  )
+                                }
+                              >
+                                {t("Map")}
+                                <Icon name="arrowUpRight" size={16} />
+                              </Button>
+                            </div>
+                          ) : order.third_party ? (
+                            // 3rd-party has no GPS at all (the service — not
+                            // this app — drives the last leg). Service name
+                            // + handed-at time, plus the same tracking
+                            // element (Paxel deep link, or a copyable ref)
+                            // the hand-off/proof cards use, in place of a
+                            // Map button there's no GPS to back.
+                            order.delivered_at && (
+                              <div className={styles.followUpRow}>
+                                <Icon
+                                  name="scooter"
+                                  size={24}
+                                  className={styles.successIcon}
+                                />
+                                <div className={styles.followUpMain}>
+                                  <span className={styles.fieldLabel}>
+                                    {t("Handed to")}{" "}
+                                    {parsedThirdPartyService ||
+                                      order.courier_service ||
+                                      t("Online courier")}{" "}
+                                    at {formatClock(order.delivered_at)}
+                                  </span>
+                                  {activeProof?.name && (
+                                    <span className={styles.secondary}>
+                                      {t("Driver's name")}{" "}
+                                      <strong>{activeProof.name}</strong>
+                                    </span>
+                                  )}
+                                </div>
+                                {parsedThirdPartyRef &&
+                                  (parsedThirdPartyService.toLowerCase() ===
+                                  "paxel" ? (
+                                    <Button
+                                      type="button"
+                                      variant="tertiary"
+                                      className={styles.inlineButton}
+                                      onClick={() =>
+                                        window.open(
+                                          `https://paxel.co.id/tracking/${encodeURIComponent(parsedThirdPartyRef)}`,
+                                          "_blank",
+                                          "noopener",
+                                        )
+                                      }
+                                    >
+                                      {t("Track")}
+                                      <Icon name="arrowUpRight" size={16} />
+                                    </Button>
+                                  ) : (
+                                    <Button
+                                      type="button"
+                                      variant="tertiary"
+                                      className={styles.inlineButton}
+                                      onClick={handleCopyTrackingRef}
+                                    >
+                                      {copiedTrackingRef
+                                        ? t("Copied")
+                                        : `${t("Ref:")} ${parsedThirdPartyRef}`}
+                                      <Icon
+                                        name={
+                                          copiedTrackingRef ? "check" : "copy"
+                                        }
+                                        size={16}
+                                      />
+                                    </Button>
+                                  ))}
+                              </div>
+                            )
+                          ) : order.pickup && order.delivered_at ? (
+                            // Customer pickup — collected in person at the
+                            // warehouse, no GPS either. `delivered_at`
+                            // doubles as the "picked up at" moment;
+                            // `activeProof.name` is the "Photo of who
+                            // collected" name captured at proof.
+                            <div className={styles.followUpRow}>
+                              <Icon
+                                name="pickup"
+                                size={24}
+                                className={styles.followUpIcon}
+                              />
+                              <div className={styles.followUpMain}>
+                                <span className={styles.fieldLabel}>
+                                  {t("Picked up at")}{" "}
+                                  {formatClock(order.delivered_at)}
+                                </span>
+                                {activeProof?.name && (
+                                  <span className={styles.secondary}>
+                                    {t("Collected by")}{" "}
+                                    <strong>{activeProof.name}</strong>
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          ) : (
+                            // Own-courier with no captured pickup stamp
+                            // (best-effort GPS capture can simply fail) —
+                            // falls back to showing its delivered info
+                            // alone, same as the other single-event modes
+                            // above.
+                            deliveredRow
+                          )}
+
+                          {/* Only rendered again here when there's a real
+                            `pickup_geo` row above to pair it with —
+                            otherwise `deliveredRow` already rendered in
+                            the fallback branch above. */}
+                          {order.pickup_geo && deliveredRow}
+                        </>
+                      );
+                    })()}
+                </Card>
+              );
+            })()}
+
           {/* Part-delivered decision card — separate from the "Outstanding"
               status card up in the stepper section (which stays a plain
               status banner for every outstanding order); this one renders
@@ -5660,27 +5636,39 @@ export function OrderDetail() {
               <div className={styles.cardContent}>
                 {canDecideOutstanding ? (
                   showBackorderView ? (
-                    <div className={styles.cardListColumn}>
-                      <Button
-                        type="button"
-                        variant="tertiary"
-                        className={styles.inlineButton}
-                        icon="chevronLeft"
-                        onClick={() => setShowBackorderView(false)}
-                      >
-                        {t("Back")}
-                      </Button>
-                      <div className={styles.warningHeader}>
-                        <Icon name="bell" size={18} />
-                        <span className={styles.warningTitle}>
-                          {t("Send later — remind me")}
-                        </span>
+                    <>
+                      <div className={styles.cardListColumn}>
+                        <div className={styles.rowStretch}>
+                          <div className={styles.row}>
+                            <Icon
+                              name="bell"
+                              size={16}
+                              style={{ color: "var(--state-warning)" }}
+                            />
+                            <span
+                              className={styles.fieldLabel}
+                              style={{ color: "var(--state-warning)" }}
+                            >
+                              {t("Send later — remind me")}
+                            </span>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="tertiary"
+                            className={styles.inlineButton}
+                            icon="chevronLeft"
+                            onClick={() => setShowBackorderView(false)}
+                          >
+                            {t("Back")}
+                          </Button>
+                        </div>
+
+                        <p className={styles.secondary}>
+                          {t(
+                            "Close today's delivery; keep the rest as a backorder that reappears on a date.",
+                          )}
+                        </p>
                       </div>
-                      <p className={styles.secondary}>
-                        {t(
-                          "Close today's delivery; keep the rest as a backorder that reappears on a date.",
-                        )}
-                      </p>
                       <span className={styles.row}>
                         <p className={styles.fieldLabel}>
                           {t("Reminder date")}
@@ -5693,50 +5681,54 @@ export function OrderDetail() {
                           onChange={(e) => setBackorderRemindOn(e.target.value)}
                         />
                       </span>
-                      <Button
-                        type="button"
-                        variant="primary"
-                        buttonStyle="fullWidth"
-                        size="lg"
-                        icon="packageAdd"
-                        tone="warning"
-                        disabled={creatingBackorder}
-                        onClick={handleCreateBackorder}
-                      >
-                        {creatingBackorder
-                          ? t("Saving…")
-                          : `${t("Create backorder")} #${order.no}-B →`}
-                      </Button>
-                    </div>
+                      <div className={styles.cardActions}>
+                        <Button
+                          type="button"
+                          variant="primary"
+                          buttonStyle="fullWidth"
+                          size="lg"
+                          icon="packageAdd"
+                          tone="warning"
+                          disabled={creatingBackorder}
+                          onClick={handleCreateBackorder}
+                        >
+                          {creatingBackorder
+                            ? t("Saving…")
+                            : `${t("Create backorder")} #${order.no}-B →`}
+                        </Button>
+                      </div>
+                    </>
                   ) : (
-                    <div className={styles.cardListColumn}>
-                      <p className={styles.secondary}>
-                        {partDeliveredSubtitle}
-                      </p>
-                      <div className={styles.owedLinesBox}>
-                        {owedLines.map((l) => (
-                          <div key={l.id} className={styles.owedLineItem}>
-                            <p className={styles.fieldLabel}>{l.name}</p>
-                            <span className={styles.owedPill}>
-                              <Icon name="packageProcess" size={20} />
-                              {isWeightOnlyUnit(l.unit) ? (
-                                <span>{t("Short — ran out of stock")}</span>
-                              ) : (
-                                <>
-                                  <span className={styles.detailValue}>
-                                    {lineLeft(l)} {l.unit}
-                                  </span>
-                                  <span className={styles.owedPillLabel}>
-                                    {t("still owed")}
-                                  </span>
-                                </>
-                              )}
-                            </span>
-                          </div>
-                        ))}
+                    <>
+                      <div className={styles.cardListColumn}>
+                        <p className={styles.secondary}>
+                          {partDeliveredSubtitle}
+                        </p>
+                        <div className={styles.owedLinesBox}>
+                          {owedLines.map((l) => (
+                            <div key={l.id} className={styles.owedLineItem}>
+                              <p className={styles.fieldLabel}>{l.name}</p>
+                              <span className={styles.owedPill}>
+                                <Icon name="packageProcess" size={20} />
+                                {isWeightOnlyUnit(l.unit) ? (
+                                  <span>{t("Short — ran out of stock")}</span>
+                                ) : (
+                                  <>
+                                    <span className={styles.detailValue}>
+                                      {lineLeft(l)} {l.unit}
+                                    </span>
+                                    <span className={styles.owedPillLabel}>
+                                      {t("still owed")}
+                                    </span>
+                                  </>
+                                )}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                       <div className={styles.cardActions}>
-                        <div className={styles.column}>
+                        <div className={styles.cardListColumn}>
                           <Button
                             type="button"
                             variant="primary"
@@ -5769,7 +5761,7 @@ export function OrderDetail() {
                         >
                           {t("Send later — remind me")}
                         </Button>
-                        <div className={styles.column}>
+                        <div className={styles.cardListColumn}>
                           <Button
                             type="button"
                             variant="secondary"
@@ -5793,7 +5785,7 @@ export function OrderDetail() {
                           </p>
                         </div>
                       </div>
-                    </div>
+                    </>
                   )
                 ) : (
                   <div className={styles.cardListColumn}>
@@ -5894,28 +5886,15 @@ export function OrderDetail() {
                             </strong>
                           </p>
                           {(receivePhotosMap[l.id]?.length ?? 0) > 0 && (
-                            <div className={styles.thumbnailsContainer}>
-                              {receivePhotosMap[l.id]!.map((p) => (
-                                <div
-                                  key={p.id}
-                                  className={styles.thumbnailItem}
-                                  onClick={() =>
-                                    setActiveImageModal({
-                                      url: p.url,
-                                      title: `${t("Scale photo")} · ${l.name}`,
-                                      receiveLineId: l.id,
-                                      receivePhotoId: p.id,
-                                    })
-                                  }
-                                >
-                                  <img
-                                    src={p.url}
-                                    alt=""
-                                    className={styles.thumbnailImg}
-                                  />
-                                </div>
-                              ))}
-                            </div>
+                            <Thumbnails
+                              photos={receivePhotosMap[l.id]!.map((p) => ({
+                                url: p.url,
+                                title: `${t("Scale photo")} · ${l.name}`,
+                                receiveLineId: l.id,
+                                receivePhotoId: p.id,
+                              }))}
+                              onOpen={openImageGallery}
+                            />
                           )}
                         </div>
                       </div>
@@ -5927,29 +5906,15 @@ export function OrderDetail() {
                         <p className={styles.docType}>
                           {t("Return documents")}
                         </p>
-                        <div className={styles.thumbnailsContainer}>
-                          {returnDocs
+                        <Thumbnails
+                          photos={returnDocs
                             .filter((d) => d.photo_id)
-                            .map((d) => (
-                              <div
-                                key={d.id}
-                                className={styles.thumbnailItem}
-                                onClick={() =>
-                                  setActiveImageModal({
-                                    url: getAssetUrl(d.photo_id!),
-                                    title:
-                                      RETURN_DOC_KIND_LABELS[d.kind] ?? d.kind,
-                                  })
-                                }
-                              >
-                                <img
-                                  src={getAssetUrl(d.photo_id!)}
-                                  alt=""
-                                  className={styles.thumbnailImg}
-                                />
-                              </div>
-                            ))}
-                        </div>
+                            .map((d) => ({
+                              url: getAssetUrl(d.photo_id!),
+                              title: RETURN_DOC_KIND_LABELS[d.kind] ?? d.kind,
+                            }))}
+                          onOpen={openImageGallery}
+                        />
                       </div>
                     </div>
                   )}
@@ -6010,8 +5975,7 @@ export function OrderDetail() {
                     }
                     photos={receivePhotosMap[l.id] ?? []}
                     onUploadPhoto={handleUploadReceiveWeighPhoto}
-                    onRemovePhoto={handleRemoveReceiveWeighPhoto}
-                    onOpenImage={setActiveImageModal}
+                    onOpenImage={openImageGallery}
                     t={t}
                   />
                 ))}
@@ -6707,42 +6671,19 @@ export function OrderDetail() {
                           </span>
                         </div>
                         {condPhotos.length > 0 && (
-                          <div className={styles.thumbnailsContainer}>
-                            {condPhotos.map((p, i) => (
-                              <div
-                                key={p.fileId + i}
-                                className={styles.thumbnailItem}
-                                onClick={() =>
-                                  setActiveImageModal({
-                                    url: p.url,
-                                    title:
-                                      handoffMode === "pickup" ||
-                                      handoffMode === "third"
-                                        ? t("Item condition photo (pickup)")
-                                        : t("Item condition photo"),
-                                    stagedProofSlot: "cond",
-                                    stagedProofIndex: i,
-                                  })
-                                }
-                              >
-                                <img
-                                  src={p.url}
-                                  alt=""
-                                  className={styles.thumbnailImg}
-                                />
-                                <div
-                                  className={styles.thumbnailHoverTrash}
-                                  title={t("Delete image")}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleRemoveStagedProofPhoto("cond", i);
-                                  }}
-                                >
-                                  <Icon name="trash" size={14} />
-                                </div>
-                              </div>
-                            ))}
-                          </div>
+                          <Thumbnails
+                            photos={condPhotos.map((p, i) => ({
+                              url: p.url,
+                              title:
+                                handoffMode === "pickup" ||
+                                handoffMode === "third"
+                                  ? t("Item condition photo (pickup)")
+                                  : t("Item condition photo"),
+                              stagedProofSlot: "cond" as const,
+                              stagedProofIndex: i,
+                            }))}
+                            onOpen={openImageGallery}
+                          />
                         )}
                         <input
                           ref={condFileInputRef}
@@ -6812,45 +6753,20 @@ export function OrderDetail() {
                               </span>
                             </div>
                             {recvPhotos.length > 0 && (
-                              <div className={styles.thumbnailsContainer}>
-                                {recvPhotos.map((p, i) => (
-                                  <div
-                                    key={p.fileId + i}
-                                    className={styles.thumbnailItem}
-                                    onClick={() =>
-                                      setActiveImageModal({
-                                        url: p.url,
-                                        title:
-                                          handoffMode === "third"
-                                            ? t(
-                                                "Photo of the package / courier",
-                                              )
-                                            : handoffMode === "pickup"
-                                              ? t("Photo of who collected")
-                                              : t("Receiver photo"),
-                                        stagedProofSlot: "recv",
-                                        stagedProofIndex: i,
-                                      })
-                                    }
-                                  >
-                                    <img
-                                      src={p.url}
-                                      alt=""
-                                      className={styles.thumbnailImg}
-                                    />
-                                    <div
-                                      className={styles.thumbnailHoverTrash}
-                                      title={t("Delete image")}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleRemoveStagedProofPhoto("recv", i);
-                                      }}
-                                    >
-                                      <Icon name="trash" size={14} />
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
+                              <Thumbnails
+                                photos={recvPhotos.map((p, i) => ({
+                                  url: p.url,
+                                  title:
+                                    handoffMode === "third"
+                                      ? t("Photo of the package / courier")
+                                      : handoffMode === "pickup"
+                                        ? t("Photo of who collected")
+                                        : t("Receiver photo"),
+                                  stagedProofSlot: "recv" as const,
+                                  stagedProofIndex: i,
+                                }))}
+                                onOpen={openImageGallery}
+                              />
                             )}
                             <input
                               ref={recvFileInputRef}
@@ -6920,46 +6836,20 @@ export function OrderDetail() {
                               </span>
                             </div>
                             {signedPhotos.length > 0 && (
-                              <div className={styles.thumbnailsContainer}>
-                                {signedPhotos.map((p, i) => (
-                                  <div
-                                    key={p.fileId + i}
-                                    className={styles.thumbnailItem}
-                                    onClick={() =>
-                                      setActiveImageModal({
-                                        url: p.url,
-                                        title:
-                                          handoffMode === "third"
-                                            ? t("Signed invoice")
-                                            : proofRequired
-                                              ? t("Signed doc (required)")
-                                              : t("Signed doc (optional)"),
-                                        stagedProofSlot: "signed",
-                                        stagedProofIndex: i,
-                                      })
-                                    }
-                                  >
-                                    <img
-                                      src={p.url}
-                                      alt=""
-                                      className={styles.thumbnailImg}
-                                    />
-                                    <div
-                                      className={styles.thumbnailHoverTrash}
-                                      title={t("Delete image")}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleRemoveStagedProofPhoto(
-                                          "signed",
-                                          i,
-                                        );
-                                      }}
-                                    >
-                                      <Icon name="trash" size={14} />
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
+                              <Thumbnails
+                                photos={signedPhotos.map((p, i) => ({
+                                  url: p.url,
+                                  title:
+                                    handoffMode === "third"
+                                      ? t("Signed invoice")
+                                      : proofRequired
+                                        ? t("Signed doc (required)")
+                                        : t("Signed doc (optional)"),
+                                  stagedProofSlot: "signed" as const,
+                                  stagedProofIndex: i,
+                                }))}
+                                onOpen={openImageGallery}
+                              />
                             )}
                             <input
                               ref={signedFileInputRef}
@@ -8052,6 +7942,18 @@ export function OrderDetail() {
                       }
                     : undefined
         }
+        onPrev={
+          activeImageModal?.gallery && activeImageModal.gallery.length > 1
+            ? () => handleImageModalNav(-1)
+            : undefined
+        }
+        onNext={
+          activeImageModal?.gallery && activeImageModal.gallery.length > 1
+            ? () => handleImageModalNav(1)
+            : undefined
+        }
+        currentIndex={activeImageModal?.galleryIndex}
+        total={activeImageModal?.gallery?.length}
       />
     </div>
   );
