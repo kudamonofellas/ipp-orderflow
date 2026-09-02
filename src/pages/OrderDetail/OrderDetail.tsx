@@ -78,7 +78,7 @@ import {
   type ReturnStage,
 } from "../../lib/pipeline";
 import { redactHistoryPrices } from "../../lib/redactHistory";
-import { formatClock, formatTakenAt } from "../../lib/format";
+import { formatClock, formatTakenAt, formatDateShort } from "../../lib/format";
 import { ReturnLineBox } from "../../components/ReturnLineBox/ReturnLineBox";
 import { dateCode } from "../../lib/orderNo";
 import { ImageDetailsModal } from "../../components/ImageDetailsModal/ImageDetailsModal";
@@ -109,6 +109,25 @@ function isWeighedUnit(unit: string | null | undefined): boolean {
 function isWeightOnlyUnit(unit: string | null | undefined): boolean {
   const u = (unit ?? "").toLowerCase();
   return u === "kg" || u === "gram";
+}
+
+/** How many of a counted line are still owed after partial delivery — 0 for
+ *  a weight-only (kg/gram) line (held back via `short` instead) or a
+ *  removed line. Ported from the prototype's `lineLeft()`
+ *  (`Dev-domain.js:35-46`). */
+function lineLeft(line: {
+  qty?: unknown;
+  delivered?: unknown;
+  returned?: unknown;
+  unit?: string | null;
+  removed?: boolean | null;
+}): number {
+  if (line.removed || isWeightOnlyUnit(line.unit)) return 0;
+  const left =
+    (Number(line.qty) || 0) -
+    (Number(line.delivered) || 0) -
+    (Number(line.returned) || 0);
+  return left > 0 ? left : 0;
 }
 
 /** A line's price as a number, `0` for anything unparseable. Only for
@@ -427,6 +446,17 @@ export function OrderDetail() {
   const [noteFileIds, setNoteFileIds] = useState<string[]>([]);
   const [confirmingInbound, setConfirmingInbound] = useState(false);
   const [undoingInbound, setUndoingInbound] = useState(false);
+
+  /* ── outstanding (item shortfall) decisions ── */
+  const [sendingRest, setSendingRest] = useState(false);
+  const [showBackorderView, setShowBackorderView] = useState(false);
+  const [backorderRemindOn, setBackorderRemindOn] = useState("");
+  const [creatingBackorder, setCreatingBackorder] = useState(false);
+  const [closingShort, setClosingShort] = useState(false);
+  // Re-entrancy guard: a fast double-tap must not create TWO backorders —
+  // same class of bug as the prototype's own `backorderOnce` ref
+  // (Dev-OrderDetail.jsx:249).
+  const backorderOnceRef = useRef(false);
 
   /* ── hand-off mode chooser (dispatch stage) ── */
   const [choosingMode, setChoosingMode] = useState(false);
@@ -928,12 +958,17 @@ export function OrderDetail() {
     : false;
   const canCancel =
     auth.can("cancelOrders") && !isCancelled && !isDelivered && !isReturned;
+  // Ported from the prototype's own hold guard (`Dev-OrderDetail.jsx:148-150`
+  // — `!order.hold && !endState`, where `endState` is delivered/cancelled/
+  // returned only). `outstanding` is a stage (set automatically by a
+  // partial delivery); `hold` is an independent boolean flag — the two
+  // don't imply each other, and the prototype never excludes outstanding
+  // from being holdable. Previously excluded here (`!isOutstanding`), a
+  // leftover from an earlier pre-migration model where this port's own
+  // "hold" WAS the outstanding stage rather than a separate flag — fixed
+  // as part of finishing that migration.
   const canHold =
-    auth.can("holdResume") &&
-    !isOutstanding &&
-    !isCancelled &&
-    !isDelivered &&
-    !isReturned;
+    auth.can("holdResume") && !isCancelled && !isDelivered && !isReturned;
   const canRestore = (isCancelled || isOutstanding) && auth.can("reopenOrders");
   // Sees the Documents section AND its add-form — one gate for both, per the
   // prototype's own hardcoded `['Admin','Finance','Owner'].includes(role)`
@@ -954,6 +989,26 @@ export function OrderDetail() {
   const canReceiveReturn = auth.can("receiveReturns");
   const canDecideReturn = auth.can("decideReturns");
   const canSignReturn = auth.can("signReturns");
+  // Lines still owed after a partial delivery — ported from the prototype's
+  // own `owedLines` (`Dev-OrderDetail.jsx:224`). Reuses `decideReturns`
+  // (Admin's job, same as resolving a return) rather than a new capability —
+  // this is the same shape of "resolve an exceptional order state" decision.
+  const owedLines = lines.filter(
+    (l) =>
+      lineLeft(l) > 0 || (isWeightOnlyUnit(l.unit) && !!l.short && !l.removed),
+  );
+  const canDecideOutstanding = auth.can("decideReturns");
+  // "You sent part of this order today" only holds while it's still the
+  // same calendar day the partial delivery happened — past that, name the
+  // actual delivery date instead of a stale "today".
+  const partDeliveredOnSameDay =
+    !!order.delivered_at &&
+    new Date(order.delivered_at).toDateString() === new Date().toDateString();
+  const partDeliveredSubtitle = partDeliveredOnSameDay
+    ? t("You sent part of this order today. Below is what is still owed:")
+    : t(
+        "You sent part of this order on {date}. Below is what is still owed:",
+      ).replace("{date}", formatDateShort(order.delivered_at));
   const selectedDoc = RETURN_DOC_OPTIONS.find((d) => d.key === selectedDocType);
   const canSeePrices = auth.can("seePrices");
   // History card render — same treatment as the Notifications feed
@@ -1226,8 +1281,26 @@ export function OrderDetail() {
     isCodOrder &&
     !order.cod_reconciled &&
     auth.can("reconcileCOD");
+  /* Done-state counterpart of each pending row above — kept in the same
+   * Follow-ups card (not a separate card elsewhere) so confirming a row
+   * flips it in place to a done+Undo row instead of making it vanish,
+   * matching the prototype's own in-place pending→done pattern
+   * (`Dev-OrderDetail.jsx:1591-1610`, `1584-1589`). Deliberately NOT
+   * capability-gated, unlike the pending rows above — re-verified directly
+   * against the prototype (`Dev-OrderDetail.jsx:1584,1592,1606`, all three
+   * `stage === 'delivered' && <flag>`, no role check at all) and corrected
+   * from an earlier pass that gated the whole done row on the same
+   * capability as its pending row. A completed follow-up is a fact about
+   * the order (like the delivery proof itself) — visible to whoever can
+   * view the order at all, floor roles included; only the Undo action is
+   * office-only, gated individually on the button itself below, matching
+   * `Dev-OrderDetail.jsx:1587,1595,1609` exactly. Reported directly:
+   * Warehouse/Production/Courier couldn't see a resolved follow-up's
+   * status at all, only office roles could. */
+  const showCodDone = isDelivered && isCodOrder && !!order.cod_reconciled;
   const showDocsRow =
     isDelivered && !order.docs_returned && canConfirmDocsReturned;
+  const showDocsDone = isDelivered && !!order.docs_returned;
   /* Terms invoice — clearing at the Finance gate approved the CREDIT; the
    * actual payment lands later. Mirrors the prototype's dedicated
    * "Terms invoice — payment not yet received" card (Dev-OrderDetail.jsx:
@@ -1239,7 +1312,10 @@ export function OrderDetail() {
     order.payment_timing === "terms" &&
     !order.payment_paid_at &&
     auth.can("approveFinance");
-  const showTermsPaidNotice =
+  // Replaces the old standalone `showTermsPaidNotice` Card — same done
+  // state, now rendered as a row inside Follow-ups instead of its own
+  // card elsewhere on the page (2026-08-31, per the fix described above).
+  const showTermsDone =
     isDelivered && order.payment_timing === "terms" && !!order.payment_paid_at;
 
   /* Finance gate — ported from the prototype's renderFinanceGate() plus its
@@ -1262,10 +1338,13 @@ export function OrderDetail() {
   // The person who cleared payment (or anyone else with `approveFinance`)
   // stays able to reverse it even after the order has moved past the gate —
   // matches the prototype's `canUndoClear` (`Dev-OrderDetail.jsx:165-166`).
-  // "Hold" in this port IS the `outstanding` stage (see `handleHold`, no
-  // separate boolean overlay like the prototype's `order.hold`), so the
-  // stage whitelist below already excludes on-hold orders without a
-  // separate check.
+  // `hold` (a boolean flag, `order.hold`/`isHold`) and `stage` are
+  // independent axes — an order can be on hold at any of the whitelisted
+  // stages below, so `!isHold` is a genuinely separate check here, not
+  // redundant with the stage whitelist. (This file previously had a stale
+  // comment claiming "hold IS the outstanding stage" from an earlier
+  // pre-migration model — that was never true of this check and has been
+  // corrected as part of finishing that migration.)
   const showFinanceUndoRow =
     financeCleared &&
     canApproveFinance &&
@@ -2290,6 +2369,29 @@ export function OrderDetail() {
     }
   }
 
+  /** Undoes a mistaken "Mark returned" tap on the DO/SI Follow-ups row —
+   *  flips `docs_returned` back to false. No prior undo precedent existed
+   *  for this field either (see `handleUndoCOD` above); mirrors it. */
+  async function handleUndoDocsReturned() {
+    if (!id) return;
+    const res = await updateOrder(id, { docs_returned: false });
+    if (!res.error && res.data) {
+      setOrder(res.data);
+      await appendOrderHistory({
+        order_id: id,
+        what: "Undo — DO/SI not returned yet",
+        who: userId,
+        stage,
+      });
+      const hRes = await readOrderHistory(id);
+      if (!hRes.error) setHistory(hRes.data ?? []);
+    } else {
+      alert(`Failed to undo documents returned: ${res.error}`, {
+        title: t("Couldn't undo documents returned"),
+      });
+    }
+  }
+
   /** Records that a Terms-timing invoice's payment came in — the actual
    *  cash, distinct from clearing the credit at the Finance gate. Mirrors
    *  the prototype's terms-invoice "Payment received" button
@@ -2369,6 +2471,36 @@ export function OrderDetail() {
       });
     }
     setReconcilingCod(false);
+  }
+
+  /** Undoes a mistaken "Confirm received" tap on the COD Follow-ups row —
+   *  flips `cod_reconciled`/`cod_received_at` back, mirroring the shape of
+   *  `handleUndoTermsPayment` below (which already existed) rather than
+   *  the delivery-confirm Undo's full-snapshot restore, since this flag is
+   *  fully self-contained with no other state to reconcile. No prior undo
+   *  precedent existed for this field before this fix — flagged and
+   *  deliberately deferred on 2026-08-13, built now per direct request. */
+  async function handleUndoCOD() {
+    if (!id) return;
+    const res = await updateOrder(id, {
+      cod_reconciled: false,
+      cod_received_at: null,
+    });
+    if (!res.error && res.data) {
+      setOrder(res.data);
+      await appendOrderHistory({
+        order_id: id,
+        what: "Undo — COD cash not reconciled yet",
+        who: userId,
+        stage: null,
+      });
+      const hRes = await readOrderHistory(id);
+      if (!hRes.error) setHistory(hRes.data ?? []);
+    } else {
+      alert(`Failed to undo COD reconcile: ${res.error}`, {
+        title: t("Couldn't undo COD reconcile"),
+      });
+    }
   }
 
   /** Clears the Finance gate — the previously-missing write behind the
@@ -2645,14 +2777,53 @@ export function OrderDetail() {
     ]);
     setActiveProof(proofRes.data);
 
+    // Convert this run's Cold-Storage "sending" quantity (order_lines.sent)
+    // into permanently-delivered qty — ported from the prototype's own
+    // confirm-delivery step (Dev-OrderDetail.jsx:910-914). A counted line
+    // with nothing recorded in `sent` (a normal, non-partial run) is treated
+    // as fully delivered (whatever was still owed). Weight-only (kg/gram)
+    // lines are untouched here — they're held back via the `short` flag
+    // instead, never via delivered/sent.
+    const deliveredLineUpdates: { id: string; delivered: number }[] = [];
+    const updatedLines = lines.map((l) => {
+      if (isWeightOnlyUnit(l.unit)) return l;
+      const sentQty = l.sent != null ? Number(l.sent) : lineLeft(l);
+      const nextDelivered = (Number(l.delivered) || 0) + sentQty;
+      if (l.id)
+        deliveredLineUpdates.push({ id: l.id, delivered: nextDelivered });
+      return { ...l, delivered: nextDelivered, sent: null };
+    });
+    const owesItems = updatedLines.some(
+      (l) =>
+        lineLeft(l) > 0 ||
+        (isWeightOnlyUnit(l.unit) && !!l.short && !l.removed),
+    );
+
     // Goods changed hands regardless of cash — the branch below only
     // decides where the order lands and what the record says. A COD
-    // shortfall (partial or none) routes to `outstanding` so Finance
-    // chases the balance, same state `handleHold` already uses.
+    // shortfall (partial or none) and/or an item shortfall (some ordered
+    // qty never left the warehouse this run) both route `stage` to
+    // `outstanding` so Admin/Finance can resolve it — `hold` (a separate
+    // boolean flag, untouched by this write) is never implied by or
+    // coupled to either. `outstanding` is a stage set automatically here;
+    // `hold` is set only by `handleToggleHold`, manually, independently of
+    // stage.
     const codShort = codApplies && codOutcome !== "full";
     let nextStage: string;
     let historyWhat: string;
-    if (handoffMode === "third") {
+    if (owesItems && codShort) {
+      nextStage = "outstanding";
+      const reasonLabel =
+        OUTSTANDING_REASONS.find((r) => r.key === outstandingReason)?.label ??
+        "unspecified";
+      historyWhat = `Delivered part, payment outstanding — collected ${currency.format(cashCollected ?? 0)} of ${currency.format(codAmount)} (${reasonLabel})`;
+    } else if (owesItems) {
+      nextStage = "outstanding";
+      historyWhat =
+        handoffMode === "third"
+          ? `Delivered part via ${parsedThirdPartyService || order.courier_service || "3rd-party"} — rest outstanding`
+          : `Delivered part — ${receiverName.trim()}, rest outstanding`;
+    } else if (handoffMode === "third") {
       nextStage = "delivered";
       const svc =
         parsedThirdPartyService || order.courier_service || "3rd-party";
@@ -2708,6 +2879,14 @@ export function OrderDetail() {
     });
     if (!res.error && res.data) {
       setOrder(res.data);
+      if (deliveredLineUpdates.length > 0) {
+        await Promise.allSettled(
+          deliveredLineUpdates.map((u) =>
+            updateOrderLine(u.id, { delivered: u.delivered, sent: null }),
+          ),
+        );
+        setLines(updatedLines);
+      }
       await appendOrderHistory({
         order_id: id,
         what: historyWhat,
@@ -2921,6 +3100,234 @@ export function OrderDetail() {
         title: t("Couldn't restore order"),
       });
     }
+  }
+
+  /* ────────────── Outstanding (item shortfall) decisions ── */
+
+  /** "Send the rest now" — a second delivery run for what's still owed.
+   *  Ported from the prototype's `sendRest` (`Dev-OrderDetail.jsx:238-244`):
+   *  archives the current (partial) delivery proof, marks each owed
+   *  counted line's `sent` so Cold Storage knows what's left to pick, clears
+   *  `short` on owed weight-only lines so they need re-weighing, and sends
+   *  the order back to Cold Storage. */
+  async function handleSendRest() {
+    if (!id || !order || sendingRest) return;
+    if (
+      !(await confirm(
+        t("Stock is ready — run a second delivery for what is left."),
+        { title: t("Send the rest now") },
+      ))
+    )
+      return;
+    setSendingRest(true);
+    const actionAt = new Date().toISOString();
+    if (activeProof) {
+      await updateDeliveryProof(activeProof.id, { archived: true });
+    }
+    const nextLines = lines.map((l) => {
+      if (isWeightOnlyUnit(l.unit)) return l.short ? { ...l, short: false } : l;
+      const left = lineLeft(l);
+      return left > 0 ? { ...l, sent: left } : l;
+    });
+    const lineWrites = nextLines.flatMap((l, i) =>
+      l === lines[i] || !l.id
+        ? []
+        : [
+            updateOrderLine(
+              l.id,
+              isWeightOnlyUnit(l.unit) ? { short: false } : { sent: l.sent },
+            ),
+          ],
+    );
+    await Promise.allSettled(lineWrites);
+
+    const patch: Record<string, unknown> = {
+      stage: "cold",
+      taken_by: null,
+      pickup: false,
+      ready_for_pickup: false,
+      ready_at: null,
+      third_party: false,
+      courier_service: null,
+      courier_tracking_ref: null,
+    };
+    const res = await updateOrder(id, {
+      ...patch,
+      undo_snapshot: snapshotFor(patch, actionAt),
+    });
+    if (!res.error && res.data) {
+      setOrder(res.data);
+      setLines(nextLines);
+      setActiveProof(null);
+      resetProofState();
+      await appendOrderHistory({
+        order_id: id,
+        what: "Sending the rest — back to Cold Storage",
+        who: userId,
+        stage: "cold",
+        at: actionAt,
+      });
+      const hRes = await readOrderHistory(id);
+      if (!hRes.error) setHistory(hRes.data ?? []);
+    } else {
+      alert(`Failed to send the rest: ${res.error}`, {
+        title: t("Couldn't send the rest"),
+      });
+    }
+    setSendingRest(false);
+  }
+
+  /** "Create backorder" — closes today's delivery short and spins the owed
+   *  remainder off into a brand-new `#{no}-B` order at `awaiting` stage, to
+   *  reappear on the chosen reminder date. Ported from the prototype's
+   *  `closeWithBackorder` (`Dev-OrderDetail.jsx:246-286`); this port's
+   *  relational schema has no nested `lines[]` to deep-copy, so it reuses
+   *  the same Directus create-order/create-lines path as `handleReorder`. */
+  async function handleCreateBackorder() {
+    if (!id || !order || creatingBackorder || backorderOnceRef.current) return;
+    if (!order.customer_id) {
+      alert(
+        t("This order has no customer on file — can't create a backorder."),
+        {
+          title: t("Can't create backorder"),
+        },
+      );
+      return;
+    }
+    backorderOnceRef.current = true;
+    setCreatingBackorder(true);
+    const now = new Date().toISOString();
+    const backorderNo = `${order.no}-B`;
+
+    const orderRes = await createOrder({
+      no: backorderNo,
+      customer_id: order.customer_id,
+      customer_name: order.customer_name ?? null,
+      customer_contact: order.customer_contact ?? null,
+      customer_address: order.customer_address ?? null,
+      customer_legal_name: order.customer_legal_name ?? null,
+      channel: order.channel ?? "horeca",
+      stage: "awaiting",
+      status: "Open",
+      sales: order.sales ?? null,
+      deliver_at: order.deliver_at ?? null,
+      order_date: now.slice(0, 10),
+      backorder_of: order.no ?? null,
+      remind_on: backorderRemindOn || null,
+      payment_method: order.payment_method ?? null,
+      payment_timing: order.payment_timing ?? null,
+      payment_amount:
+        order.payment_amount != null ? Number(order.payment_amount) : null,
+    });
+    if (orderRes.error || !orderRes.data) {
+      alert(`Failed to create backorder: ${orderRes.error}`, {
+        title: t("Couldn't create backorder"),
+      });
+      setCreatingBackorder(false);
+      backorderOnceRef.current = false;
+      return;
+    }
+    const newOrderId = orderRes.data.id;
+
+    const lineInputs: CreateOrderLineInput[] = owedLines.map((l, i) => {
+      // A short-flagged weight-only line carries its FULL qty forward
+      // (nothing was weighed off it yet); a counted line carries only
+      // what's left — ported from the prototype's own qty math
+      // (Dev-OrderDetail.jsx:258).
+      const qty = isWeightOnlyUnit(l.unit) ? Number(l.qty) || 0 : lineLeft(l);
+      return {
+        order_id: newOrderId,
+        product_id: l.product_id ?? null,
+        name: l.name,
+        qty,
+        unit: l.unit ?? "",
+        status: l.product_id ? "recognized" : "manual",
+        sort_order: i,
+      };
+    });
+    const linesRes = await createOrderLines(lineInputs);
+    if (linesRes.error) {
+      alert(
+        `Backorder created but lines failed: ${linesRes.error}. Order id ${newOrderId}.`,
+        { title: t("Backorder partially failed") },
+      );
+    }
+
+    // Close THIS order — the remainder now lives on the backorder instead.
+    // No undo_snapshot: undoing only the parent would leave the new -B
+    // order orphaned (matches the prototype's own `noUndo` on this move).
+    const closeRes = await updateOrder(id, {
+      stage: "delivered",
+      closed_short: true,
+      short_reason: null,
+      undo_snapshot: null,
+    });
+    if (!closeRes.error && closeRes.data) {
+      setOrder(closeRes.data);
+      await appendOrderHistory({
+        order_id: id,
+        what: `Closed short — backorder #${backorderNo} created`,
+        who: userId,
+        stage: "delivered",
+        at: now,
+      });
+      const hRes = await readOrderHistory(id);
+      if (!hRes.error) setHistory(hRes.data ?? []);
+    } else {
+      alert(
+        `Backorder created, but failed to close this order: ${closeRes.error}`,
+        {
+          title: t("Couldn't close order"),
+        },
+      );
+    }
+    await appendOrderHistory({
+      order_id: newOrderId,
+      what: `Backorder of #${order.no}`,
+      who: userId,
+      stage: "awaiting",
+      at: now,
+    });
+
+    setShowBackorderView(false);
+    setBackorderRemindOn("");
+    setCreatingBackorder(false);
+  }
+
+  /** "Finish — don't send the rest" — closes the order as delivered with
+   *  the remainder dropped/written off, no follow-up. Ported from the
+   *  prototype's `closeDrop` (`Dev-OrderDetail.jsx:289-293`). */
+  async function handleCloseShort() {
+    if (!id || !order || closingShort) return;
+    const why = await prompt(t("Why is the rest not going?"), {
+      title: t("Finish — don't send the rest"),
+    });
+    if (why === null) return;
+    setClosingShort(true);
+    const actionAt = new Date().toISOString();
+    const res = await updateOrder(id, {
+      stage: "delivered",
+      closed_short: true,
+      short_reason: why || "dropped",
+      undo_snapshot: null,
+    });
+    if (!res.error && res.data) {
+      setOrder(res.data);
+      await appendOrderHistory({
+        order_id: id,
+        what: `Closed short — remainder dropped${why ? ` (${why})` : ""}`,
+        who: userId,
+        stage: "delivered",
+        at: actionAt,
+      });
+      const hRes = await readOrderHistory(id);
+      if (!hRes.error) setHistory(hRes.data ?? []);
+    } else {
+      alert(`Failed to close the order: ${res.error}`, {
+        title: t("Couldn't close order"),
+      });
+    }
+    setClosingShort(false);
   }
 
   /**
@@ -3897,8 +4304,15 @@ export function OrderDetail() {
               prominent "done" banner instead of a stepper with nothing left
               to step through. */}
           {stage === "delivered" ? (
-            <Card className={styles.successCard}>
-              <div className={styles.headerRow}>
+            <Card
+              className={styles.successCard}
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "var(--space-md)",
+              }}
+            >
+              <div className={styles.headerRow} style={{ paddingBottom: 0 }}>
                 <div
                   className={styles.left}
                   style={{ color: "var(--accent-primary)" }}
@@ -3952,149 +4366,240 @@ export function OrderDetail() {
                   </div>
                 )}
               </div>
-              {/* Pickup stamp — ported from the prototype's own persistent
-                  "Driver location" card (`Dev-OrderDetail.jsx:1517-1524`,
-                  `order.pickupGeo || order.deliverGeo`, no role/stage gate
-                  at all). This port had split the pair apart: `deliver_geo`
-                  already lived here (below), but `pickup_geo` only ever
-                  showed inside the trackCourier-gated live-tracking card,
-                  which disappears entirely once `stage !== "dispatch"` —
-                  so the pickup stamp was permanently invisible post-
-                  delivery, to every role, even though the data was still
-                  on the order. Shown here unconditionally (matches the
-                  prototype: no trackCourier check on this card either),
-                  right above `deliver_geo` — same order the prototype
-                  lists "Picked up" before "Delivered". */}
-              {order.pickup_geo && (
-                <div className={styles.rowStretch}>
-                  <div className={styles.left}>
-                    <Icon name="pickup" size={24} />
-                    <div className={styles.column}>
-                      <span className={styles.secondary}>
-                        {t("Picked up at")} {formatClock(order.pickup_geo.at)}
-                      </span>
-                      <div className={styles.locationText}>
-                        {order.taken_by ? (
+
+              {/* Left = "picked up" event, right = "delivery" event —
+                  own-courier is the only mode with both (warehouse pickup
+                  stamp + drop-off), so it's the only one that shows the
+                  separator between two real columns; 3rd-party has no
+                  pickup leg captured at all (goes on the right, as "the
+                  delivery"), customer-pickup has no separate delivery leg
+                  (goes on the left, as "the pickup") — both empty-wrapper
+                  siblings still render on the *other* side so `.rowStretch`
+                  (`justify-content: space-between`) reliably pins the one
+                  real side to its edge instead of collapsing to flex-start
+                  regardless of which side it conceptually belongs on.
+                  Raw `taken_by`/`third_party`/`pickup` fields throughout,
+                  not `handoffMode` (always `null` on a delivered order).
+                  Reported directly ("missing some parts... third party and
+                  the customer itself") — previously the whole right/second
+                  side was nested inside the left side's own `pickup_geo`
+                  check, so it silently never rendered for either mode.
+                  Ported from the prototype's persistent "Driver location"
+                  card (`Dev-OrderDetail.jsx:1517-1524`), no role/stage
+                  gate. */}
+
+              {/* Card's children each get a hairline divider above them
+                  (see `docs_returned`'s own `.rowStretch` below) — this
+                  wrapper must not render at all when neither slot below
+                  has anything to show, or it leaves a second, empty
+                  divider floating above `docs_returned`'s real one with
+                  nothing between them. Reported directly with a
+                  screenshot ("two lines... because there are two
+                  rowStretch div rendered"). Mirrors the exact conditions
+                  each slot's own branches check below. */}
+              {(order.pickup_geo ||
+                (order.third_party && order.delivered_at) ||
+                (order.pickup && order.delivered_at) ||
+                (order.taken_by && order.deliver_geo)) &&
+                (() => {
+                  // Own-courier's delivered info is only ever the RIGHT
+                  // slot when it's paired with a real `pickup_geo` on the
+                  // left — GPS pickup capture is best-effort, so an
+                  // own-courier order can be delivered with no pickup
+                  // stamp at all. Without this, that case rendered the
+                  // delivered block alone on the right (via the empty
+                  // left/right space-between fallback), floating with
+                  // dead space before it instead of starting flush left
+                  // like every other mode's single-event case already
+                  // does. Reported directly with a screenshot. Hoisted so
+                  // the same JSX can appear in either slot without
+                  // duplicating it.
+                  const deliveredBlock = order.taken_by &&
+                    order.deliver_geo && (
+                      <div className={styles.row}>
+                        <Icon name="delivered" size={24} />
+                        <div className={styles.column}>
                           <span className={styles.secondary}>
-                            {t("by")} {displayName(order.taken_by)}
+                            {dropDistanceM !== null
+                              ? `${t("Dropped at delivery address")} · ~${dropDistanceM}m`
+                              : t("Delivery location captured")}{" "}
+                            at {formatClock(order.deliver_geo.at)}
                           </span>
-                        ) : (
-                          order.third_party && (
-                            <span className={styles.secondary}>
-                              {t("by")}{" "}
-                              {parsedThirdPartyService ||
-                                order.courier_service ||
-                                t("Online courier")}
-                            </span>
-                          )
-                        )}
-                        <Button
-                          type="button"
-                          variant="tertiary"
-                          className={styles.inlineButton}
-                          onClick={() =>
-                            window.open(
-                              `https://www.google.com/maps/search/?api=1&query=${order.pickup_geo!.lat},${order.pickup_geo!.lng}`,
-                              "_blank",
-                              "noopener",
-                            )
-                          }
-                        >
-                          {t("Map")}
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                  {order.deliver_geo ? (
-                    <div className={styles.dropLocationRow}>
-                      <span className={styles.dropLocationText}>
-                        {dropDistanceM !== null
-                          ? `${t("Dropped at delivery address")} · ~${dropDistanceM}m`
-                          : t("Delivery location captured")}{" "}
-                        · {formatClock(order.deliver_geo.at)}
-                      </span>
-                      <Button
-                        type="button"
-                        variant="tertiary"
-                        icon="location"
-                        className={styles.inlineButton}
-                        onClick={() =>
-                          window.open(
-                            `https://www.google.com/maps/search/?api=1&query=${order.deliver_geo!.lat},${order.deliver_geo!.lng}`,
-                            "_blank",
-                            "noopener",
-                          )
-                        }
-                      >
-                        {t("Map")}
-                      </Button>
-                    </div>
-                  ) : (
-                    // Third-party has no GPS drop location (the service — not
-                    // this app — drives the last leg) — shows when it was
-                    // handed over plus the same tracking element (Paxel deep
-                    // link, or a copyable ref) the hand-off/proof cards use,
-                    // in place of the Map button there's no GPS to back.
-                    order.third_party &&
-                    order.delivered_at && (
-                      <div className={styles.dropLocationRow}>
-                        <span className={styles.locationText}>
-                          {t("Handed at")} {formatClock(order.delivered_at)}
-                        </span>
-                        {parsedThirdPartyRef &&
-                          (parsedThirdPartyService.toLowerCase() === "paxel" ? (
+                          <div className={styles.byRow}>
+                            {activeProof?.name && (
+                              <span>
+                                {t("Received by")}{" "}
+                                <strong>{activeProof.name}</strong>
+                              </span>
+                            )}
                             <Button
                               type="button"
                               variant="tertiary"
                               className={styles.inlineButton}
                               onClick={() =>
                                 window.open(
-                                  `https://paxel.co.id/tracking/${encodeURIComponent(parsedThirdPartyRef)}`,
+                                  `https://www.google.com/maps/search/?api=1&query=${order.deliver_geo!.lat},${order.deliver_geo!.lng}`,
                                   "_blank",
                                   "noopener",
                                 )
                               }
                             >
-                              {t("Track")}
+                              {t("Map")}
                             </Button>
-                          ) : (
-                            <Button
-                              type="button"
-                              variant="tertiary"
-                              icon={copiedTrackingRef ? "check" : "copy"}
-                              className={styles.inlineButton}
-                              onClick={handleCopyTrackingRef}
-                            >
-                              {copiedTrackingRef
-                                ? t("Copied")
-                                : `${t("Ref:")} ${parsedThirdPartyRef}`}
-                            </Button>
-                          ))}
+                          </div>
+                        </div>
                       </div>
-                    )
-                  )}
-                </div>
-              )}
+                    );
 
-              <div className={styles.rowStretch}>
-                {activeProof?.name && (
-                  <div className={styles.receivedByRow}>
-                    {order.third_party ? t("Driver's name") : t("Received by")}{" "}
-                    <strong>{activeProof.name}</strong>
-                  </div>
-                )}
-                {order.docs_returned && (
-                  <div className={styles.row}>
-                    <Icon name="tick" />
-                    <div
-                      className={styles.fieldLabel}
-                      style={{ color: "var(--accent-primary)" }}
-                    >
-                      {t("Signed DO & SI returned")}
+                  return (
+                    <div className={styles.rowStretch}>
+                      <div>
+                        {order.pickup_geo ? (
+                          <div className={styles.row}>
+                            <Icon name="pickup" size={24} />
+                            <div className={styles.column}>
+                              <span className={styles.secondary}>
+                                {t("Picked up at")}{" "}
+                                {formatClock(order.pickup_geo.at)}
+                              </span>
+                              <div className={styles.byRow}>
+                                {order.taken_by && (
+                                  <span>
+                                    {t("by")}{" "}
+                                    <strong>
+                                      {displayName(order.taken_by)}
+                                    </strong>
+                                  </span>
+                                )}
+                                <Button
+                                  type="button"
+                                  variant="tertiary"
+                                  className={styles.inlineButton}
+                                  onClick={() =>
+                                    window.open(
+                                      `https://www.google.com/maps/search/?api=1&query=${order.pickup_geo!.lat},${order.pickup_geo!.lng}`,
+                                      "_blank",
+                                      "noopener",
+                                    )
+                                  }
+                                >
+                                  {t("Map")}
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        ) : order.third_party ? (
+                          // 3rd-party has no GPS at all (the service — not
+                          // this app — drives the last leg), and no
+                          // separate pickup leg to pair it with on the
+                          // right — this is the order's only event, so it
+                          // sits on the left like the other two modes'
+                          // single events do. Service name + handed-at
+                          // time, plus the same tracking element (Paxel
+                          // deep link, or a copyable ref) the hand-off/
+                          // proof cards use, in place of a Map button
+                          // there's no GPS to back.
+                          order.delivered_at && (
+                            <div className={styles.row}>
+                              <Icon name="scooter" size={24} />
+                              <div className={styles.column}>
+                                <span className={styles.secondary}>
+                                  {t("Handed to")}{" "}
+                                  <strong>
+                                    {parsedThirdPartyService ||
+                                      order.courier_service ||
+                                      t("Online courier")}
+                                  </strong>{" "}
+                                  at {formatClock(order.delivered_at)}
+                                </span>
+                                <div className={styles.byRow}>
+                                  {activeProof?.name && (
+                                    <span>
+                                      {t("Driver's name")}{" "}
+                                      <strong>{activeProof.name}</strong>
+                                    </span>
+                                  )}
+                                  {parsedThirdPartyRef &&
+                                    (parsedThirdPartyService.toLowerCase() ===
+                                    "paxel" ? (
+                                      <Button
+                                        type="button"
+                                        variant="tertiary"
+                                        className={styles.inlineButton}
+                                        onClick={() =>
+                                          window.open(
+                                            `https://paxel.co.id/tracking/${encodeURIComponent(parsedThirdPartyRef)}`,
+                                            "_blank",
+                                            "noopener",
+                                          )
+                                        }
+                                      >
+                                        {t("Track")}
+                                      </Button>
+                                    ) : (
+                                      <Button
+                                        type="button"
+                                        variant="tertiary"
+                                        icon={
+                                          copiedTrackingRef ? "check" : "copy"
+                                        }
+                                        className={styles.inlineButton}
+                                        onClick={handleCopyTrackingRef}
+                                      >
+                                        {copiedTrackingRef
+                                          ? t("Copied")
+                                          : `${t("Ref:")} ${parsedThirdPartyRef}`}
+                                      </Button>
+                                    ))}
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        ) : order.pickup && order.delivered_at ? (
+                          // Customer pickup — collected in person at the
+                          // warehouse, no GPS either (nothing to drive
+                          // to/from). `delivered_at` doubles as the
+                          // "picked up at" moment; `activeProof.name` is
+                          // the "Photo of who collected" name captured at
+                          // proof.
+                          <div className={styles.row}>
+                            <Icon name="pickup" size={24} />
+                            <div className={styles.column}>
+                              <span className={styles.secondary}>
+                                {t("Picked up at")}{" "}
+                                {formatClock(order.delivered_at)}
+                              </span>
+                              {activeProof?.name && (
+                                <div className={styles.byRow}>
+                                  <span>
+                                    {t("Collected by")}{" "}
+                                    <strong>{activeProof.name}</strong>
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          // Own-courier with no captured pickup stamp
+                          // (best-effort GPS capture can simply fail) —
+                          // falls back to showing its delivered info here
+                          // on the left, same as the other single-event
+                          // modes above, instead of floating alone on the
+                          // right. Reported directly with a screenshot.
+                          deliveredBlock
+                        )}
+                      </div>
+
+                      <div>
+                        {/* Only rendered here when there's a real
+                            `pickup_geo` on the left to pair it with —
+                            otherwise `deliveredBlock` already rendered in
+                            the left slot's own fallback branch above. */}
+                        {order.pickup_geo && deliveredBlock}
+                      </div>
                     </div>
-                  </div>
-                )}
-              </div>
+                  );
+                })()}
             </Card>
           ) : isHold ? (
             <Card className={styles.warningCard}>
@@ -4129,6 +4634,22 @@ export function OrderDetail() {
                     <strong>Admin</strong> or <strong>Owner</strong> resumes it.
                   </p>
                 )}
+              </div>
+            </Card>
+          ) : isOutstanding ? (
+            <Card className={styles.warningCard}>
+              <div className={styles.cardContent}>
+                <div className={styles.warningHeader}>
+                  <Icon name="packageProcess" size={20} />
+                  <span className={styles.warningTitle}>
+                    {t("Outstanding")}
+                  </span>
+                </div>
+                <p>
+                  {t(
+                    "This order is partially fulfilled — a portion of the items has not yet been delivered to the customer.",
+                  )}
+                </p>
               </div>
             </Card>
           ) : isReturned && !isCancelled ? (
@@ -4652,6 +5173,12 @@ export function OrderDetail() {
                   showsWeightTotal ||
                   (isWeightOnlyUnit(line.unit) && !!line.short) ||
                   (canSeePrices && hasPrice);
+                // "N of M delivered · X left" / "N/M delivered" pill — ported
+                // from the prototype's item-list chip (delivered > 0 is the
+                // only gate; shown at any stage, not just once outstanding).
+                const deliveredNum = Number(line.delivered) || 0;
+                const left = lineLeft(line);
+                const showDeliveredPill = deliveredNum > 0;
 
                 return (
                   <div key={line.id} className={styles.itemRow}>
@@ -4661,6 +5188,15 @@ export function OrderDetail() {
                         <span className={styles.unitTag}>{line.unit}</span>
                         <span className={styles.itemName}>{line.name}</span>
                       </div>
+                      {showDeliveredPill && (
+                        <span
+                          className={`${styles.pill} ${left > 0 ? styles.pillWarning : styles.pillSuccess}`}
+                        >
+                          {left > 0
+                            ? `${deliveredNum} ${t("of")} ${qty} ${t("delivered")} · ${left} ${t("left")}`
+                            : `${deliveredNum}/${qty} ${t("delivered")}`}
+                        </span>
+                      )}
                       {/* Cold Storage only, and never on kg/gram — matches
                           the prototype's exact gate (`Dev-OrderDetail.jsx
                           :1364`: `weighing && counted && remaining(l) >= 1`,
@@ -5036,6 +5572,7 @@ export function OrderDetail() {
                           >
                             {t("Total:")}
                             {stage !== "intake" &&
+                              totalMeasuredWeight > 0 &&
                               ` ${totalMeasuredWeight.toFixed(2)} kg`}
                             {stage !== "intake" && belowWeighHint && (
                               <span className={styles.weighHint}>
@@ -5107,6 +5644,187 @@ export function OrderDetail() {
                 </div>
               ))}
           </Card>
+
+          {/* Part-delivered decision card — separate from the "Outstanding"
+              status card up in the stepper section (which stays a plain
+              status banner for every outstanding order); this one renders
+              only once there are real owed items, right below the items
+              list so the owed-lines box sits next to what it's describing. */}
+          {isOutstanding && owedLines.length > 0 && (
+            <Card className={styles.warningCard}>
+              <div className={styles.headerRow}>
+                <h3 className={styles.sectionTitle}>
+                  {t("Part delivered — the rest is still owed")}
+                </h3>
+              </div>
+              <div className={styles.cardContent}>
+                {canDecideOutstanding ? (
+                  showBackorderView ? (
+                    <div className={styles.cardListColumn}>
+                      <Button
+                        type="button"
+                        variant="tertiary"
+                        className={styles.inlineButton}
+                        icon="chevronLeft"
+                        onClick={() => setShowBackorderView(false)}
+                      >
+                        {t("Back")}
+                      </Button>
+                      <div className={styles.warningHeader}>
+                        <Icon name="bell" size={18} />
+                        <span className={styles.warningTitle}>
+                          {t("Send later — remind me")}
+                        </span>
+                      </div>
+                      <p className={styles.secondary}>
+                        {t(
+                          "Close today's delivery; keep the rest as a backorder that reappears on a date.",
+                        )}
+                      </p>
+                      <span className={styles.row}>
+                        <p className={styles.fieldLabel}>
+                          {t("Reminder date")}
+                        </p>
+                        <input
+                          type="date"
+                          className={styles.editInput}
+                          style={{ width: "auto", maxWidth: 168 }}
+                          value={backorderRemindOn}
+                          onChange={(e) => setBackorderRemindOn(e.target.value)}
+                        />
+                      </span>
+                      <Button
+                        type="button"
+                        variant="primary"
+                        buttonStyle="fullWidth"
+                        size="lg"
+                        icon="packageAdd"
+                        tone="warning"
+                        disabled={creatingBackorder}
+                        onClick={handleCreateBackorder}
+                      >
+                        {creatingBackorder
+                          ? t("Saving…")
+                          : `${t("Create backorder")} #${order.no}-B →`}
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className={styles.cardListColumn}>
+                      <p className={styles.secondary}>
+                        {partDeliveredSubtitle}
+                      </p>
+                      <div className={styles.owedLinesBox}>
+                        {owedLines.map((l) => (
+                          <div key={l.id} className={styles.owedLineItem}>
+                            <p className={styles.fieldLabel}>{l.name}</p>
+                            <span className={styles.owedPill}>
+                              <Icon name="packageProcess" size={20} />
+                              {isWeightOnlyUnit(l.unit) ? (
+                                <span>{t("Short — ran out of stock")}</span>
+                              ) : (
+                                <>
+                                  <span className={styles.detailValue}>
+                                    {lineLeft(l)} {l.unit}
+                                  </span>
+                                  <span className={styles.owedPillLabel}>
+                                    {t("still owed")}
+                                  </span>
+                                </>
+                              )}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                      <div className={styles.cardActions}>
+                        <div className={styles.column}>
+                          <Button
+                            type="button"
+                            variant="primary"
+                            buttonStyle="fullWidth"
+                            icon="packageMoving"
+                            tone="warning"
+                            disabled={sendingRest}
+                            onClick={handleSendRest}
+                          >
+                            {sendingRest
+                              ? t("Saving…")
+                              : t("Send the rest now")}
+                          </Button>
+                          <p
+                            className={styles.infoHint}
+                            style={{ color: "var(--text-muted)" }}
+                          >
+                            {t(
+                              "Stock is ready — run a second delivery for what is left.",
+                            )}
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          buttonStyle="fullWidth"
+                          icon="bell"
+                          tone="warning"
+                          onClick={() => setShowBackorderView(true)}
+                        >
+                          {t("Send later — remind me")}
+                        </Button>
+                        <div className={styles.column}>
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            buttonStyle="fullWidth"
+                            icon="packageDelivered"
+                            tone="error"
+                            disabled={closingShort}
+                            onClick={handleCloseShort}
+                          >
+                            {closingShort
+                              ? t("Saving…")
+                              : t("Finish — don't send the rest")}
+                          </Button>
+                          <p
+                            className={styles.infoHint}
+                            style={{ color: "var(--text-muted)" }}
+                          >
+                            {t(
+                              "Mark the order done as delivered. The remainder is dropped (no longer needed / written off) — nothing follows later.",
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                ) : (
+                  <div className={styles.cardListColumn}>
+                    <p className={styles.secondary}>{partDeliveredSubtitle}</p>
+                    <div className={styles.owedLinesBox}>
+                      {owedLines.map((l) => (
+                        <div key={l.id} className={styles.owedLineItem}>
+                          <p className={styles.fieldLabel}>{l.name}</p>
+                          <span className={styles.owedPill}>
+                            <Icon name="box" size={16} />
+                            {isWeightOnlyUnit(l.unit) ? (
+                              <span>{t("Short — ran out of stock")}</span>
+                            ) : (
+                              <>
+                                <strong>
+                                  {lineLeft(l)} {l.unit}
+                                </strong>
+                                <span className={styles.muted}>
+                                  {t("still owed")}
+                                </span>
+                              </>
+                            )}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </Card>
+          )}
 
           {/* "Isn't weighed yet" safety net — a kg/gram/loaf line added (or
               unit-changed) after Cold Storage, still in the warehouse.
@@ -5356,10 +6074,11 @@ export function OrderDetail() {
               (stage === "finalise" && canAdvance) ||
               (stage === "dispatch" && canAdvance) ||
               showCodRow ||
+              showCodDone ||
               showDocsRow ||
+              showDocsDone ||
               showTermsRow ||
-              (isDelivered && !!order.docs_returned) ||
-              showTermsPaidNotice ||
+              showTermsDone ||
               showFinanceGateForm ||
               (canUndo && !!order.undo_snapshot) ||
               (canTrackCourier &&
@@ -6428,11 +7147,37 @@ export function OrderDetail() {
                 </Card>
               )}
 
-              {(showCodRow || showDocsRow || showTermsRow) && (
-                <Card className={styles.warningCard}>
+              {/* Confirming a row keeps it in this same card as a
+                  done+Undo row instead of removing it — matches the
+                  prototype's own in-place pending→done pattern
+                  (`Dev-OrderDetail.jsx:1591-1610`, `1584-1589`) rather than
+                  the row (or the whole card) disappearing and its done
+                  state showing up in a separate card elsewhere. Reported
+                  directly. Header stays "Follow-ups pending" while
+                  anything's still pending; once every visible row is
+                  resolved, it reads "Follow-ups" instead — same card,
+                  never vanishes while there's an Undo worth keeping
+                  available. */}
+              {(showCodRow ||
+                showCodDone ||
+                showDocsRow ||
+                showDocsDone ||
+                showTermsRow ||
+                showTermsDone) && (
+                <Card
+                  className={styles.warningCard}
+                  style={{
+                    borderColor:
+                      showCodRow || showDocsRow || showTermsRow
+                        ? undefined
+                        : "var(--border-default)",
+                  }}
+                >
                   <div className={styles.headerRowLeft}>
                     <h3 className={styles.sectionTitle}>
-                      {t("Follow-ups pending")}
+                      {showCodRow || showDocsRow || showTermsRow
+                        ? t("Follow-ups pending")
+                        : t("Follow-ups")}
                     </h3>
                   </div>
                   <div className={styles.cardListColumn}></div>
@@ -6448,7 +7193,7 @@ export function OrderDetail() {
                           {t("COD cash awaiting office reconcile")}
                         </span>
                         <span className={styles.secondary}>
-                          {currency.format(codReconcileAmount)} ·{" "}
+                          {currency.format(codReconcileAmount)}{" "}
                           {t("collected by courier")}
                         </span>
                       </div>
@@ -6462,6 +7207,36 @@ export function OrderDetail() {
                       >
                         {reconcilingCod ? t("Saving…") : t("Confirm received")}
                       </Button>
+                    </div>
+                  )}
+                  {showCodDone && (
+                    <div className={styles.followUpRow}>
+                      <Icon
+                        name="check"
+                        size={24}
+                        className={styles.followUpIcon}
+                        style={{ color: "var(--accent-primary)" }}
+                      />
+                      <div className={styles.followUpMain}>
+                        <span className={styles.fieldLabel}>
+                          {t("Cash reconciled")}
+                        </span>
+                        <span className={styles.secondary}>
+                          {order.cod_received_at
+                            ? `${formatDate(order.cod_received_at)}`
+                            : ""}
+                        </span>
+                      </div>
+                      {auth.can("reconcileCOD") && (
+                        <Button
+                          type="button"
+                          variant="tertiary"
+                          icon="undo"
+                          onClick={handleUndoCOD}
+                        >
+                          {t("Undo")}
+                        </Button>
+                      )}
                     </div>
                   )}
                   {showDocsRow && (
@@ -6490,10 +7265,50 @@ export function OrderDetail() {
                       </Button>
                     </div>
                   )}
+                  {showDocsDone && (
+                    <div className={styles.followUpRow}>
+                      <Icon
+                        name="check"
+                        size={24}
+                        className={styles.followUpIcon}
+                        style={{ color: "var(--accent-primary)" }}
+                      />
+                      <div className={styles.followUpMain}>
+                        <span className={styles.fieldLabel}>
+                          {t("Signed DO & SI returned")}
+                        </span>
+                        <span className={styles.secondary}>
+                          {/* No `docs_returned_at` timestamp field exists —
+                              derived from the matching history entry
+                              instead of adding one, same trick used
+                              earlier today for the failed-attempt
+                              banner's reason/timestamp. */}
+                          {(() => {
+                            const at = [...history]
+                              .reverse()
+                              .find(
+                                (h) => h.what === "DO/SI returned & filed",
+                              )?.at;
+                            return at ? `${formatDate(at)}` : "";
+                          })()}
+                        </span>
+                      </div>
+                      {canConfirmDocsReturned && (
+                        <Button
+                          type="button"
+                          variant="tertiary"
+                          icon="undo"
+                          onClick={handleUndoDocsReturned}
+                        >
+                          {t("Undo")}
+                        </Button>
+                      )}
+                    </div>
+                  )}
                   {showTermsRow && (
                     <div className={styles.followUpRow}>
                       <Icon
-                        name="cash"
+                        name="wallet"
                         size={24}
                         className={styles.followUpIcon}
                       />
@@ -6518,40 +7333,36 @@ export function OrderDetail() {
                       </Button>
                     </div>
                   )}
-                </Card>
-              )}
-              {showTermsPaidNotice && (
-                <Card
-                  style={{
-                    borderColor: "var(--accent-primary)",
-                    backgroundColor: "var(--bg-surface-hover-dark)",
-                  }}
-                >
-                  <div className={styles.headerRow}>
-                    <div
-                      className={styles.left}
-                      style={{ color: "var(--accent-primary)" }}
-                    >
-                      <Icon name="check" />
-                      <div className={styles.fieldLabel}>
-                        {t("Terms payment received")}
-                        {order.payment_paid_at
-                          ? ` · ${formatDate(order.payment_paid_at)}`
-                          : ""}
+                  {showTermsDone && (
+                    <div className={styles.followUpRow}>
+                      <Icon
+                        name="check"
+                        size={24}
+                        className={styles.followUpIcon}
+                        style={{ color: "var(--accent-primary)" }}
+                      />
+                      <div className={styles.followUpMain}>
+                        <span className={styles.fieldLabel}>
+                          {t("Terms payment received")}
+                        </span>
+                        <span className={styles.secondary}>
+                          {order.payment_paid_at
+                            ? `${formatDate(order.payment_paid_at)}`
+                            : ""}
+                        </span>
                       </div>
+                      {canApproveFinance && (
+                        <Button
+                          type="button"
+                          variant="tertiary"
+                          icon="undo"
+                          onClick={handleUndoTermsPayment}
+                        >
+                          {t("Undo")}
+                        </Button>
+                      )}
                     </div>
-                    {canApproveFinance && (
-                      <Button
-                        type="button"
-                        variant="tertiary"
-                        size="sm"
-                        onClick={handleUndoTermsPayment}
-                      >
-                        <Icon name="undo" size={16} />
-                        {t("Undo")}
-                      </Button>
-                    )}
-                  </div>
+                  )}
                 </Card>
               )}
 

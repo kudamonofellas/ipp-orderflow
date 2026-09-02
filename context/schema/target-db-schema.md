@@ -112,6 +112,10 @@ The core pipeline record. Replaces the order objects in `store.jsx` → `seed()`
 | `pickup_geo`        | JSON, nullable                 | **added 2026-08-13** — `{lat, lng, at}`, captured at condition-photo upload (delivery mode only), best-effort |
 | `deliver_geo`       | JSON, nullable                 | **added 2026-08-13** — `{lat, lng, at}`, captured at delivery confirm, best-effort; drives the "Delivered & Closed" banner's drop-location row |
 | `undo_snapshot`     | JSON, nullable                 | **added 2026-08-13** — `{prevStage, changedFields, proofId, who, at}` written when a delivery is confirmed, cleared by every subsequent order-mutating action; backs the quiet "Undo — back to dispatch" link (distinct from "Re-open to Dispatch") |
+| `backorder_of`      | TEXT, nullable                 | **added 2026-09-02** — parent order's `no` (not an FK id), set on a backorder (`#{no}-B`) created from the "Part delivered" card's "Create backorder" action |
+| `remind_on`         | DATE, nullable                 | **added 2026-09-02** — reminder date for a backorder (`awaiting`-stage order) to reappear |
+| `closed_short`      | BOOLEAN DEFAULT FALSE          | **added 2026-09-02** — order was closed while items were still owed (either backordered or dropped) |
+| `short_reason`      | TEXT, nullable                 | **added 2026-09-02** — free-text reason when the remainder was dropped via "Finish — don't send the rest"; null when the remainder was backordered instead |
 
 > Note: this table has drifted from the live schema in a few other spots too (e.g. `delivery_proofs.cash_collected`, `attachments.proof_id`, added earlier in the 2026-08-13 session) — `context/schema/snapshot.json` is the authoritative live export; treat gaps here as documentation debt, not evidence a column doesn't exist.
 
@@ -130,8 +134,9 @@ The items on an order. Replaces `order.lines[]`.
 | `weight`               | NUMERIC(10,3)            | actual weighed kg (catch-weight)                         |
 | `price`                | NUMERIC(15,2)            | only if the PO stated one; NULL = priced in Accurate     |
 | `status`               | TEXT                     | enum: `recognized`, `manual`, `unmatched`                |
-| `delivered`            | INTEGER DEFAULT 0        | counted units delivered (for partial / nyusul)           |
+| `delivered`            | INTEGER DEFAULT 0        | counted units delivered (for partial / nyusul) — **written for the first time 2026-09-02**: previously only ever set via manual/seed data, now converted from `sent` by `handleConfirmDelivery` on delivery confirm |
 | `returned`             | INTEGER DEFAULT 0        | counted units refused                                    |
+| `sent`                 | NUMERIC(12,3)            | **live but missing from this table until 2026-09-02** — added 2026-08-18, per `roles-and-permissions`; qty being sent in the current run (Cold Storage's "sending" input), consumed and cleared into `delivered` at delivery confirm |
 | `short`                | BOOLEAN DEFAULT FALSE    | flagged short at weigh                                   |
 | `removed`              | BOOLEAN DEFAULT FALSE    | line removed from the order (soft)                       |
 | `weigh_photo`          | UUID → `photos`          | scale-reading photo                                      |

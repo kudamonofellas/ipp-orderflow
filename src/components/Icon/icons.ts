@@ -16,12 +16,13 @@ export const ICONS = {
   products: "hugeicons:package",
   reports: "hugeicons:analytics-01",
   search: "hugeicons:search-01",
-  notification: "hugeicons:notification-01",
+  bell: "hugeicons:notification-01",
   settings: "hugeicons:settings-01",
   add: "hugeicons:add-01",
   total: "hugeicons:package",
   delivered: "hugeicons:delivery-truck-01",
   deliveryDelay: "hugeicons:delivery-delay-01",
+  deliveryProcess: "hugeicons:delivery-tracking-01",
   pickup: "hugeicons:safe-delivery-01",
   scooter: "hugeicons:scooter-02",
   returned: "hugeicons:delivery-return-01",
@@ -68,6 +69,9 @@ export const ICONS = {
   loaf: "hugeicons:steak",
   box: "hugeicons:package",
   packageDelivered: "hugeicons:package-delivered",
+  packageProcess: "hugeicons:package-process",
+  packageMoving: "hugeicons:package-moving",
+  packageAdd: "hugeicons:package-add",
   pack: "hugeicons:packaging",
   language: "hugeicons:language-square",
   download: "hugeicons:download-01",
@@ -85,6 +89,7 @@ export const ICONS = {
   hourglass: "hugeicons:hourglass",
   copy: "hugeicons:copy-01",
   share: "hugeicons:share-01",
+  wallet: "hugeicons:wallet-01",
 } as const;
 
 export type IconName = keyof typeof ICONS;

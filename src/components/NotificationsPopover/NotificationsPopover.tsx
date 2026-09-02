@@ -88,7 +88,7 @@ export function NotificationsPopover() {
       <Button
         type="button"
         variant="secondary"
-        icon="notification"
+        icon="bell"
         size="md"
         aria-label="Notifications"
         aria-haspopup="dialog"

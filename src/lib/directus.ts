@@ -566,6 +566,13 @@ export interface CreateOrderInput {
   deliver_at: string | null;
   order_date: string;
   notes?: string | null;
+  /** Backorder creation (Part-delivered card's "Create backorder") — mirrors
+   *  the prototype's `backorderOf`/`remindOn`. */
+  backorder_of?: string | null;
+  remind_on?: string | null;
+  payment_method?: string | null;
+  payment_timing?: string | null;
+  payment_amount?: number | null;
 }
 
 export async function createOrder(

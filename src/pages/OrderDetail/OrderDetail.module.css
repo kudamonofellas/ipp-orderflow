@@ -117,7 +117,9 @@
   flex-direction: row;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-sm);
+  padding-top: var(--space-sm);
+  border-top: 1px solid var(--border-default);
+  gap: var(--space-lg);
 }
 
 .fieldLabel {
@@ -217,6 +219,12 @@
   color: var(--state-error);
   background: color-mix(in srgb, var(--state-error), transparent 90%);
   border: 1px solid color-mix(in srgb, var(--state-error) 33%, transparent);
+}
+
+.pillSuccess {
+  color: var(--state-success);
+  background: color-mix(in srgb, var(--state-success), transparent 90%);
+  border: 1px solid color-mix(in srgb, var(--state-success) 33%, transparent);
 }
 
 .title {
@@ -498,14 +506,6 @@
   color: var(--text-secondary);
 }
 
-.locationText {
-  font: var(--text-body);
-  color: var(--text-secondary);
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-xs);
-}
-
 .inlineButton {
   padding: 0 !important;
   background: none !important;
@@ -514,7 +514,11 @@
   line-height: 1 !important;
 }
 
-.receivedByRow {
+.byRow {
+  display: flex;
+  flex-direction: row;
+  gap: var(--space-sm);
+  align-items: center;
   font: var(--text-body);
   color: var(--text-primary);
 }
@@ -969,6 +973,37 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);
+}
+
+.owedLinesBox {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+}
+
+.owedLineItem {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.owedPill {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-sm) var(--space-md);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.owedPillLabel {
+  color: var(--text-muted);
+  font-weight: 400;
 }
 
 .cardActions {
