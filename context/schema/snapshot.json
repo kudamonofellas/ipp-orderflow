@@ -8677,48 +8677,6 @@
     },
     {
       "collection": "orders",
-      "field": "backorder_of",
-      "type": "string",
-      "meta": {
-        "collection": "orders",
-        "conditions": null,
-        "display": null,
-        "display_options": null,
-        "field": "backorder_of",
-        "group": null,
-        "hidden": false,
-        "interface": "input",
-        "note": "Parent order no this backorder was split from",
-        "options": null,
-        "readonly": false,
-        "required": false,
-        "sort": 62,
-        "special": null,
-        "translations": null,
-        "validation": null,
-        "validation_message": null,
-        "width": "full"
-      },
-      "schema": {
-        "name": "backorder_of",
-        "table": "orders",
-        "data_type": "character varying",
-        "default_value": null,
-        "max_length": 255,
-        "numeric_precision": null,
-        "numeric_scale": null,
-        "is_nullable": true,
-        "is_unique": false,
-        "is_primary_key": false,
-        "is_generated": false,
-        "generation_expression": null,
-        "has_auto_increment": false,
-        "foreign_key_table": null,
-        "foreign_key_column": null
-      }
-    },
-    {
-      "collection": "orders",
       "field": "remind_on",
       "type": "date",
       "meta": {
@@ -8841,6 +8799,50 @@
         "has_auto_increment": false,
         "foreign_key_table": null,
         "foreign_key_column": null
+      }
+    },
+    {
+      "collection": "orders",
+      "field": "backorder_of",
+      "type": "uuid",
+      "meta": {
+        "collection": "orders",
+        "conditions": null,
+        "display": null,
+        "display_options": null,
+        "field": "backorder_of",
+        "group": null,
+        "hidden": false,
+        "interface": "select-dropdown-m2o",
+        "note": "Parent order this backorder was split from (self-FK to orders.id)",
+        "options": null,
+        "readonly": false,
+        "required": false,
+        "sort": 66,
+        "special": [
+          "m2o"
+        ],
+        "translations": null,
+        "validation": null,
+        "validation_message": null,
+        "width": "full"
+      },
+      "schema": {
+        "name": "backorder_of",
+        "table": "orders",
+        "data_type": "uuid",
+        "default_value": null,
+        "max_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null,
+        "is_nullable": true,
+        "is_unique": false,
+        "is_primary_key": false,
+        "is_generated": false,
+        "generation_expression": null,
+        "has_auto_increment": false,
+        "foreign_key_table": "orders",
+        "foreign_key_column": "id"
       }
     },
     {
@@ -10428,30 +10430,15 @@
     },
     {
       "collection": "attachments",
-      "field": "created_by",
-      "related_collection": "directus_users",
+      "field": "message_id",
+      "related_collection": "messages",
       "meta": null,
       "schema": {
         "table": "attachments",
-        "column": "created_by",
-        "foreign_key_table": "directus_users",
-        "foreign_key_column": "id",
-        "constraint_name": "attachments_created_by_fkey",
-        "on_update": "NO ACTION",
-        "on_delete": "SET NULL"
-      }
-    },
-    {
-      "collection": "attachments",
-      "field": "document_file",
-      "related_collection": "directus_files",
-      "meta": null,
-      "schema": {
-        "table": "attachments",
-        "column": "document_file",
-        "foreign_key_table": "directus_files",
-        "foreign_key_column": "id",
-        "constraint_name": "attachments_document_file_foreign",
+        "column": "message_id",
+        "foreign_key_table": "messages",
+        "foreign_key_column": "message_id",
+        "constraint_name": "attachments_message_id_foreign",
         "on_update": "NO ACTION",
         "on_delete": "SET NULL"
       }
@@ -10473,15 +10460,30 @@
     },
     {
       "collection": "attachments",
-      "field": "message_id",
-      "related_collection": "messages",
+      "field": "document_file",
+      "related_collection": "directus_files",
       "meta": null,
       "schema": {
         "table": "attachments",
-        "column": "message_id",
-        "foreign_key_table": "messages",
-        "foreign_key_column": "message_id",
-        "constraint_name": "attachments_message_id_foreign",
+        "column": "document_file",
+        "foreign_key_table": "directus_files",
+        "foreign_key_column": "id",
+        "constraint_name": "attachments_document_file_foreign",
+        "on_update": "NO ACTION",
+        "on_delete": "SET NULL"
+      }
+    },
+    {
+      "collection": "attachments",
+      "field": "created_by",
+      "related_collection": "directus_users",
+      "meta": null,
+      "schema": {
+        "table": "attachments",
+        "column": "created_by",
+        "foreign_key_table": "directus_users",
+        "foreign_key_column": "id",
+        "constraint_name": "attachments_created_by_fkey",
         "on_update": "NO ACTION",
         "on_delete": "SET NULL"
       }
@@ -10553,15 +10555,30 @@
     },
     {
       "collection": "delivery_proofs",
-      "field": "signed_photo",
+      "field": "order_id",
+      "related_collection": "orders",
+      "meta": null,
+      "schema": {
+        "table": "delivery_proofs",
+        "column": "order_id",
+        "foreign_key_table": "orders",
+        "foreign_key_column": "id",
+        "constraint_name": "delivery_proofs_order_id_foreign",
+        "on_update": "NO ACTION",
+        "on_delete": "CASCADE"
+      }
+    },
+    {
+      "collection": "delivery_proofs",
+      "field": "cond_photo",
       "related_collection": "directus_files",
       "meta": null,
       "schema": {
         "table": "delivery_proofs",
-        "column": "signed_photo",
+        "column": "cond_photo",
         "foreign_key_table": "directus_files",
         "foreign_key_column": "id",
-        "constraint_name": "delivery_proofs_signed_photo_foreign",
+        "constraint_name": "delivery_proofs_cond_photo_foreign",
         "on_update": "NO ACTION",
         "on_delete": "SET NULL"
       }
@@ -10583,45 +10600,15 @@
     },
     {
       "collection": "delivery_proofs",
-      "field": "cond_photo",
+      "field": "signed_photo",
       "related_collection": "directus_files",
       "meta": null,
       "schema": {
         "table": "delivery_proofs",
-        "column": "cond_photo",
+        "column": "signed_photo",
         "foreign_key_table": "directus_files",
         "foreign_key_column": "id",
-        "constraint_name": "delivery_proofs_cond_photo_foreign",
-        "on_update": "NO ACTION",
-        "on_delete": "SET NULL"
-      }
-    },
-    {
-      "collection": "delivery_proofs",
-      "field": "order_id",
-      "related_collection": "orders",
-      "meta": null,
-      "schema": {
-        "table": "delivery_proofs",
-        "column": "order_id",
-        "foreign_key_table": "orders",
-        "foreign_key_column": "id",
-        "constraint_name": "delivery_proofs_order_id_foreign",
-        "on_update": "NO ACTION",
-        "on_delete": "CASCADE"
-      }
-    },
-    {
-      "collection": "draft_weighings",
-      "field": "photo_id",
-      "related_collection": "directus_files",
-      "meta": null,
-      "schema": {
-        "table": "draft_weighings",
-        "column": "photo_id",
-        "foreign_key_table": "directus_files",
-        "foreign_key_column": "id",
-        "constraint_name": "draft_weighings_photo_id_foreign",
+        "constraint_name": "delivery_proofs_signed_photo_foreign",
         "on_update": "NO ACTION",
         "on_delete": "SET NULL"
       }
@@ -10642,6 +10629,21 @@
       }
     },
     {
+      "collection": "draft_weighings",
+      "field": "photo_id",
+      "related_collection": "directus_files",
+      "meta": null,
+      "schema": {
+        "table": "draft_weighings",
+        "column": "photo_id",
+        "foreign_key_table": "directus_files",
+        "foreign_key_column": "id",
+        "constraint_name": "draft_weighings_photo_id_foreign",
+        "on_update": "NO ACTION",
+        "on_delete": "SET NULL"
+      }
+    },
+    {
       "collection": "line_cuts",
       "field": "line_id",
       "related_collection": "order_lines",
@@ -10652,6 +10654,21 @@
         "foreign_key_table": "order_lines",
         "foreign_key_column": "id",
         "constraint_name": "line_cuts_line_id_foreign",
+        "on_update": "NO ACTION",
+        "on_delete": "CASCADE"
+      }
+    },
+    {
+      "collection": "line_photos",
+      "field": "line_id",
+      "related_collection": "order_lines",
+      "meta": null,
+      "schema": {
+        "table": "line_photos",
+        "column": "line_id",
+        "foreign_key_table": "order_lines",
+        "foreign_key_column": "id",
+        "constraint_name": "line_photos_line_id_foreign",
         "on_update": "NO ACTION",
         "on_delete": "CASCADE"
       }
@@ -10672,16 +10689,16 @@
       }
     },
     {
-      "collection": "line_photos",
+      "collection": "line_return_photos",
       "field": "line_id",
       "related_collection": "order_lines",
       "meta": null,
       "schema": {
-        "table": "line_photos",
+        "table": "line_return_photos",
         "column": "line_id",
         "foreign_key_table": "order_lines",
         "foreign_key_column": "id",
-        "constraint_name": "line_photos_line_id_foreign",
+        "constraint_name": "line_return_photos_line_id_foreign",
         "on_update": "NO ACTION",
         "on_delete": "CASCADE"
       }
@@ -10702,16 +10719,16 @@
       }
     },
     {
-      "collection": "line_return_photos",
-      "field": "line_id",
-      "related_collection": "order_lines",
+      "collection": "line_weighing_photos",
+      "field": "weighing_id",
+      "related_collection": "line_weighings",
       "meta": null,
       "schema": {
-        "table": "line_return_photos",
-        "column": "line_id",
-        "foreign_key_table": "order_lines",
+        "table": "line_weighing_photos",
+        "column": "weighing_id",
+        "foreign_key_table": "line_weighings",
         "foreign_key_column": "id",
-        "constraint_name": "line_return_photos_line_id_foreign",
+        "constraint_name": "line_weighing_photos_weighing_id_fkey",
         "on_update": "NO ACTION",
         "on_delete": "CASCADE"
       }
@@ -10732,16 +10749,16 @@
       }
     },
     {
-      "collection": "line_weighing_photos",
-      "field": "weighing_id",
-      "related_collection": "line_weighings",
+      "collection": "line_weighings",
+      "field": "line_id",
+      "related_collection": "order_lines",
       "meta": null,
       "schema": {
-        "table": "line_weighing_photos",
-        "column": "weighing_id",
-        "foreign_key_table": "line_weighings",
+        "table": "line_weighings",
+        "column": "line_id",
+        "foreign_key_table": "order_lines",
         "foreign_key_column": "id",
-        "constraint_name": "line_weighing_photos_weighing_id_fkey",
+        "constraint_name": "line_weighings_line_id_foreign",
         "on_update": "NO ACTION",
         "on_delete": "CASCADE"
       }
@@ -10762,36 +10779,6 @@
       }
     },
     {
-      "collection": "line_weighings",
-      "field": "line_id",
-      "related_collection": "order_lines",
-      "meta": null,
-      "schema": {
-        "table": "line_weighings",
-        "column": "line_id",
-        "foreign_key_table": "order_lines",
-        "foreign_key_column": "id",
-        "constraint_name": "line_weighings_line_id_foreign",
-        "on_update": "NO ACTION",
-        "on_delete": "CASCADE"
-      }
-    },
-    {
-      "collection": "messages",
-      "field": "document_file",
-      "related_collection": "directus_files",
-      "meta": null,
-      "schema": {
-        "table": "messages",
-        "column": "document_file",
-        "foreign_key_table": "directus_files",
-        "foreign_key_column": "id",
-        "constraint_name": "messages_document_file_foreign",
-        "on_update": "NO ACTION",
-        "on_delete": "SET NULL"
-      }
-    },
-    {
       "collection": "messages",
       "field": "order_uuid",
       "related_collection": "orders",
@@ -10807,16 +10794,16 @@
       }
     },
     {
-      "collection": "order_history",
-      "field": "who",
-      "related_collection": "directus_users",
+      "collection": "messages",
+      "field": "document_file",
+      "related_collection": "directus_files",
       "meta": null,
       "schema": {
-        "table": "order_history",
-        "column": "who",
-        "foreign_key_table": "directus_users",
+        "table": "messages",
+        "column": "document_file",
+        "foreign_key_table": "directus_files",
         "foreign_key_column": "id",
-        "constraint_name": "order_history_who_foreign",
+        "constraint_name": "messages_document_file_foreign",
         "on_update": "NO ACTION",
         "on_delete": "SET NULL"
       }
@@ -10837,18 +10824,33 @@
       }
     },
     {
+      "collection": "order_history",
+      "field": "who",
+      "related_collection": "directus_users",
+      "meta": null,
+      "schema": {
+        "table": "order_history",
+        "column": "who",
+        "foreign_key_table": "directus_users",
+        "foreign_key_column": "id",
+        "constraint_name": "order_history_who_foreign",
+        "on_update": "NO ACTION",
+        "on_delete": "SET NULL"
+      }
+    },
+    {
       "collection": "order_lines",
-      "field": "returned_weigh_photo",
-      "related_collection": "directus_files",
+      "field": "order_id",
+      "related_collection": "orders",
       "meta": null,
       "schema": {
         "table": "order_lines",
-        "column": "returned_weigh_photo",
-        "foreign_key_table": "directus_files",
+        "column": "order_id",
+        "foreign_key_table": "orders",
         "foreign_key_column": "id",
-        "constraint_name": "order_lines_returned_weigh_photo_foreign",
+        "constraint_name": "order_lines_order_id_foreign",
         "on_update": "NO ACTION",
-        "on_delete": "SET NULL"
+        "on_delete": "CASCADE"
       }
     },
     {
@@ -10868,17 +10870,17 @@
     },
     {
       "collection": "order_lines",
-      "field": "order_id",
-      "related_collection": "orders",
+      "field": "returned_weigh_photo",
+      "related_collection": "directus_files",
       "meta": null,
       "schema": {
         "table": "order_lines",
-        "column": "order_id",
-        "foreign_key_table": "orders",
+        "column": "returned_weigh_photo",
+        "foreign_key_table": "directus_files",
         "foreign_key_column": "id",
-        "constraint_name": "order_lines_order_id_foreign",
+        "constraint_name": "order_lines_returned_weigh_photo_foreign",
         "on_update": "NO ACTION",
-        "on_delete": "CASCADE"
+        "on_delete": "SET NULL"
       }
     },
     {
@@ -10908,15 +10910,25 @@
     },
     {
       "collection": "orders",
-      "field": "taken_by",
-      "related_collection": "directus_users",
-      "meta": null,
+      "field": "backorder_of",
+      "related_collection": "orders",
+      "meta": {
+        "junction_field": null,
+        "many_collection": "orders",
+        "many_field": "backorder_of",
+        "one_allowed_collections": null,
+        "one_collection": "orders",
+        "one_collection_field": null,
+        "one_deselect_action": "nullify",
+        "one_field": null,
+        "sort_field": null
+      },
       "schema": {
         "table": "orders",
-        "column": "taken_by",
-        "foreign_key_table": "directus_users",
+        "column": "backorder_of",
+        "foreign_key_table": "orders",
         "foreign_key_column": "id",
-        "constraint_name": "orders_taken_by_foreign",
+        "constraint_name": "orders_backorder_of_foreign",
         "on_update": "NO ACTION",
         "on_delete": "SET NULL"
       }
@@ -10937,16 +10949,16 @@
       }
     },
     {
-      "collection": "purchase_orders",
-      "field": "photo_id",
-      "related_collection": "directus_files",
+      "collection": "orders",
+      "field": "taken_by",
+      "related_collection": "directus_users",
       "meta": null,
       "schema": {
-        "table": "purchase_orders",
-        "column": "photo_id",
-        "foreign_key_table": "directus_files",
+        "table": "orders",
+        "column": "taken_by",
+        "foreign_key_table": "directus_users",
         "foreign_key_column": "id",
-        "constraint_name": "purchase_orders_photo_id_foreign",
+        "constraint_name": "orders_taken_by_foreign",
         "on_update": "NO ACTION",
         "on_delete": "SET NULL"
       }
@@ -10967,16 +10979,16 @@
       }
     },
     {
-      "collection": "return_documents",
+      "collection": "purchase_orders",
       "field": "photo_id",
       "related_collection": "directus_files",
       "meta": null,
       "schema": {
-        "table": "return_documents",
+        "table": "purchase_orders",
         "column": "photo_id",
         "foreign_key_table": "directus_files",
         "foreign_key_column": "id",
-        "constraint_name": "return_documents_photo_id_foreign",
+        "constraint_name": "purchase_orders_photo_id_foreign",
         "on_update": "NO ACTION",
         "on_delete": "SET NULL"
       }
@@ -10994,6 +11006,21 @@
         "constraint_name": "return_documents_order_id_foreign",
         "on_update": "NO ACTION",
         "on_delete": "CASCADE"
+      }
+    },
+    {
+      "collection": "return_documents",
+      "field": "photo_id",
+      "related_collection": "directus_files",
+      "meta": null,
+      "schema": {
+        "table": "return_documents",
+        "column": "photo_id",
+        "foreign_key_table": "directus_files",
+        "foreign_key_column": "id",
+        "constraint_name": "return_documents_photo_id_foreign",
+        "on_update": "NO ACTION",
+        "on_delete": "SET NULL"
       }
     }
   ]

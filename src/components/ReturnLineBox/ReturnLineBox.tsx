@@ -1,7 +1,6 @@
 import type { ChangeEvent } from "react";
 import { Icon } from "../Icon/Icon";
 import { Button } from "../Button/Button";
-import { Thumbnails } from "../Thumbnails/Thumbnails";
 import type { OrderLinesCollection } from "../../types/directus";
 import { formatClock } from "../../lib/format";
 import styles from "./ReturnLineBox.module.css";
@@ -42,6 +41,7 @@ export interface ReturnLineBoxProps {
   onReceiveQtyChange: (lineId: string, value: string) => void;
   photos: ReturnLineBoxPhoto[];
   onUploadPhoto: (lineId: string, e: ChangeEvent<HTMLInputElement>) => void;
+  onRemovePhoto: (lineId: string, photoId: string) => void;
   onOpenImage: (entries: ReturnLineBoxImageEntry[], index: number) => void;
   t: (key: string) => string;
 }
@@ -60,6 +60,7 @@ export function ReturnLineBox({
   onReceiveQtyChange,
   photos,
   onUploadPhoto,
+  onRemovePhoto,
   onOpenImage,
   t,
 }: ReturnLineBoxProps) {
@@ -132,25 +133,30 @@ export function ReturnLineBox({
       {isConfirmed ? (
         <>
           {photos.length > 0 && (
-            <Thumbnails
-              photos={photos.map((p) => ({
-                url: p.url,
-                title: `${t("Scale photo")} · ${line.name}`,
-              }))}
-              onOpen={onOpenImage}
-            />
+            <div className={styles.thumbnailsContainer}>
+              {photos.map((p, i) => (
+                <div
+                  key={p.id}
+                  className={styles.thumbnailItem}
+                  onClick={() =>
+                    onOpenImage(
+                      photos.map((p2) => ({
+                        url: p2.url,
+                        title: `${t("Scale photo")} · ${line.name}`,
+                      })),
+                      i,
+                    )
+                  }
+                >
+                  <img src={p.url} alt="" className={styles.thumbnailImg} />
+                </div>
+              ))}
+            </div>
           )}
         </>
       ) : isPending && canReceiveReturn ? (
         <>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "0.75rem",
-              flexWrap: "wrap",
-            }}
-          >
+          <div className={styles.followUpRow}>
             <input
               type="number"
               min="0"
@@ -183,16 +189,37 @@ export function ReturnLineBox({
               />
             </label>
             {photos.length > 0 && (
-              <Thumbnails
-                itemSize={{ width: 32, height: 32 }}
-                photos={photos.map((p) => ({
-                  url: p.url,
-                  title: `${t("Scale photo")} · ${line.name}`,
-                  receiveLineId: line.id,
-                  receivePhotoId: p.id,
-                }))}
-                onOpen={onOpenImage}
-              />
+              <div className={styles.thumbnailsContainer}>
+                {photos.map((p, i) => (
+                  <div
+                    key={p.id}
+                    className={styles.thumbnailItem}
+                    onClick={() =>
+                      onOpenImage(
+                        photos.map((p2) => ({
+                          url: p2.url,
+                          title: `${t("Scale photo")} · ${line.name}`,
+                          receiveLineId: line.id,
+                          receivePhotoId: p2.id,
+                        })),
+                        i,
+                      )
+                    }
+                  >
+                    <img src={p.url} alt="" className={styles.thumbnailImg} />
+                    <div
+                      className={styles.thumbnailHoverTrash}
+                      title={t("Delete image")}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onRemovePhoto(line.id, p.id);
+                      }}
+                    >
+                      <Icon name="trash" size={14} />
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
           <div className={styles.cardActions}>
@@ -200,7 +227,6 @@ export function ReturnLineBox({
               type="button"
               variant="secondary"
               buttonStyle="fullWidth"
-              size="lg"
               onClick={() => onConfirm(line.id)}
               disabled={confirming}
             >

@@ -82,7 +82,6 @@ import { formatClock, formatTakenAt, formatDateShort } from "../../lib/format";
 import { ReturnLineBox } from "../../components/ReturnLineBox/ReturnLineBox";
 import { dateCode } from "../../lib/orderNo";
 import { ImageDetailsModal } from "../../components/ImageDetailsModal/ImageDetailsModal";
-import { Thumbnails } from "../../components/Thumbnails/Thumbnails";
 import styles from "./OrderDetail.module.css";
 
 /**
@@ -376,10 +375,9 @@ interface ImageModalEntry {
   /** A staged (not-yet-confirmed) delivery-proof photo — see handleRemoveStagedProofPhoto. */
   stagedProofSlot?: "cond" | "recv" | "signed";
   stagedProofIndex?: number;
-  /** Present when opened from a `Thumbnails` gallery with more than one
-   *  photo — the full sibling list + this entry's position in it, so the
-   *  modal's prev/next buttons can page through without the parent
-   *  re-deriving anything. */
+  /** Present when opened from a multi-photo row — the full sibling list +
+   *  this entry's position in it, so the modal's prev/next buttons can page
+   *  through without the parent re-deriving anything. */
   gallery?: ImageModalEntry[];
   galleryIndex?: number;
 }
@@ -448,6 +446,90 @@ export function OrderDetail() {
     });
   }
 
+  /** Whether `deleteImageEntry` has somewhere to route this entry — exactly
+   *  one id-group is ever populated per `ImageModalEntry`. Shared by the
+   *  modal's own delete button and each thumbnail row's hover-trash. */
+  function canDeleteImageEntry(entry: ImageModalEntry): boolean {
+    return !!(
+      (entry.lineId && entry.photoId) ||
+      (entry.weighingLineId && entry.weighingId && entry.weighingPhotoId) ||
+      (entry.receiveLineId && entry.receivePhotoId) ||
+      entry.attachmentId ||
+      (entry.stagedProofSlot && entry.stagedProofIndex !== undefined)
+    );
+  }
+
+  /** Fires the right delete handler for a photo entry, based on whichever
+   *  id-fields it carries. One place that knows how to delete "whatever
+   *  this entry is," instead of duplicating the same branch chain at the
+   *  modal's delete button and every thumbnail row's hover-trash. */
+  function deleteImageEntry(entry: ImageModalEntry) {
+    if (entry.lineId && entry.photoId) {
+      handleRemoveItemPhoto(entry.lineId, entry.photoId);
+    } else if (
+      entry.weighingLineId &&
+      entry.weighingId &&
+      entry.weighingPhotoId
+    ) {
+      handleRemoveWeighingPhoto(
+        entry.weighingLineId,
+        entry.weighingId,
+        entry.weighingPhotoId,
+      );
+    } else if (entry.receiveLineId && entry.receivePhotoId) {
+      handleRemoveReceiveWeighPhoto(entry.receiveLineId, entry.receivePhotoId);
+    } else if (entry.attachmentId) {
+      handleDeleteDocument(entry.attachmentId);
+    } else if (entry.stagedProofSlot && entry.stagedProofIndex !== undefined) {
+      handleRemoveStagedProofPhoto(
+        entry.stagedProofSlot,
+        entry.stagedProofIndex,
+      );
+    }
+  }
+
+  /** Plain, always-expanded thumbnail row — replaces the `Thumbnails`
+   *  component (removed 2026-09-03): its per-instance `ResizeObserver` +
+   *  `useLayoutEffect` measured real, avoidable overhead on orders with
+   *  many lines/photos, most noticeable as visible lag right after an
+   *  upload. Every photo always renders and wraps onto a new line instead
+   *  of collapsing into an "N more" overlay. Clicking a thumbnail opens the
+   *  slideshow modal (`openImageGallery`) same as before; hovering shows a
+   *  trash icon (touch: always visible) that deletes in place via
+   *  `deleteImageEntry`, restoring the per-thumbnail delete this file had
+   *  before `Thumbnails` centralized it into the modal only. */
+  function renderThumbnails(
+    photos: ImageModalEntry[],
+    style?: React.CSSProperties,
+  ) {
+    if (photos.length === 0) return null;
+    return (
+      <div className={styles.thumbnailsContainer} style={style}>
+        {photos.map((p, i) => (
+          <div
+            key={i}
+            className={styles.thumbnailItem}
+            onClick={() => openImageGallery(photos, i)}
+          >
+            <img src={p.url} alt="" className={styles.thumbnailImg} />
+            {canDeleteImageEntry(p) && (
+              <div
+                className={styles.thumbnailHoverTrash}
+                title={t("Delete image")}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  deleteImageEntry(p);
+                }}
+              >
+                <Icon name="trash" size={14} />
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   /* ── action state ── */
   const [advancing, setAdvancing] = useState(false);
   const [cancelling, setCancelling] = useState(false);
@@ -494,10 +576,27 @@ export function OrderDetail() {
   const [backorderRemindOn, setBackorderRemindOn] = useState("");
   const [creatingBackorder, setCreatingBackorder] = useState(false);
   const [closingShort, setClosingShort] = useState(false);
+  const [activatingBackorder, setActivatingBackorder] = useState(false);
+  const [closingAwaiting, setClosingAwaiting] = useState(false);
   // Re-entrancy guard: a fast double-tap must not create TWO backorders —
   // same class of bug as the prototype's own `backorderOnce` ref
   // (Dev-OrderDetail.jsx:249).
   const backorderOnceRef = useRef(false);
+  // `order.backorder_of` is now the parent's real id (self-FK) — the link
+  // itself needs no lookup, but the human-facing `no` shown in the banner
+  // text does.
+  const [backorderParentNo, setBackorderParentNo] = useState<string | null>(
+    null,
+  );
+  // The reverse edge: `backorder_of` only points child → parent, so a
+  // closed-short PARENT order (this one, once "Create backorder" ran) has
+  // no field of its own naming the child it spawned — resolved via a
+  // reverse lookup instead of a new schema field, since it's a clean 1:1
+  // relationship (`#{no}-B`, at most one child per parent in this model).
+  const [backorderChild, setBackorderChild] = useState<{
+    id: string;
+    no: string | null;
+  } | null>(null);
 
   /* ── hand-off mode chooser (dispatch stage) ── */
   const [choosingMode, setChoosingMode] = useState(false);
@@ -834,6 +933,44 @@ export function OrderDetail() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [order?.customer_id, order?.payment_confirmed]);
 
+  // Resolve the backorder's parent order id into its human-facing `no`,
+  // lazily — only for the rare `awaiting`-stage backorder order, so this
+  // never fires for the vast majority of orders that aren't one. The link
+  // itself uses `order.backorder_of` (the id) directly, no lookup needed.
+  useEffect(() => {
+    const parentId = order?.backorder_of;
+    if (!parentId) return;
+    let cancelled = false;
+    readOrder(parentId, { fields: ["id", "no"] }).then((res) => {
+      if (!cancelled && !res.error && res.data?.no) {
+        setBackorderParentNo(res.data.no);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [order?.backorder_of]);
+
+  // Reverse lookup for a closed-short PARENT order: which `-B` child (if
+  // any) did "Create backorder" spawn from this one. Lazy — only fires for
+  // an order actually marked `closed_short`.
+  useEffect(() => {
+    if (!order?.closed_short || !id) return;
+    let cancelled = false;
+    readOrders({
+      filter: { backorder_of: { _eq: id } },
+      fields: ["id", "no"],
+      limit: 1,
+    }).then((res) => {
+      if (!cancelled && !res.error && res.data?.[0]) {
+        setBackorderChild({ id: res.data[0].id, no: res.data[0].no ?? null });
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [order?.closed_short, id]);
+
   /* Pre-fill the Finance gate's Timing toggle from the customer's actual
    * terms, matching the prototype's own initializer
    * (`useState(order?.payment.timing || 'upfront')`, Dev-OrderDetail.jsx:71)
@@ -894,6 +1031,7 @@ export function OrderDetail() {
   const isOutstanding = stage === "outstanding";
   const isDelivered = stage === "delivered";
   const isReturned = stage === "returned";
+  const isAwaiting = stage === "awaiting";
   const isHold = order.hold === true;
 
   // Locked once delivered, dispatched-and-taken, or in a terminal off-pipeline
@@ -1010,7 +1148,14 @@ export function OrderDetail() {
   // as part of finishing that migration.
   const canHold =
     auth.can("holdResume") && !isCancelled && !isDelivered && !isReturned;
-  const canRestore = (isCancelled || isOutstanding) && auth.can("reopenOrders");
+  // Cancelled-only, matching the prototype's own Restore
+  // (`Dev-OrderDetail.jsx:158`: `can(role, 'cancelOrders') && stage ===
+  // 'cancelled'`) — whoever can cancel can restore. Outstanding used to be
+  // included here too, as a stopgap before the Part-delivered resolution
+  // card (send-rest / backorder / close-short) existed; an outstanding
+  // order is a partial-delivery remainder, not a cancelled one, so Restore
+  // was semantically wrong for it — removed now that the real flow exists.
+  const canRestore = isCancelled && auth.can("cancelOrders");
   // Sees the Documents section AND its add-form — one gate for both, per the
   // prototype's own hardcoded `['Admin','Finance','Owner'].includes(role)`
   // (`Dev-OrderDetail.jsx:1615`, add-form at 1626-1635 with no extra gate of
@@ -2155,6 +2300,14 @@ export function OrderDetail() {
             courier_tracking_ref: null,
           }
         : {}),
+      // Reopening a closed-short order is a redo of the delivery outcome
+      // itself — leaving `closed_short`/`short_reason` set would make the
+      // "Closed — delivered short" banner (and its backorder-child link)
+      // resurface after a perfectly normal redelivery that never actually
+      // fell short this time.
+      ...(stage === "delivered"
+        ? { closed_short: false, short_reason: null }
+        : {}),
     };
     // A fresh snapshot for THIS move — supersedes whatever snapshot (if
     // any) was left over from a prior action, including the delivered
@@ -2169,6 +2322,50 @@ export function OrderDetail() {
       if (stage === "delivered") {
         setActiveProof(null);
         resetProofState();
+        // Reopening a completed delivery is a redo from scratch, not a
+        // continuation of a partial one (that's what "Send the rest now" on
+        // the Part-delivered card is for, and it's a separate handler that
+        // deliberately keeps `delivered` accumulating). Left stale here,
+        // the next confirm-delivery would add onto the previous run's
+        // total instead of counting fresh — reported directly (an order
+        // reopened and redelivered several times showed "7/5 delivered").
+        const resetLines = lines.map((l) =>
+          l.delivered || l.sent != null
+            ? { ...l, delivered: 0, sent: null }
+            : l,
+        );
+        const lineWrites = resetLines.flatMap((l, i) =>
+          l === lines[i] || !l.id
+            ? []
+            : [updateOrderLine(l.id, { delivered: 0, sent: null })],
+        );
+        if (lineWrites.length > 0) {
+          await Promise.allSettled(lineWrites);
+          setLines(resetLines);
+          // Same reasoning as the `delivered`/`sent` reset above — the
+          // Cold-Storage "sending" input reads `sendingQtyMap`, not `l.sent`
+          // off `lines`, so it needs its own reset or it'd keep showing
+          // whatever was there before this reopen. Defaults to the qty that
+          // was actually delivered last time (the "latest value" — reported
+          // directly: a closed-short order reopened at 3/5 delivered was
+          // showing "sending 5 of 5", not 3) so redoing the same delivery
+          // starts from where it left off; only a line that was never
+          // delivered at all (a genuine from-scratch case) falls back to
+          // the full ordered qty.
+          setSendingQtyMap((prev) => {
+            const next = { ...prev };
+            lines.forEach((l) => {
+              if (!l.id) return;
+              const qtyNum =
+                typeof l.qty === "string"
+                  ? parseFloat(l.qty) || 0
+                  : (l.qty ?? 0);
+              const prevDelivered = Number(l.delivered) || 0;
+              next[l.id] = prevDelivered > 0 ? prevDelivered : qtyNum;
+            });
+            return next;
+          });
+        }
       }
       if (needsCutReset) {
         // Un-tick every cut to match — both the local override map (a tick
@@ -2818,17 +3015,27 @@ export function OrderDetail() {
     ]);
     setActiveProof(proofRes.data);
 
-    // Convert this run's Cold-Storage "sending" quantity (order_lines.sent)
-    // into permanently-delivered qty — ported from the prototype's own
-    // confirm-delivery step (Dev-OrderDetail.jsx:910-914). A counted line
-    // with nothing recorded in `sent` (a normal, non-partial run) is treated
-    // as fully delivered (whatever was still owed). Weight-only (kg/gram)
-    // lines are untouched here — they're held back via the `short` flag
-    // instead, never via delivered/sent.
+    // Convert this run's Cold-Storage "sending" quantity into permanently-
+    // delivered qty — ported from the prototype's own confirm-delivery step
+    // (Dev-OrderDetail.jsx:910-914). Read from `sendingQtyMap`, NOT
+    // `l.sent` off the `lines` array — `lines` is only refetched on a full
+    // page load, while `handleSendingBlur` persists a Cold-Storage edit to
+    // the database without ever syncing it back into `lines` state, so
+    // `l.sent` here could be stale from before the edit (the render-time
+    // "sending" input already reads `sendingQtyMap`, not `l.sent`, for the
+    // same reason — this must match it exactly, or what's displayed and
+    // what gets written at confirm time silently diverge). A line missing
+    // from the map (shouldn't happen once loaded) falls back to its full
+    // ordered qty — same as a normal, non-partial run. Weight-only
+    // (kg/gram) lines are untouched here — they're held back via the
+    // `short` flag instead, never via delivered/sent.
     const deliveredLineUpdates: { id: string; delivered: number }[] = [];
     const updatedLines = lines.map((l) => {
       if (isWeightOnlyUnit(l.unit)) return l;
-      const sentQty = l.sent != null ? Number(l.sent) : lineLeft(l);
+      const qtyNum =
+        typeof l.qty === "string" ? parseFloat(l.qty) || 0 : (l.qty ?? 0);
+      const sentQty =
+        l.id && sendingQtyMap[l.id] != null ? sendingQtyMap[l.id] : qtyNum;
       const nextDelivered = (Number(l.delivered) || 0) + sentQty;
       if (l.id)
         deliveredLineUpdates.push({ id: l.id, delivered: nextDelivered });
@@ -3085,10 +3292,9 @@ export function OrderDetail() {
 
   async function handleRestore() {
     if (!id || !order) return;
-    // Outstanding or cancelled orders return to their recorded cancelled_from stage,
-    // falling back to dispatch for outstanding or intake for cancelled.
-    const restoreStage =
-      order.cancelled_from ?? (isOutstanding ? "dispatch" : "intake");
+    // Cancelled-only (see `canRestore`) — returns to the recorded
+    // cancelled_from stage, falling back to intake.
+    const restoreStage = order.cancelled_from ?? "intake";
     // Landing back at dispatch needs the same hand-off reset
     // `handleSendBack`'s reopen path already applies (delivered → dispatch)
     // — otherwise taken_by/pickup/third_party survive and the hand-off
@@ -3199,6 +3405,20 @@ export function OrderDetail() {
     if (!res.error && res.data) {
       setOrder(res.data);
       setLines(nextLines);
+      // Keep the Cold-Storage "sending" input's own state (the actual
+      // source `handleConfirmDelivery` reads at confirm time) in sync with
+      // what was just written — otherwise it'd keep showing whatever was
+      // left over from the PREVIOUS run instead of the newly-owed amount.
+      setSendingQtyMap((prev) => {
+        const next = { ...prev };
+        nextLines.forEach((l) => {
+          if (l.id && l.sent != null) {
+            next[l.id] =
+              typeof l.sent === "string" ? parseFloat(l.sent) : l.sent;
+          }
+        });
+        return next;
+      });
       setActiveProof(null);
       resetProofState();
       await appendOrderHistory({
@@ -3253,7 +3473,7 @@ export function OrderDetail() {
       sales: order.sales ?? null,
       deliver_at: order.deliver_at ?? null,
       order_date: now.slice(0, 10),
-      backorder_of: order.no ?? null,
+      backorder_of: id ?? null,
       remind_on: backorderRemindOn || null,
       payment_method: order.payment_method ?? null,
       payment_timing: order.payment_timing ?? null,
@@ -3369,6 +3589,79 @@ export function OrderDetail() {
       });
     }
     setClosingShort(false);
+  }
+
+  /** "Activate — stock arrived" on an `awaiting`-stage backorder — the
+   *  stock came in, so it re-enters the normal pipeline at Cold Storage to
+   *  be picked and weighed like any other order. Ported from the
+   *  prototype's own one-liner (`Dev-OrderDetail.jsx:1061`:
+   *  `advance('cold', {}, 'Stock arrived — activated')`) — no other field
+   *  changes, unlike the other outstanding decisions. */
+  async function handleActivateBackorder() {
+    if (!id || !order || activatingBackorder) return;
+    setActivatingBackorder(true);
+    const actionAt = new Date().toISOString();
+    const patch = { stage: "cold" };
+    const res = await updateOrder(id, {
+      ...patch,
+      undo_snapshot: snapshotFor(patch, actionAt),
+    });
+    if (!res.error && res.data) {
+      setOrder(res.data);
+      await appendOrderHistory({
+        order_id: id,
+        what: "Stock arrived — activated",
+        who: userId,
+        stage: "cold",
+        at: actionAt,
+      });
+      const hRes = await readOrderHistory(id);
+      if (!hRes.error) setHistory(hRes.data ?? []);
+    } else {
+      alert(`Failed to activate the order: ${res.error}`, {
+        title: t("Couldn't activate order"),
+      });
+    }
+    setActivatingBackorder(false);
+  }
+
+  /** "Close — stock did not arrive" on an `awaiting`-stage backorder — the
+   *  stock never came in, so the case closes as cancelled (nothing was
+   *  ever delivered on it). Ported from the prototype's `closeAwaiting`
+   *  (`Dev-OrderDetail.jsx:295-299`), including its default reason. */
+  async function handleCloseAwaiting() {
+    if (!id || !order || closingAwaiting) return;
+    const why = await prompt(t("Why is the rest not going?"), {
+      title: t("Close — stock did not arrive"),
+      defaultValue: "stock never arrived",
+    });
+    if (why === null) return;
+    setClosingAwaiting(true);
+    const actionAt = new Date().toISOString();
+    const reason = why || "stock never arrived";
+    const res = await updateOrder(id, {
+      stage: "cancelled",
+      cancelled: true,
+      short_reason: reason,
+      undo_snapshot: null,
+    });
+    if (!res.error && res.data) {
+      setOrder(res.data);
+      await appendOrderHistory({
+        order_id: id,
+        what: `Closed — ${reason}`,
+        who: userId,
+        stage: "cancelled",
+        at: actionAt,
+      });
+      const hRes = await readOrderHistory(id);
+      if (!hRes.error) setHistory(hRes.data ?? []);
+    } else {
+      alert(`Failed to close the order: ${res.error}`, {
+        title: t("Couldn't close order"),
+      });
+    }
+    setClosingAwaiting(false);
   }
 
   /**
@@ -4301,18 +4594,6 @@ export function OrderDetail() {
                 {t("Order")} {order.no}
               </h3>
               <div className={styles.pillsContainer}>
-                {isCancelled && (
-                  <div className={styles.pill}>
-                    <Icon name="cancelled" />
-                    Cancelled
-                  </div>
-                )}
-                {isReturned && (
-                  <div className={`${styles.pill} ${styles.pillError}`}>
-                    <Icon name="returned" />
-                    Returned
-                  </div>
-                )}
                 {order.is_replacement && (
                   <div className={`${styles.pill} ${styles.pillWarning}`}>
                     <Icon name="reload" size={16} />
@@ -4344,16 +4625,58 @@ export function OrderDetail() {
           {/* Stepper — once delivered, replace the 8-step track with one
               prominent "done" banner instead of a stepper with nothing left
               to step through. */}
-          {stage === "delivered" ? (
+          {stage === "delivered" && order.closed_short ? (
+            <div className={styles.banner}>
+              <div className={styles.headerRow} style={{ paddingBottom: 0 }}>
+                <div
+                  className={styles.stepLine}
+                  style={{ backgroundColor: "var(--state-warning)" }}
+                />
+                <div className={styles.warningHeader}>
+                  <Icon name="packageProcess" size={24} />
+                  <span className={styles.warningTitle}>
+                    {t("Closed — delivered short")}
+                  </span>
+                </div>
+                <div
+                  className={styles.stepLine}
+                  style={{ backgroundColor: "var(--state-warning)" }}
+                />
+              </div>
+              <p>
+                {backorderChild ? (
+                  <>
+                    {t("Remainder carried to backorder")}{" "}
+                    <Button
+                      type="button"
+                      variant="tertiary"
+                      className={styles.inlineButton}
+                      onClick={() =>
+                        navigate(`/orders/${backorderChild.id}`, {
+                          state: { from: location.pathname },
+                        })
+                      }
+                    >
+                      Order {backorderChild.no}
+                    </Button>
+                  </>
+                ) : (
+                  `${t("Remainder dropped")}${order.short_reason ? ` — ${order.short_reason}` : ""}`
+                )}
+              </p>
+            </div>
+          ) : stage === "delivered" ? (
             <div className={styles.banner}>
               <div className={styles.headerRow} style={{ paddingBottom: 0 }}>
                 <div
                   className={styles.stepLine}
                   style={{ backgroundColor: "var(--accent-primary)" }}
                 />
-                <div className={styles.successTitle}>
+                <div className={styles.successHeader}>
                   <Icon name="packageDelivered" size={24} />
-                  {t("Delivered & Closed")}
+                  <span className={styles.successTitle}>
+                    {t("Delivered & Closed")}
+                  </span>
                 </div>
 
                 <div
@@ -4429,290 +4752,86 @@ export function OrderDetail() {
                 )}
               </p>
             </div>
-          ) : isReturned && !isCancelled ? (
-            <Card className={styles.errorCard}>
-              <div className={styles.headerRow}>
-                <h3 className={styles.sectionTitle}>Customer return</h3>
+          ) : isReturned ? (
+            <div className={styles.banner}>
+              <div className={styles.headerRow} style={{ paddingBottom: 0 }}>
+                <div
+                  className={styles.stepLine}
+                  style={{ backgroundColor: "var(--state-error)" }}
+                />
+                <div className={styles.errorHeader}>
+                  <Icon name="packageReturned" size={20} />
+                  <span className={styles.errorTitle}>{t("Returned")}</span>
+                </div>
+                <div
+                  className={styles.stepLine}
+                  style={{ backgroundColor: "var(--state-error)" }}
+                />
               </div>
-              <div className={styles.cardContent}>
-                {canReceiveReturn && !order.return_received && (
-                  <div className={styles.cardListColumn}>
-                    <span className={styles.row}>
-                      <p className={styles.fieldLabel}>{t("Warehouse ")}</p>
-                      <p className={styles.muted}>— receive & verify</p>
-                      <div className={styles.separator}></div>
-                    </span>
-                    <p className={styles.secondary}>
-                      {t(
-                        "Weigh or count what actually came back, then confirm.",
-                      )}
-                    </p>
-                  </div>
+              <p>
+                {t(
+                  "This order was returned by the customer — see the Customer Return card below for details.",
                 )}
-                {lines
-                  .filter((l) => Number(l.returned) > 0)
-                  .map((l) => (
-                    <ReturnLineBox
-                      key={l.id}
-                      line={l}
-                      pendingAmount={Number(l.returned)}
-                      returnedReason={order.returned_reason}
-                      orderReturnReceived={order.return_received}
-                      canReceiveReturn={canReceiveReturn}
-                      confirming={confirmingReceive}
-                      reopening={undoingInbound}
-                      onConfirm={handleConfirmReturnLine}
-                      onReopen={handleReopenReturnLine}
-                      receiveQtyValue={receiveQtyMap[l.id]}
-                      onReceiveQtyChange={(lineId, value) =>
-                        setReceiveQtyMap((prev) => ({
-                          ...prev,
-                          [lineId]: value,
-                        }))
+              </p>
+            </div>
+          ) : isAwaiting ? (
+            <div className={styles.banner}>
+              <div className={styles.headerRow} style={{ paddingBottom: 0 }}>
+                <div className={styles.stepLine} />
+                <div className={styles.mutedHeader}>
+                  <Icon name="hourglass" size={20} />
+                  <span className={styles.mutedTitle}>
+                    {t("Awaiting stock")}
+                  </span>
+                </div>
+                <div className={styles.stepLine} />
+              </div>
+              <p>
+                {t("Waiting for stock to come in.")}
+                {order.backorder_of && (
+                  <>
+                    {" "}
+                    {t("This order is a backorder of")}{" "}
+                    <Button
+                      type="button"
+                      variant="tertiary"
+                      className={styles.inlineButton}
+                      onClick={() =>
+                        navigate(`/orders/${order.backorder_of}`, {
+                          // This is a drill-down into a related order, not a
+                          // reorder-style "replace the origin" hop — Back on
+                          // the parent should return HERE, to this backorder
+                          // child, not skip past it to wherever this page
+                          // itself came from.
+                          state: { from: location.pathname },
+                        })
                       }
-                      photos={receivePhotosMap[l.id] ?? []}
-                      onUploadPhoto={handleUploadReceiveWeighPhoto}
-                      onOpenImage={openImageGallery}
-                      t={t}
-                    />
-                  ))}
-
-                {inSettleBucket && (
-                  <div className={styles.cardListColumn}>
-                    {canDecideReturn && (
-                      <span className={styles.row}>
-                        <p className={styles.fieldLabel}>{t("Admin ")}</p>
-                        <p className={styles.muted}>
-                          — update Accurate, then process
-                        </p>
-                        <div className={styles.separator}></div>
-                      </span>
-                    )}
-                    {canDecideReturn ? (
-                      <>
-                        {!order.return_received && (
-                          <p>
-                            {lines.some(
-                              (l) =>
-                                Number(l.returned) > 0 && isWeighedUnit(l.unit),
-                            )
-                              ? t(
-                                  "Goods not back yet — counted quantities are exact; the kg/loaf credit is provisional until the warehouse weighs the return.",
-                                )
-                              : t(
-                                  "Goods not back yet — quantities are exact (counted). You can prepare everything now.",
-                                )}
-                          </p>
-                        )}
-                        <select
-                          className={styles.editInput}
-                          style={{ width: "100%" }}
-                          value={selectedDocType}
-                          onChange={(e) => setSelectedDocType(e.target.value)}
-                        >
-                          <option value="">
-                            {t("— how is this settled in Accurate? —")}
-                          </option>
-                          {RETURN_DOC_OPTIONS.map((opt) => (
-                            <option key={opt.key} value={opt.key}>
-                              {t(opt.label)}
-                            </option>
-                          ))}
-                        </select>
-                        {selectedDocType === "return-note" && (
-                          <>
-                            <label className={styles.row}>
-                              <Checkbox
-                                size="sm"
-                                checked={retPrinted}
-                                onChange={setRetPrinted}
-                                label={t("Input in Accurate & printed")}
-                              />
-                              {t("Input in Accurate & printed")}
-                            </label>
-                            <PhotoUploadButton
-                              variant="secondary"
-                              icon={noteFileIds.length > 0 ? "check" : "camera"}
-                              label={
-                                noteFileIds.length > 0
-                                  ? t("Photo attached")
-                                  : t("Photo of the return note (optional)")
-                              }
-                              photos={noteFileIds.map((fileId) => ({
-                                id: fileId,
-                                fileId,
-                                url: getAssetUrl(fileId),
-                              }))}
-                              onUpload={handleUploadReturnNotePhoto}
-                              onRemove={handleRemoveReturnNotePhoto}
-                              onOpenImage={(p) =>
-                                setActiveImageModal({
-                                  url: p.url,
-                                  title: t("Photo of the return note"),
-                                })
-                              }
-                            />
-                          </>
-                        )}
-
-                        <div className={styles.cardActions}>
-                          <Button
-                            type="button"
-                            variant="primary"
-                            buttonStyle="fullWidth"
-                            icon="check"
-                            size="lg"
-                            onClick={handleConfirmSettle}
-                            disabled={
-                              !selectedDocType ||
-                              confirmingSettle ||
-                              (selectedDocType === "return-note" &&
-                                !retPrinted) ||
-                              (!!selectedDoc &&
-                                !selectedDoc.replacement &&
-                                selectedDoc.key !== "revise-return" &&
-                                !order.return_received)
-                            }
-                          >
-                            {confirmingSettle
-                              ? t("Saving…")
-                              : !selectedDoc
-                                ? t("Confirm & close")
-                                : selectedDoc.replacement
-                                  ? t("Send replacement — back to Cold Storage")
-                                  : selectedDoc.key === "revise-return"
-                                    ? t("Send revised DO/SI for signing")
-                                    : t("Confirm & close")}
-                          </Button>
-                        </div>
-                        <div className={styles.hints}>
-                          {selectedDoc &&
-                            !selectedDoc.replacement &&
-                            selectedDoc.key !== "revise-return" &&
-                            !order.return_received && (
-                              <p
-                                className={`${styles.secondary} ${styles.infoHint}`}
-                              >
-                                {t(
-                                  "The order closes only after the warehouse receives the goods.",
-                                )}
-                              </p>
-                            )}
-                          {selectedDoc && (
-                            <div className={styles.infoHint}>
-                              <div className={styles.iconWrapper}>
-                                <Icon
-                                  name="infoCircle"
-                                  style={{ color: "var(--text-muted)" }}
-                                />
-                              </div>
-                              <p className={styles.muted}>
-                                {selectedDoc.key === "single-replace"
-                                  ? t(
-                                      "ONE document: the original DO/SI is revised to show what the customer finally keeps incl. the replacement. Best for a like-for-like swap.",
-                                    )
-                                  : selectedDoc.key === "separate-replace"
-                                    ? t(
-                                        "TWO documents: a Sales Return Note credits what came back + a NEW DO/SI for the replacement shipment. Best when the replacement differs (item / kg / price) or ships another day.",
-                                      )
-                                    : selectedDoc.key === "revise-return"
-                                      ? t(
-                                          "The revised DO/SI goes to the customer to sign before the order closes.",
-                                        )
-                                      : t(
-                                          "Returned goods credited — the order closes.",
-                                        )}
-                              </p>
-                            </div>
-                          )}
-                        </div>
-                      </>
-                    ) : (
-                      <p className={styles.secondary}>
-                        {order.return_received
-                          ? t(
-                              "Received — waiting for an admin to update the Accurate documents and decide.",
-                            )
-                          : t(
-                              "Waiting for an admin to update Accurate & decide — this can run before the goods arrive.",
-                            )}
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                {inSignBucket && (
-                  <div className={styles.followUpRow}>
-                    <Icon
-                      style={{
-                        flexShrink: 0,
-                        color: "var(--state-error)",
-                      }}
-                      name="documentWait"
-                    />
-                    <div className={styles.followUpMain}>
-                      <p className={styles.fieldLabel}>
-                        {t("Awaiting Signed DO/SI")}
-                      </p>
-
-                      {latestSignedDoc ? (
-                        <p className="tiny muted">
-                          {t(
-                            "Signed document on file — order closes once received.",
-                          )}
-                        </p>
-                      ) : canSignReturn ? (
-                        <label
-                          style={{ cursor: "pointer", display: "inline-block" }}
-                        >
-                          <input
-                            type="file"
-                            accept="image/*"
-                            style={{ display: "none" }}
-                            onChange={handleUploadSignedDoc}
-                          />
-                          {signedDocFileId
-                            ? t("Photo attached ✓")
-                            : t("Attach signed document")}
-                        </label>
-                      ) : (
-                        <p className="tiny muted">
-                          {t("Revised DO/SI is out with the customer to sign.")}
-                        </p>
-                      )}
-                    </div>
-
-                    {!latestSignedDoc && canSignReturn && (
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        onClick={handleMarkSignedAndClose}
-                        disabled={!signedDocFileId || closingSigned}
-                      >
-                        {closingSigned
-                          ? t("Saving…")
-                          : t("Mark signed & close")}
-                      </Button>
-                    )}
-                  </div>
-                )}
-
-                {order.is_replacement && !isDelivered && (
-                  <p className="tiny muted">
-                    {t(
-                      "Replacement re-entered the pipeline and is currently at",
-                    )}{" "}
-                    <strong>
-                      {t(
-                        PIPELINE_STAGES.find((s) => s.key === stage)?.label ??
-                          stage,
-                      )}
-                    </strong>
+                    >
+                      {t("Order")} {backorderParentNo ?? "…"}
+                    </Button>
                     .
-                  </p>
+                  </>
                 )}
+                {order.remind_on && (
+                  <>
+                    {" "}
+                    {t("Reminder date")}:{" "}
+                    <strong>{formatDateShort(order.remind_on)}</strong>.
+                  </>
+                )}
+              </p>
+            </div>
+          ) : isCancelled ? (
+            <div className={styles.banner}>
+              <div className={styles.headerRow} style={{ paddingBottom: 0 }}>
+                <div className={styles.stepLine} />
+                <div className={styles.mutedHeader}>
+                  <Icon name="cancelled" size={20} />
+                  <span className={styles.mutedTitle}>{t("Cancelled")}</span>
+                </div>
+                <div className={styles.stepLine} />
               </div>
-            </Card>
+            </div>
           ) : (
             <div
               className={styles.stepperContainer}
@@ -4777,40 +4896,6 @@ export function OrderDetail() {
                 can view it, but the action is theirs.
               </span>
             </div>
-          )}
-
-          {showFinanceUndoRow && (
-            <Card className={styles.warningCard}>
-              <div className={styles.warningHeader}>
-                <Icon
-                  name="paymentSuccess"
-                  size={20}
-                  style={{ color: "var(--state-warning)" }}
-                />
-                <div className={styles.warningTitle}>
-                  {t("Payment cleared by Finance")}
-                </div>
-              </div>
-              <p>
-                {t("Payment cleared by Finance")} —{" "}
-                {stage === "cold"
-                  ? t("cleared while still at Cold Storage.")
-                  : t("the order has moved on past the gate.")}{" "}
-                {t("Cleared by mistake?")}
-              </p>
-              <div className={styles.cardActions}>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={handleUndoFinanceClear}
-                  disabled={approvingFinance}
-                  icon="undo"
-                  tone="warning"
-                >
-                  {t("Undo payment clearance")}
-                </Button>
-              </div>
-            </Card>
           )}
 
           {/* Customer Info Card */}
@@ -4949,12 +5034,35 @@ export function OrderDetail() {
                   showsWeightTotal ||
                   (isWeightOnlyUnit(line.unit) && !!line.short) ||
                   (canSeePrices && hasPrice);
-                // "N of M delivered · X left" / "N/M delivered" pill — ported
-                // from the prototype's item-list chip (delivered > 0 is the
-                // only gate; shown at any stage, not just once outstanding).
+                // "N of M delivered · X left" / "N/M delivered" pill — every
+                // stage on and after `delivered` (delivered, outstanding,
+                // returned, cancelled), since all of those have a real
+                // `delivered` value once confirm-delivery has run and stay
+                // meaningful for the rest of the order's life.
                 const deliveredNum = Number(line.delivered) || 0;
                 const left = lineLeft(line);
-                const showDeliveredPill = deliveredNum > 0;
+                const showDeliveredPill =
+                  (isDelivered || isOutstanding || isReturned || isCancelled) &&
+                  deliveredNum > 0;
+                // "N of M sent (X to follow)" / "N/M sent" pill — the
+                // post-Cold-Storage counterpart of the sending input's own
+                // "to follow" hint, for the stages between Cold Storage and
+                // delivery confirmation (production/packing/finalise/
+                // dispatch) where `order_lines.sent` still holds the real
+                // value. Once delivery is confirmed, `sent` is cleared into
+                // `delivered` (see `handleConfirmDelivery`) and
+                // `showDeliveredPill` takes over instead — the two pills
+                // never overlap. Warning-toned while something's still held
+                // back; accent-toned once the full ordered qty has shipped.
+                const showSendingPill =
+                  stage !== "cold" &&
+                  !isDelivered &&
+                  !isOutstanding &&
+                  !isReturned &&
+                  !isCancelled &&
+                  !isAwaiting &&
+                  !isWeightOnlyUnit(line.unit) &&
+                  qty >= 1;
 
                 return (
                   <div key={line.id} className={styles.itemRow}>
@@ -4969,8 +5077,17 @@ export function OrderDetail() {
                           className={`${styles.pill} ${left > 0 ? styles.pillWarning : styles.pillSuccess}`}
                         >
                           {left > 0
-                            ? `${deliveredNum} ${t("of")} ${qty} ${t("delivered")} · ${left} ${t("left")}`
+                            ? `${deliveredNum} ${t("of")} ${qty} ${t("delivered")} ${t("(")} ${left} ${t("left")} ${t(")")}`
                             : `${deliveredNum}/${qty} ${t("delivered")}`}
+                        </span>
+                      )}
+                      {showSendingPill && (
+                        <span
+                          className={`${styles.pill} ${sendingQty < qty ? styles.pillWarning : styles.pillAccent}`}
+                        >
+                          {sendingQty < qty
+                            ? `${t("sending")} ${sendingQty} ${t("of")} ${qty} ${t("(")} ${qty - sendingQty} ${t("to follow")} ${t(")")}`
+                            : `${t("sending")} ${sendingQty} ${t("of")} ${qty}`}
                         </span>
                       )}
                       {/* Cold Storage only, and never on kg/gram — matches
@@ -5025,7 +5142,7 @@ export function OrderDetail() {
                             {t("of")} {qty}
                             {sendingQty < qty && (
                               <span className={styles.toFollowHint}>
-                                · {qty - sendingQty} {t("to follow")}
+                                {"("} {qty - sendingQty} {t("to follow")} {")"}
                               </span>
                             )}
                           </div>
@@ -5095,18 +5212,15 @@ export function OrderDetail() {
                               }
                             />
 
-                            {w.photos.length > 0 && (
-                              <Thumbnails
-                                style={{ marginLeft: 28 }}
-                                photos={w.photos.map((p) => ({
-                                  url: p.url,
-                                  title: `${t("Weighing photo —")} ${line.name}`,
-                                  weighingLineId: line.id,
-                                  weighingId: w.id,
-                                  weighingPhotoId: p.id,
-                                }))}
-                                onOpen={openImageGallery}
-                              />
+                            {renderThumbnails(
+                              w.photos.map((p) => ({
+                                url: p.url,
+                                title: `${t("Weighing photo —")} ${line.name}`,
+                                weighingLineId: line.id,
+                                weighingId: w.id,
+                                weighingPhotoId: p.id,
+                              })),
+                              { marginLeft: 28 },
                             )}
                           </div>
                         ))}
@@ -5162,15 +5276,12 @@ export function OrderDetail() {
                               <span className={styles.weighingValueReadOnly}>
                                 {w.weight || "0.00"} kg
                               </span>
-                              {w.photos.length > 0 && (
-                                <Thumbnails
-                                  style={{ marginLeft: "0.5rem" }}
-                                  photos={w.photos.map((p) => ({
-                                    url: p.url,
-                                    title: `${t("Weighing photo —")} ${line.name}`,
-                                  }))}
-                                  onOpen={openImageGallery}
-                                />
+                              {renderThumbnails(
+                                w.photos.map((p) => ({
+                                  url: p.url,
+                                  title: `${t("Weighing photo —")} ${line.name}`,
+                                })),
+                                { marginLeft: "0.5rem" },
                               )}
                             </div>
                           ))}
@@ -5223,7 +5334,7 @@ export function OrderDetail() {
                           requirePhoto &&
                           itemPhotos.length === 0 && (
                             <span
-                              className="tiny"
+                              className={styles.infoHint}
                               style={{
                                 color: "var(--state-warning)",
                                 marginLeft: "0.5rem",
@@ -5240,24 +5351,21 @@ export function OrderDetail() {
                             at every stage up to delivery (production,
                             packing, finalise, dispatch, outstanding), not
                             just at Cold Storage. Reported directly. */}
-                        {itemPhotos.length > 0 && (
-                          <Thumbnails
-                            style={{ marginLeft: 28 }}
-                            photos={itemPhotos.map((img) =>
-                              canWeighHere
-                                ? {
-                                    url: img.url,
-                                    title: `${t("Attachment for")} ${line.name}`,
-                                    photoId: img.id,
-                                    lineId: line.id,
-                                  }
-                                : {
-                                    url: img.url,
-                                    title: `${t("Attachment for")} ${line.name}`,
-                                  },
-                            )}
-                            onOpen={openImageGallery}
-                          />
+                        {renderThumbnails(
+                          itemPhotos.map((img) =>
+                            canWeighHere
+                              ? {
+                                  url: img.url,
+                                  title: `${t("Attachment for")} ${line.name}`,
+                                  photoId: img.id,
+                                  lineId: line.id,
+                                }
+                              : {
+                                  url: img.url,
+                                  title: `${t("Attachment for")} ${line.name}`,
+                                },
+                          ),
+                          { marginLeft: 28 },
                         )}
                       </div>
                     )}
@@ -5325,7 +5433,7 @@ export function OrderDetail() {
                 className={styles.noteItem}
                 style={{ gridColumn: "1 / -1", marginTop: "var(--space-md)" }}
               >
-                <span className={styles.noteHeader}>{t("Order Note")}</span>
+                <span className={styles.detailLabel}>{t("Order Note")}</span>
                 <span>{order.notes}</span>
               </div>
             )}
@@ -5416,10 +5524,7 @@ export function OrderDetail() {
                           {t("Delivery documentation")}
                         </span>
                       </div>
-                      <Thumbnails
-                        photos={deliveryDocPhotos}
-                        onOpen={openImageGallery}
-                      />
+                      {renderThumbnails(deliveryDocPhotos)}
                     </div>
                   )}
 
@@ -5621,6 +5726,298 @@ export function OrderDetail() {
               );
             })()}
 
+          {/* "Customer return" card — separate from the "Returned" status
+              banner up in the stepper section (which stays a plain status
+              banner for every returned order); this one is the actual
+              receive/decide/sign workflow, placed right after the Delivery
+              Proof card. Two things tell an order is returned: the plain
+              banner, and this card. */}
+          {isReturned && !isCancelled && (
+            <Card className={styles.errorCard}>
+              <div className={styles.headerRow}>
+                <h3 className={styles.sectionTitle}>Customer return</h3>
+              </div>
+              <div className={styles.cardContent}>
+                {canReceiveReturn && !order.return_received && (
+                  <div className={styles.cardListColumn}>
+                    <span className={styles.row}>
+                      <p className={styles.fieldLabel}>{t("Warehouse ")}</p>
+                      <p className={styles.muted}>— receive & verify</p>
+                      <div className={styles.separator}></div>
+                    </span>
+                    <p className={styles.secondary}>
+                      {t(
+                        "Weigh or count what actually came back, then confirm.",
+                      )}
+                    </p>
+                  </div>
+                )}
+                {lines
+                  .filter((l) => Number(l.returned) > 0)
+                  .map((l) => (
+                    <ReturnLineBox
+                      key={l.id}
+                      line={l}
+                      pendingAmount={Number(l.returned)}
+                      returnedReason={order.returned_reason}
+                      orderReturnReceived={order.return_received}
+                      canReceiveReturn={canReceiveReturn}
+                      confirming={confirmingReceive}
+                      reopening={undoingInbound}
+                      onConfirm={handleConfirmReturnLine}
+                      onReopen={handleReopenReturnLine}
+                      receiveQtyValue={receiveQtyMap[l.id]}
+                      onReceiveQtyChange={(lineId, value) =>
+                        setReceiveQtyMap((prev) => ({
+                          ...prev,
+                          [lineId]: value,
+                        }))
+                      }
+                      photos={receivePhotosMap[l.id] ?? []}
+                      onUploadPhoto={handleUploadReceiveWeighPhoto}
+                      onRemovePhoto={handleRemoveReceiveWeighPhoto}
+                      onOpenImage={openImageGallery}
+                      t={t}
+                    />
+                  ))}
+
+                {inSettleBucket && (
+                  <div className={styles.cardListColumn}>
+                    {canDecideReturn && (
+                      <span className={styles.row}>
+                        <p className={styles.fieldLabel}>{t("Admin ")}</p>
+                        <p className={styles.muted}>
+                          — update Accurate, then process
+                        </p>
+                        <div className={styles.separator}></div>
+                      </span>
+                    )}
+                    {canDecideReturn ? (
+                      <>
+                        {!order.return_received && (
+                          <p>
+                            {lines.some(
+                              (l) =>
+                                Number(l.returned) > 0 && isWeighedUnit(l.unit),
+                            )
+                              ? t(
+                                  "Goods not back yet — counted quantities are exact; the kg/loaf credit is provisional until the warehouse weighs the return.",
+                                )
+                              : t(
+                                  "Goods not back yet — quantities are exact (counted). You can prepare everything now.",
+                                )}
+                          </p>
+                        )}
+                        <select
+                          className={styles.editInput}
+                          style={{ width: "100%" }}
+                          value={selectedDocType}
+                          onChange={(e) => setSelectedDocType(e.target.value)}
+                        >
+                          <option value="">
+                            {t("— how is this settled in Accurate? —")}
+                          </option>
+                          {RETURN_DOC_OPTIONS.map((opt) => (
+                            <option key={opt.key} value={opt.key}>
+                              {t(opt.label)}
+                            </option>
+                          ))}
+                        </select>
+                        {selectedDocType === "return-note" && (
+                          <>
+                            <label className={styles.row}>
+                              <Checkbox
+                                size="sm"
+                                checked={retPrinted}
+                                onChange={setRetPrinted}
+                                label={t("Input in Accurate & printed")}
+                              />
+                              {t("Input in Accurate & printed")}
+                            </label>
+                            <PhotoUploadButton
+                              variant="secondary"
+                              icon={noteFileIds.length > 0 ? "check" : "camera"}
+                              label={
+                                noteFileIds.length > 0
+                                  ? t("Photo attached")
+                                  : t("Photo of the return note (optional)")
+                              }
+                              photos={noteFileIds.map((fileId) => ({
+                                id: fileId,
+                                fileId,
+                                url: getAssetUrl(fileId),
+                              }))}
+                              onUpload={handleUploadReturnNotePhoto}
+                              onRemove={handleRemoveReturnNotePhoto}
+                              onOpenImage={(p) =>
+                                setActiveImageModal({
+                                  url: p.url,
+                                  title: t("Photo of the return note"),
+                                })
+                              }
+                            />
+                          </>
+                        )}
+
+                        <div className={styles.cardActions}>
+                          <Button
+                            type="button"
+                            variant="primary"
+                            buttonStyle="fullWidth"
+                            icon="check"
+                            onClick={handleConfirmSettle}
+                            disabled={
+                              !selectedDocType ||
+                              confirmingSettle ||
+                              (selectedDocType === "return-note" &&
+                                !retPrinted) ||
+                              (!!selectedDoc &&
+                                !selectedDoc.replacement &&
+                                selectedDoc.key !== "revise-return" &&
+                                !order.return_received)
+                            }
+                          >
+                            {confirmingSettle
+                              ? t("Saving…")
+                              : !selectedDoc
+                                ? t("Confirm & close")
+                                : selectedDoc.replacement
+                                  ? t("Send replacement — back to Cold Storage")
+                                  : selectedDoc.key === "revise-return"
+                                    ? t("Send revised DO/SI for signing")
+                                    : t("Confirm & close")}
+                          </Button>
+                        </div>
+                        <div className={styles.hints}>
+                          {selectedDoc &&
+                            !selectedDoc.replacement &&
+                            selectedDoc.key !== "revise-return" &&
+                            !order.return_received && (
+                              <p
+                                className={`${styles.secondary} ${styles.infoHint}`}
+                              >
+                                {t(
+                                  "The order closes only after the warehouse receives the goods.",
+                                )}
+                              </p>
+                            )}
+                          {selectedDoc && (
+                            <div className={styles.infoHint}>
+                              <div className={styles.iconWrapper}>
+                                <Icon
+                                  name="infoCircle"
+                                  style={{ color: "var(--text-muted)" }}
+                                />
+                              </div>
+                              <p className={styles.muted}>
+                                {selectedDoc.key === "single-replace"
+                                  ? t(
+                                      "ONE document: the original DO/SI is revised to show what the customer finally keeps incl. the replacement. Best for a like-for-like swap.",
+                                    )
+                                  : selectedDoc.key === "separate-replace"
+                                    ? t(
+                                        "TWO documents: a Sales Return Note credits what came back + a NEW DO/SI for the replacement shipment. Best when the replacement differs (item / kg / price) or ships another day.",
+                                      )
+                                    : selectedDoc.key === "revise-return"
+                                      ? t(
+                                          "The revised DO/SI goes to the customer to sign before the order closes.",
+                                        )
+                                      : t(
+                                          "Returned goods credited — the order closes.",
+                                        )}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </>
+                    ) : (
+                      <p className={styles.secondary}>
+                        {order.return_received
+                          ? t(
+                              "Received — waiting for an admin to update the Accurate documents and decide.",
+                            )
+                          : t(
+                              "Waiting for an admin to update Accurate & decide — this can run before the goods arrive.",
+                            )}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {inSignBucket && (
+                  <div className={styles.followUpRow}>
+                    <Icon
+                      style={{
+                        flexShrink: 0,
+                        color: "var(--state-error)",
+                      }}
+                      name="documentWait"
+                    />
+                    <div className={styles.followUpMain}>
+                      <p className={styles.fieldLabel}>
+                        {t("Awaiting Signed DO/SI")}
+                      </p>
+
+                      {latestSignedDoc ? (
+                        <p className={styles.infoHint}>
+                          {t(
+                            "Signed document on file — order closes once received.",
+                          )}
+                        </p>
+                      ) : canSignReturn ? (
+                        <label
+                          style={{ cursor: "pointer", display: "inline-block" }}
+                        >
+                          <input
+                            type="file"
+                            accept="image/*"
+                            style={{ display: "none" }}
+                            onChange={handleUploadSignedDoc}
+                          />
+                          {signedDocFileId
+                            ? t("Photo attached ✓")
+                            : t("Attach signed document")}
+                        </label>
+                      ) : (
+                        <p className={styles.infoHint}>
+                          {t("Revised DO/SI is out with the customer to sign.")}
+                        </p>
+                      )}
+                    </div>
+
+                    {!latestSignedDoc && canSignReturn && (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={handleMarkSignedAndClose}
+                        disabled={!signedDocFileId || closingSigned}
+                      >
+                        {closingSigned
+                          ? t("Saving…")
+                          : t("Mark signed & close")}
+                      </Button>
+                    )}
+                  </div>
+                )}
+
+                {order.is_replacement && !isDelivered && (
+                  <p className={styles.infoHint}>
+                    {t(
+                      "Replacement re-entered the pipeline and is currently at",
+                    )}{" "}
+                    <strong>
+                      {t(
+                        PIPELINE_STAGES.find((s) => s.key === stage)?.label ??
+                          stage,
+                      )}
+                    </strong>
+                    .
+                  </p>
+                )}
+              </div>
+            </Card>
+          )}
+
           {/* Part-delivered decision card — separate from the "Outstanding"
               status card up in the stepper section (which stays a plain
               status banner for every outstanding order); this one renders
@@ -5686,7 +6083,6 @@ export function OrderDetail() {
                           type="button"
                           variant="primary"
                           buttonStyle="fullWidth"
-                          size="lg"
                           icon="packageAdd"
                           tone="warning"
                           disabled={creatingBackorder}
@@ -5818,6 +6214,117 @@ export function OrderDetail() {
             </Card>
           )}
 
+          {/* "Awaiting stock — backorder" card — the awaiting-stage
+              counterpart of the Part-delivered card, reusing the same
+              owedLinesBox/owedLineItem shape for the still-owed line(s) (a
+              backorder order's own lines ARE what's owed, no partial
+              filtering needed). Ported from the prototype's own
+              `case 'awaiting'` (Dev-OrderDetail.jsx:1053-1065). */}
+          {isAwaiting && (
+            <Card>
+              <div className={styles.headerRow}>
+                <h3 className={styles.sectionTitle}>
+                  {t("Awaiting stock — backorder")}
+                </h3>
+              </div>
+              <div className={styles.cardContent}>
+                <div className={styles.cardListColumn}>
+                  <div className={styles.rowStretch}>
+                    {order.backorder_of && (
+                      <span>
+                        {t("Backorder of")}{" "}
+                        <Button
+                          type="button"
+                          variant="tertiary"
+                          className={styles.inlineButton}
+                          onClick={() =>
+                            navigate(`/orders/${order.backorder_of}`, {
+                              state: { from: location.pathname },
+                            })
+                          }
+                        >
+                          {t("Order")} {backorderParentNo ?? "…"}
+                        </Button>
+                      </span>
+                    )}
+                    {order.remind_on &&
+                      (() => {
+                        const due = new Date(order.remind_on!) <= new Date();
+                        return (
+                          <span
+                            className={styles.row}
+                            style={{
+                              color: due
+                                ? "var(--state-warning)"
+                                : "var(--text-muted)",
+                            }}
+                          >
+                            <Icon name="bell" size={14} />
+                            {t("Reminder date")}:{" "}
+                            {formatDateShort(order.remind_on)}
+                          </span>
+                        );
+                      })()}
+                  </div>
+
+                  <div className={styles.owedLinesBox}>
+                    {owedLines.map((l) => (
+                      <div key={l.id} className={styles.owedLineItem}>
+                        <p className={styles.fieldLabel}>{l.name}</p>
+                        <span className={styles.owedPill}>
+                          <Icon name="packageProcess" size={16} />
+                          {isWeightOnlyUnit(l.unit) ? (
+                            <span>{t("Short — ran out of stock")}</span>
+                          ) : (
+                            <>
+                              <strong>
+                                {lineLeft(l)} {l.unit}
+                              </strong>
+                              <span className={styles.muted}>
+                                {t("still owed")}
+                              </span>
+                            </>
+                          )}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <p className={styles.infoHint}>
+                    {t("Waiting for stock to come in.")}
+                  </p>
+                </div>
+                {canDecideOutstanding && (
+                  <div className={styles.cardActions}>
+                    <Button
+                      type="button"
+                      variant="primary"
+                      buttonStyle="fullWidth"
+                      icon="arrowRight"
+                      disabled={activatingBackorder}
+                      onClick={handleActivateBackorder}
+                    >
+                      {activatingBackorder
+                        ? t("Saving…")
+                        : t("Activate — stock arrived")}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      buttonStyle="fullWidth"
+                      icon="close"
+                      disabled={closingAwaiting}
+                      onClick={handleCloseAwaiting}
+                    >
+                      {closingAwaiting
+                        ? t("Saving…")
+                        : t("Close — stock did not arrive")}
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </Card>
+          )}
+
           {/* "Isn't weighed yet" safety net — a kg/gram/loaf line added (or
               unit-changed) after Cold Storage, still in the warehouse.
               Ported from the prototype's own banner (`Dev-OrderDetail.jsx:1314-1321`). */}
@@ -5841,7 +6348,6 @@ export function OrderDetail() {
                   <Button
                     type="button"
                     variant="secondary"
-                    size="md"
                     icon="arrowRight"
                     onClick={handleSendToColdToWeigh}
                     disabled={advancing}
@@ -5885,16 +6391,13 @@ export function OrderDetail() {
                               {l.returned} {l.unit}
                             </strong>
                           </p>
-                          {(receivePhotosMap[l.id]?.length ?? 0) > 0 && (
-                            <Thumbnails
-                              photos={receivePhotosMap[l.id]!.map((p) => ({
-                                url: p.url,
-                                title: `${t("Scale photo")} · ${l.name}`,
-                                receiveLineId: l.id,
-                                receivePhotoId: p.id,
-                              }))}
-                              onOpen={openImageGallery}
-                            />
+                          {renderThumbnails(
+                            (receivePhotosMap[l.id] ?? []).map((p) => ({
+                              url: p.url,
+                              title: `${t("Scale photo")} · ${l.name}`,
+                              receiveLineId: l.id,
+                              receivePhotoId: p.id,
+                            })),
                           )}
                         </div>
                       </div>
@@ -5906,15 +6409,14 @@ export function OrderDetail() {
                         <p className={styles.docType}>
                           {t("Return documents")}
                         </p>
-                        <Thumbnails
-                          photos={returnDocs
+                        {renderThumbnails(
+                          returnDocs
                             .filter((d) => d.photo_id)
                             .map((d) => ({
                               url: getAssetUrl(d.photo_id!),
                               title: RETURN_DOC_KIND_LABELS[d.kind] ?? d.kind,
-                            }))}
-                          onOpen={openImageGallery}
-                        />
+                            })),
+                        )}
                       </div>
                     </div>
                   )}
@@ -5975,11 +6477,12 @@ export function OrderDetail() {
                     }
                     photos={receivePhotosMap[l.id] ?? []}
                     onUploadPhoto={handleUploadReceiveWeighPhoto}
+                    onRemovePhoto={handleRemoveReceiveWeighPhoto}
                     onOpenImage={openImageGallery}
                     t={t}
                   />
                 ))}
-              <p className="tiny muted" style={{ marginTop: "0.75rem" }}>
+              <p className={styles.infoHint} style={{ marginTop: "0.75rem" }}>
                 {t(
                   "Waiting for an admin to update Accurate & decide — this can run before the goods arrive.",
                 )}
@@ -6137,22 +6640,21 @@ export function OrderDetail() {
                           {t("Nothing to weigh — fixed packs only.")}
                         </p>
                       )}
-                    <div className={styles.cardActions}>
-                      <Button
-                        type="button"
-                        variant="primary"
-                        size="lg"
-                        buttonStyle="fullWidth"
-                        onClick={handleAdvance}
-                        disabled={advancing || !coldWeighingReady}
-                      >
-                        {advancing
-                          ? t("Saving…")
-                          : financeCleared
-                            ? t(flow?.advanceLabel ?? "")
-                            : t("Release to Finance")}
-                      </Button>
-                    </div>
+                  </div>
+                  <div className={styles.cardActions}>
+                    <Button
+                      type="button"
+                      variant="primary"
+                      buttonStyle="fullWidth"
+                      onClick={handleAdvance}
+                      disabled={advancing || !coldWeighingReady}
+                    >
+                      {advancing
+                        ? t("Saving…")
+                        : financeCleared
+                          ? t(flow?.advanceLabel ?? "")
+                          : t("Release to Finance")}
+                    </Button>
                   </div>
                 </Card>
               )}
@@ -6185,7 +6687,7 @@ export function OrderDetail() {
                               type="button"
                               variant="primary"
                               icon="knife"
-                              size="lg"
+                              size="md"
                               onClick={handleStartCutting}
                             >
                               {t("Start cutting")}
@@ -6237,20 +6739,19 @@ export function OrderDetail() {
                         )}
                       </div>
                     )}
-                    <div className={styles.cardActions}>
-                      <Button
-                        type="button"
-                        variant="primary"
-                        size="lg"
-                        buttonStyle="fullWidth"
-                        onClick={handleCuttingDoneAdvance}
-                        disabled={advancing || !allCutsDone}
-                      >
-                        {advancing
-                          ? t("Saving…")
-                          : t("Cutting done → to packing")}
-                      </Button>
-                    </div>
+                  </div>
+                  <div className={styles.cardActions}>
+                    <Button
+                      type="button"
+                      variant="primary"
+                      buttonStyle="fullWidth"
+                      onClick={handleCuttingDoneAdvance}
+                      disabled={advancing || !allCutsDone}
+                    >
+                      {advancing
+                        ? t("Saving…")
+                        : t("Cutting done → to packing")}
+                    </Button>
                   </div>
                 </Card>
               )}
@@ -6303,7 +6804,6 @@ export function OrderDetail() {
                       <Button
                         type="button"
                         variant="primary"
-                        size="lg"
                         buttonStyle="fullWidth"
                         icon="check"
                         onClick={handlePackAdvance}
@@ -6458,21 +6958,17 @@ export function OrderDetail() {
                 (canSeeCustomerContact || isStageActor) &&
                 order.customer_address && (
                   <Card className={styles.warningCard}>
-                    <div
-                      className={styles.headerRow}
-                      style={{ paddingBottom: "var(--space-md)" }}
-                    >
+                    <div className={styles.headerRow}>
                       <div className={styles.row}>
                         <Icon
                           name="delivered"
                           size={20}
-                          style={{
-                            color: "var(--state-warning)",
-                            flexShrink: 0,
-                          }}
+                          style={{ color: "var(--state-warning)" }}
                         />
-
-                        <h3 className={styles.warningTitle}>
+                        <h3
+                          className={styles.sectionTitle}
+                          style={{ color: "var(--state-warning)" }}
+                        >
                           {handoffMode === "third"
                             ? t("Handover destination")
                             : t("Deliver to")}
@@ -6503,7 +6999,7 @@ export function OrderDetail() {
                         )}
                     </div>
                     <div>
-                      <div className={styles.fieldLabel}>
+                      <div className={styles.detailValue}>
                         {order.customer_address}
                       </div>
                     </div>
@@ -6670,20 +7166,17 @@ export function OrderDetail() {
                               : t("Item condition photo")}
                           </span>
                         </div>
-                        {condPhotos.length > 0 && (
-                          <Thumbnails
-                            photos={condPhotos.map((p, i) => ({
-                              url: p.url,
-                              title:
-                                handoffMode === "pickup" ||
-                                handoffMode === "third"
-                                  ? t("Item condition photo (pickup)")
-                                  : t("Item condition photo"),
-                              stagedProofSlot: "cond" as const,
-                              stagedProofIndex: i,
-                            }))}
-                            onOpen={openImageGallery}
-                          />
+                        {renderThumbnails(
+                          condPhotos.map((p, i) => ({
+                            url: p.url,
+                            title:
+                              handoffMode === "pickup" ||
+                              handoffMode === "third"
+                                ? t("Item condition photo (pickup)")
+                                : t("Item condition photo"),
+                            stagedProofSlot: "cond" as const,
+                            stagedProofIndex: i,
+                          })),
                         )}
                         <input
                           ref={condFileInputRef}
@@ -6694,10 +7187,9 @@ export function OrderDetail() {
                         />
                         <Button
                           type="button"
-                          variant="secondary"
+                          variant="tertiary"
                           icon="camera"
                           iconOnly
-                          isActive={condPhotos.length > 0}
                           disabled={uploadingProofSlot === "cond"}
                           title={t("Upload")}
                           onClick={() => condFileInputRef.current?.click()}
@@ -6752,21 +7244,18 @@ export function OrderDetail() {
                                     : t("Receiver photo")}
                               </span>
                             </div>
-                            {recvPhotos.length > 0 && (
-                              <Thumbnails
-                                photos={recvPhotos.map((p, i) => ({
-                                  url: p.url,
-                                  title:
-                                    handoffMode === "third"
-                                      ? t("Photo of the package / courier")
-                                      : handoffMode === "pickup"
-                                        ? t("Photo of who collected")
-                                        : t("Receiver photo"),
-                                  stagedProofSlot: "recv" as const,
-                                  stagedProofIndex: i,
-                                }))}
-                                onOpen={openImageGallery}
-                              />
+                            {renderThumbnails(
+                              recvPhotos.map((p, i) => ({
+                                url: p.url,
+                                title:
+                                  handoffMode === "third"
+                                    ? t("Photo of the package / courier")
+                                    : handoffMode === "pickup"
+                                      ? t("Photo of who collected")
+                                      : t("Receiver photo"),
+                                stagedProofSlot: "recv" as const,
+                                stagedProofIndex: i,
+                              })),
                             )}
                             <input
                               ref={recvFileInputRef}
@@ -6779,10 +7268,9 @@ export function OrderDetail() {
                             />
                             <Button
                               type="button"
-                              variant="secondary"
+                              variant="tertiary"
                               icon="camera"
                               iconOnly
-                              isActive={recvPhotos.length > 0}
                               disabled={uploadingProofSlot === "recv"}
                               title={t("Upload")}
                               onClick={() => recvFileInputRef.current?.click()}
@@ -6835,21 +7323,18 @@ export function OrderDetail() {
                                     : t("Signed doc (optional)")}
                               </span>
                             </div>
-                            {signedPhotos.length > 0 && (
-                              <Thumbnails
-                                photos={signedPhotos.map((p, i) => ({
-                                  url: p.url,
-                                  title:
-                                    handoffMode === "third"
-                                      ? t("Signed invoice")
-                                      : proofRequired
-                                        ? t("Signed doc (required)")
-                                        : t("Signed doc (optional)"),
-                                  stagedProofSlot: "signed" as const,
-                                  stagedProofIndex: i,
-                                }))}
-                                onOpen={openImageGallery}
-                              />
+                            {renderThumbnails(
+                              signedPhotos.map((p, i) => ({
+                                url: p.url,
+                                title:
+                                  handoffMode === "third"
+                                    ? t("Signed invoice")
+                                    : proofRequired
+                                      ? t("Signed doc (required)")
+                                      : t("Signed doc (optional)"),
+                                stagedProofSlot: "signed" as const,
+                                stagedProofIndex: i,
+                              })),
                             )}
                             <input
                               ref={signedFileInputRef}
@@ -6862,10 +7347,9 @@ export function OrderDetail() {
                             />
                             <Button
                               type="button"
-                              variant="secondary"
+                              variant="tertiary"
                               icon="camera"
                               iconOnly
-                              isActive={signedPhotos.length > 0}
                               disabled={uploadingProofSlot === "signed"}
                               title={t("Upload")}
                               onClick={() =>
@@ -7256,6 +7740,45 @@ export function OrderDetail() {
                 </Card>
               )}
 
+              {showFinanceUndoRow && (
+                <Card className={styles.warningCard}>
+                  <div className={styles.headerRow}>
+                    <div className={styles.row}>
+                      <Icon
+                        name="paymentSuccess"
+                        size={20}
+                        style={{ color: "var(--state-warning)" }}
+                      />
+                      <div
+                        className={styles.sectionTitle}
+                        style={{ color: "var(--state-warning)" }}
+                      >
+                        {t("Payment cleared by Finance")}
+                      </div>
+                    </div>
+                  </div>
+                  <p>
+                    {t("Payment cleared by Finance")} —{" "}
+                    {stage === "cold"
+                      ? t("cleared while still at Cold Storage.")
+                      : t("the order has moved on past the gate.")}{" "}
+                    {t("Cleared by mistake?")}
+                  </p>
+                  <div className={styles.cardActions}>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={handleUndoFinanceClear}
+                      disabled={approvingFinance}
+                      icon="undo"
+                      tone="warning"
+                    >
+                      {t("Undo payment clearance")}
+                    </Button>
+                  </div>
+                </Card>
+              )}
+
               {showFinanceGateForm && (
                 <Card>
                   <div className={styles.headerRowLeft}>
@@ -7397,7 +7920,6 @@ export function OrderDetail() {
                           type="button"
                           variant="secondary"
                           buttonStyle="fullWidth"
-                          size="lg"
                           icon={
                             financeMethod === "transfer"
                               ? "paymentSuccess"
@@ -7423,7 +7945,6 @@ export function OrderDetail() {
                       type="button"
                       variant="primary"
                       buttonStyle="fullWidth"
-                      size="lg"
                       icon="check"
                       disabled={
                         approvingFinance ||
@@ -7445,8 +7966,12 @@ export function OrderDetail() {
               {canUndo && order.undo_snapshot && (
                 <div className={styles.undoRow}>
                   <div className={styles.left}>
-                    <Icon name="infoCircle" />
-                    <p className="tiny muted">{t("Pressed wrongly?")}</p>
+                    <Icon
+                      name="infoCircle"
+                      size={16}
+                      style={{ color: "var(--text-secondary)" }}
+                    />
+                    <p className={styles.secondary}>{t("Pressed wrongly?")}</p>
                   </div>
                   <Button
                     type="button"
@@ -7508,7 +8033,7 @@ export function OrderDetail() {
                           }))
                         }
                       />
-                      <span className="tiny muted">{l.unit}</span>
+                      <span className={styles.secondary}>{l.unit}</span>
                       <label style={{ cursor: "pointer" }}>
                         <input
                           type="file"
@@ -7818,11 +8343,11 @@ export function OrderDetail() {
                     .reverse()
                     .map((n, idx) => (
                       <div key={n.id ?? idx} className={styles.noteItem}>
-                        <div className={styles.noteHeader}>
+                        <div className={styles.historyTime}>
+                          <span>{formatDate(n.at, true)}</span>
                           <span style={{ fontWeight: "600" }}>
                             {n.who ? `${displayName(n.who)}` : ""}
                           </span>
-                          <span>{formatDate(n.at, true)}</span>
                         </div>
                         <div style={{ whiteSpace: "pre-wrap" }}>
                           {n.what.replace("Note:", "").trim()}
@@ -7898,49 +8423,12 @@ export function OrderDetail() {
         url={activeImageModal?.url ?? ""}
         onClose={() => setActiveImageModal(null)}
         onDelete={
-          activeImageModal?.lineId && activeImageModal?.photoId
+          activeImageModal && canDeleteImageEntry(activeImageModal)
             ? () => {
-                handleRemoveItemPhoto(
-                  activeImageModal.lineId!,
-                  activeImageModal.photoId!,
-                );
+                deleteImageEntry(activeImageModal);
                 setActiveImageModal(null);
               }
-            : activeImageModal?.weighingLineId &&
-                activeImageModal?.weighingId &&
-                activeImageModal?.weighingPhotoId
-              ? () => {
-                  handleRemoveWeighingPhoto(
-                    activeImageModal.weighingLineId!,
-                    activeImageModal.weighingId!,
-                    activeImageModal.weighingPhotoId!,
-                  );
-                  setActiveImageModal(null);
-                }
-              : activeImageModal?.receiveLineId &&
-                  activeImageModal?.receivePhotoId
-                ? () => {
-                    handleRemoveReceiveWeighPhoto(
-                      activeImageModal.receiveLineId!,
-                      activeImageModal.receivePhotoId!,
-                    );
-                    setActiveImageModal(null);
-                  }
-                : activeImageModal?.attachmentId
-                  ? () => {
-                      handleDeleteDocument(activeImageModal.attachmentId!);
-                      setActiveImageModal(null);
-                    }
-                  : activeImageModal?.stagedProofSlot &&
-                      activeImageModal?.stagedProofIndex !== undefined
-                    ? () => {
-                        handleRemoveStagedProofPhoto(
-                          activeImageModal.stagedProofSlot!,
-                          activeImageModal.stagedProofIndex!,
-                        );
-                        setActiveImageModal(null);
-                      }
-                    : undefined
+            : undefined
         }
         onPrev={
           activeImageModal?.gallery && activeImageModal.gallery.length > 1

@@ -125,10 +125,12 @@ export const OrdersCollectionSchema = z.object({
   partial_return: z.boolean().nullable().optional(),
   returned_reason: z.string().nullable().optional(),
   /** Outstanding (item-shortfall) resolution — mirrors the prototype's
-   *  `backorderOf`/`remindOn`/`closedShort`/`shortReason`. `backorder_of`
-   *  holds the PARENT order's `no` (not an FK id — matches how `no` is used
-   *  as the human-facing reference throughout, e.g. `#{no}-B`). */
-  backorder_of: z.string().nullable().optional(),
+   *  `backorderOf`/`remindOn`/`closedShort`/`shortReason`. Unlike the
+   *  prototype's plain order-number string, `backorder_of` is a real
+   *  self-referencing FK (`orders.id`, `ON DELETE SET NULL`) to the parent
+   *  order — added 2026-09-02, enforced and navigable rather than a loose
+   *  string match on `no`. */
+  backorder_of: z.string().uuid().nullable().optional(),
   remind_on: z.string().nullable().optional(),
   closed_short: z.boolean().nullable().optional(),
   short_reason: z.string().nullable().optional(),

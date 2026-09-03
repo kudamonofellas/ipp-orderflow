@@ -72,6 +72,7 @@ export const ICONS = {
   packageProcess: "hugeicons:package-process",
   packageMoving: "hugeicons:package-moving",
   packageAdd: "hugeicons:package-add",
+  packageReturned: "hugeicons:package-receive",
   pack: "hugeicons:packaging",
   language: "hugeicons:language-square",
   download: "hugeicons:download-01",

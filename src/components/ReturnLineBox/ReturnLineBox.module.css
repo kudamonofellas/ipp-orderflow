@@ -61,6 +61,14 @@
   margin-top: var(--space-md);
 }
 
+.followUpRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding: var(--space-sm) 0;
+}
+
 .thumbnailsContainer {
   display: flex;
   flex: 1;
