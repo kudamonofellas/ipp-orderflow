@@ -1,9 +1,17 @@
 import type { ChangeEvent } from "react";
 import { Icon } from "../Icon/Icon";
 import { Button } from "../Button/Button";
+import { Thumbnails } from "../Thumbnails/Thumbnails";
 import type { OrderLinesCollection } from "../../types/directus";
 import { formatClock } from "../../lib/format";
 import styles from "./ReturnLineBox.module.css";
+
+export interface ReturnLineBoxImageEntry {
+  url: string;
+  title: string;
+  receiveLineId?: string;
+  receivePhotoId?: string;
+}
 
 /** One returned-line box inside the Customer Return card — shared between
  *  the direct (isReturned-stage) and parallel (Incoming Return) receive
@@ -34,13 +42,7 @@ export interface ReturnLineBoxProps {
   onReceiveQtyChange: (lineId: string, value: string) => void;
   photos: ReturnLineBoxPhoto[];
   onUploadPhoto: (lineId: string, e: ChangeEvent<HTMLInputElement>) => void;
-  onRemovePhoto: (lineId: string, photoId: string) => void;
-  onOpenImage: (args: {
-    url: string;
-    title: string;
-    receiveLineId?: string;
-    receivePhotoId?: string;
-  }) => void;
+  onOpenImage: (entries: ReturnLineBoxImageEntry[], index: number) => void;
   t: (key: string) => string;
 }
 
@@ -58,7 +60,6 @@ export function ReturnLineBox({
   onReceiveQtyChange,
   photos,
   onUploadPhoto,
-  onRemovePhoto,
   onOpenImage,
   t,
 }: ReturnLineBoxProps) {
@@ -131,27 +132,13 @@ export function ReturnLineBox({
       {isConfirmed ? (
         <>
           {photos.length > 0 && (
-            <div
-              className={styles.thumbnailsContainer}
-              style={{
-                justifyContent: "flex-start",
-              }}
-            >
-              {photos.map((p) => (
-                <div
-                  key={p.id}
-                  className={styles.thumbnailItem}
-                  onClick={() =>
-                    onOpenImage({
-                      url: p.url,
-                      title: `${t("Scale photo")} · ${line.name}`,
-                    })
-                  }
-                >
-                  <img src={p.url} alt="" className={styles.thumbnailImg} />
-                </div>
-              ))}
-            </div>
+            <Thumbnails
+              photos={photos.map((p) => ({
+                url: p.url,
+                title: `${t("Scale photo")} · ${line.name}`,
+              }))}
+              onOpen={onOpenImage}
+            />
           )}
         </>
       ) : isPending && canReceiveReturn ? (
@@ -196,35 +183,16 @@ export function ReturnLineBox({
               />
             </label>
             {photos.length > 0 && (
-              <div className={styles.thumbnailsContainer}>
-                {photos.map((p) => (
-                  <div
-                    key={p.id}
-                    className={styles.thumbnailItem}
-                    style={{ width: 32, height: 32 }}
-                    onClick={() =>
-                      onOpenImage({
-                        url: p.url,
-                        title: `${t("Scale photo")} · ${line.name}`,
-                        receiveLineId: line.id,
-                        receivePhotoId: p.id,
-                      })
-                    }
-                  >
-                    <img src={p.url} alt="" className={styles.thumbnailImg} />
-                    <div
-                      className={styles.thumbnailHoverTrash}
-                      title={t("Delete image")}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onRemovePhoto(line.id, p.id);
-                      }}
-                    >
-                      <Icon name="trash" size={14} />
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <Thumbnails
+                itemSize={{ width: 32, height: 32 }}
+                photos={photos.map((p) => ({
+                  url: p.url,
+                  title: `${t("Scale photo")} · ${line.name}`,
+                  receiveLineId: line.id,
+                  receivePhotoId: p.id,
+                }))}
+                onOpen={onOpenImage}
+              />
             )}
           </div>
           <div className={styles.cardActions}>

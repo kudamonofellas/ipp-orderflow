@@ -37,6 +37,7 @@
 }
 
 .modalBody {
+  position: relative;
   padding: var(--space-3xl);
   display: flex;
   align-items: center;
@@ -49,4 +50,26 @@
   max-width: 100%;
   max-height: 60vh;
   object-fit: contain;
+}
+
+.modalCounter {
+  margin-left: var(--space-sm);
+  font-weight: 400;
+  color: var(--text-secondary);
+}
+
+/* Sizing/color/icon come from Button's own iconOnly styling + the inline
+   style passed alongside this class — only absolute placement lives here. */
+.navButton {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.navButtonPrev {
+  left: var(--space-md);
+}
+
+.navButtonNext {
+  right: var(--space-md);
 }
