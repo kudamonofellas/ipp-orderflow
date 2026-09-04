@@ -62,7 +62,6 @@ export const OrdersCollectionSchema = z.object({
   customer_id: z.string().nullable().optional(),
   taken_by: z.string().nullable().optional(),
   stage: z.string().nullable().optional(),
-  status: z.string().nullable().optional(),
   channel: z.string().nullable().optional(),
   order_date: z.string().nullable().optional(),
   deliver_at: z.string().nullable().optional(),
@@ -90,6 +89,11 @@ export const OrdersCollectionSchema = z.object({
    *  the order is sent back to weigh it — the stage to return to once
    *  re-weighed, so the order doesn't re-run stages it already passed. */
   reweigh_from: z.string().nullable().optional(),
+  /** Set when a re-weigh detour completes and returns the order to its
+   *  origin (`reweigh_from` cleared) — the corrected weight invalidates
+   *  whatever DO/SI was already printed. Cleared by the "Reprinted — done"
+   *  action. */
+  needs_doc_reprint: z.boolean().nullable().optional(),
   pickup: z.boolean().nullable().optional(),
   ready_for_pickup: z.boolean().nullable().optional(),
   ready_at: z.string().nullable().optional(),
@@ -231,6 +235,10 @@ export const OrderLinesCollectionSchema = z.object({
   // per-line-box UI in OrderDetail.tsx).
   return_verified: z.boolean().nullable().optional(),
   return_verified_at: z.string().nullable().optional(),
+  // Per-line refusal reason, set at handleConfirmRefusal's write time — the
+  // merged orders.returned_reason stays as a summary string, this is the
+  // precise per-line value the Customer Return card renders.
+  returned_reason: z.string().nullable().optional(),
 });
 
 /** Directus `order_history` collection row (append-only). */

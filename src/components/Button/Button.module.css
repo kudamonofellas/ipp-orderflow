@@ -148,6 +148,11 @@
   color: var(--btn-accent);
 }
 
+.default {
+  width: fit-content;
+  max-width: 100%;
+}
+
 .fullWidth,
 .full-width {
   width: 100%;

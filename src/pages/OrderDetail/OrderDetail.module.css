@@ -167,13 +167,13 @@
   flex-wrap: wrap;
 }
 
-.proofActionsRow {
+.actionsRow {
   display: flex;
   gap: var(--space-sm);
   flex-wrap: wrap;
 }
 
-.proofActionsRow > * {
+.actionsRow > * {
   flex: 1;
   min-width: 160px;
 }
@@ -199,8 +199,7 @@
   gap: var(--space-xs);
   padding: 3px var(--space-sm);
   border-radius: var(--radius-xl);
-  font: var(--text-label);
-  font-weight: 500;
+  font: var(--text-caption);
   color: var(--text-muted);
   background: color-mix(in srgb, var(--text-secondary), transparent 90%);
   border: 1px solid var(--text-muted);
@@ -397,12 +396,6 @@
   gap: var(--space-sm);
 }
 
-.orderActionsRow {
-  display: flex;
-  flex-direction: row;
-  gap: var(--space-md);
-}
-
 /* Customer card */
 .customerCard {
   display: flex;
@@ -568,12 +561,22 @@
 .followUpRow {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: var(--space-md);
   padding: var(--space-sm) 0;
 }
 
 .followUpRow + .followUpRow {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.followUpColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.followUpColumn + .followUpColumn {
   border-top: 1px solid var(--border-subtle);
 }
 
@@ -713,18 +716,20 @@
 
 .itemHeader {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: var(--space-md);
 }
 
 .itemInfo {
   display: flex;
+  flex-direction: row;
   align-items: center;
   gap: var(--space-sm);
+  height: auto;
 }
 
-.itemIndex {
+.itemQty {
   color: var(--text-primary);
   font: var(--text-body);
   font-weight: 600;
@@ -744,7 +749,7 @@
   color: var(--text-primary);
 }
 
-.sendingBadge {
+.inputBadge {
   font: var(--text-body);
   color: var(--text-secondary);
   display: flex;
@@ -752,8 +757,9 @@
   gap: 4px;
 }
 
-.sendingInput {
+.numberInput {
   width: 48px;
+  height: 40px;
   text-align: center;
   padding: 4px 6px;
   border: 1px solid var(--border-default);
@@ -902,9 +908,8 @@
   align-items: center;
   gap: var(--space-xs);
   font: var(--text-caption);
-  color: var(--accent-primary);
-  border: 1px solid var(--accent-primary);
-  background: var(--bg-surface-hover-dark);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-default);
   padding: 4px 10px;
   border-radius: var(--radius-xl);
   align-self: flex-start;
@@ -1401,4 +1406,12 @@
   background: var(--border-subtle);
   flex-shrink: 0;
   flex: 1;
+}
+
+/* In-place refusal section */
+
+.refusalWarning {
+  font: var(--text-caption);
+  color: var(--state-warning);
+  padding: var(--space-xs) 0;
 }

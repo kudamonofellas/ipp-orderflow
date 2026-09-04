@@ -10,7 +10,7 @@
   padding: var(--space-lg);
 }
 
-.returnLineBox + .returnLineBox {
+.returnLineBox+.returnLineBox {
   margin-top: var(--space-sm);
 }
 
@@ -64,7 +64,7 @@
 .followUpRow {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: var(--space-md);
   padding: var(--space-sm) 0;
 }

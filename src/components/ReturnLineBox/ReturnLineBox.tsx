@@ -5,6 +5,19 @@ import type { OrderLinesCollection } from "../../types/directus";
 import { formatClock } from "../../lib/format";
 import styles from "./ReturnLineBox.module.css";
 
+/** kg/gram only — matches `OrderDetail.tsx`'s own `isWeightOnlyUnit` (no
+ *  shared home for either yet, so duplicated here per this component's own
+ *  established convention of keeping small leaf-level utilities local
+ *  rather than reaching back into the page's module). `order_lines.delivered`
+ *  is never written for these units (`handleConfirmDelivery` skips them
+ *  entirely — they're held back via the `short` flag instead), so `keptQty`
+ *  below can't use `delivered` as its basis for them the way it does for
+ *  counted lines. */
+function isWeightUnit(unit: string | null | undefined): boolean {
+  const u = (unit ?? "").toLowerCase();
+  return u === "kg" || u === "gram";
+}
+
 export interface ReturnLineBoxImageEntry {
   url: string;
   title: string;
@@ -67,16 +80,40 @@ export function ReturnLineBox({
   const isConfirmed = !!line.return_verified && Number(line.returned) > 0;
   const isPending = !isConfirmed && pendingAmount > 0;
 
-  // What the customer kept vs. what came back — matches the prototype's own
-  // keptOf()/returned split (Dev-OrderDetail.jsx:1092,1121-1126). `delivered`
-  // is the original hand-off count; whatever isn't in the returned/pending
-  // amount is what the customer is keeping.
+  // What the customer kept vs. what came back — matches prototype's keptOf()
+  // (Dev-OrderDetail.jsx:1092): weight-unit lines use (qty - returned), while
+  // counted lines use line.delivered directly (net kept tally).
   const returnedQty = isConfirmed ? Number(line.returned) : pendingAmount;
-  const keptQty = Math.max(0, (Number(line.delivered) || 0) - returnedQty);
+  const keptQty = isWeightUnit(line.unit)
+    ? Math.max(0, (Number(line.qty) || 0) - returnedQty)
+    : Number(line.delivered) || 0;
 
   return (
     <div className={styles.returnLineBox}>
       <div className={styles.returnLineName}>{line.name}</div>
+
+      {photos.length > 0 && (
+        <div className={styles.thumbnailsContainer}>
+          {photos.map((p, i) => (
+            <div
+              key={p.id}
+              className={styles.thumbnailItem}
+              onClick={() =>
+                onOpenImage(
+                  photos.map((p2) => ({
+                    url: p2.url,
+                    title: `${t("Scale photo")} · ${line.name}`,
+                  })),
+                  i,
+                )
+              }
+            >
+              <img src={p.url} alt="" className={styles.thumbnailImg} />
+            </div>
+          ))}
+        </div>
+      )}
+
       {isConfirmed && (
         <>
           <div className={styles.undoRow}>
@@ -117,7 +154,7 @@ export function ReturnLineBox({
       )}
 
       <div className={styles.returnPill}>
-        <Icon name="cancelled" size={20} />
+        <Icon name="packageReturned" size={20} />
         <span className={styles.detailValue}>
           {returnedQty} {line.unit}
         </span>
@@ -130,31 +167,7 @@ export function ReturnLineBox({
         </p>
       )}
 
-      {isConfirmed ? (
-        <>
-          {photos.length > 0 && (
-            <div className={styles.thumbnailsContainer}>
-              {photos.map((p, i) => (
-                <div
-                  key={p.id}
-                  className={styles.thumbnailItem}
-                  onClick={() =>
-                    onOpenImage(
-                      photos.map((p2) => ({
-                        url: p2.url,
-                        title: `${t("Scale photo")} · ${line.name}`,
-                      })),
-                      i,
-                    )
-                  }
-                >
-                  <img src={p.url} alt="" className={styles.thumbnailImg} />
-                </div>
-              ))}
-            </div>
-          )}
-        </>
-      ) : isPending && canReceiveReturn ? (
+      {isConfirmed ? null : isPending && canReceiveReturn ? (
         <>
           <div className={styles.followUpRow}>
             <input

@@ -353,10 +353,7 @@ export function useDashboardCounts(
       // Build stage counts directly from stageRes (avoid double-counting)
       const stageMap = new Map<Stage, number>();
       for (const row of stageRes.data ?? []) {
-        const val =
-          (row.stage as string | null) ??
-          (row.status as string | null) ??
-          "Draft";
+        const val = (row.stage as string | null) ?? "Draft";
         const count = extractCount(row.count);
         const stageKey = statusToStage(val);
         if (stageKey) {

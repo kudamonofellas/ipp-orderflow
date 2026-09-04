@@ -411,6 +411,7 @@ const ID: Record<string, string> = {
   "Order #": "No. pesanan",
   "Order actions": "Tindakan pesanan",
   "Order changed — reprint the updated DO/SI for the courier.": "Pesanan berubah — cetak ulang DO/SI yang diperbarui untuk kurir.",
+  "DO/SI needs reprint — weight changed": "DO/SI perlu dicetak ulang — berat berubah",
   "Order Date": "Tanggal Pesan",
   "Order ID": "No. Pesanan",
   "Order Message": "Pesan Pesanan",

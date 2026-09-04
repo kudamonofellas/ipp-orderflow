@@ -1,117 +1,67 @@
-# Order Detail — 4 Fixes From Prior Feedback
+# Implementation Plan: Immediate Condition Photo Persistence & In-Place Refusal Form
 
-Continuing unfinished feedback from another conversation. Four separate issues to address.
+Align the Dispatch / Proof of Delivery workflow and the "Customer refused / returned" sub-flow with the prototype design.
 
----
+## Proposed Changes
 
-## 1. "Total:" text showing bare at intake stage
-
-**Problem**: At intake (`new order`) stage, the "Total:" label renders with nothing after it when the line has a price but no weight, because `showLineDetail` evaluates `true` (via the `canSeePrices && hasPrice` branch), but the weight span (`stage !== "intake" && isWeighedItem`) is `false`. The price line appears correctly, but "Total:" still appears with just the weight info that isn't there.
-
-**Diagnosis**: Actually, looking closer — at intake, `stage !== "intake" && isWeighedItem` is `false`, so the weight `<span>` (which contains `t("Total:")`) is **not** rendered. The issue must be about a different scenario. Let me re-read the user's request: *"can you make this text `{t("Total:")}` in the orders' item line shows up in the new order stage, just the 'Total' text"*.
-
-This means the user **wants** the "Total:" label to appear at intake stage. Currently, the guard `stage !== "intake" && isWeighedItem` prevents it from showing at intake. The user wants at least the text "Total" to be visible at intake.
-
-**Fix**: At intake, when there's a price to show, also show "Total:" as a label before the price calculation. Change the weight span guard from `stage !== "intake" && isWeighedItem` to always show the "Total:" text when `showLineDetail` is true, but only show the measured weight after it when `stage !== "intake" && isWeighedItem`.
-
-### [MODIFY] [OrderDetail.tsx](file:///d:/IPP/IPP-OrderFlow/src/pages/OrderDetail/OrderDetail.tsx)
-
-Lines ~4125–4148: Restructure the `itemTotalRow` so that:
-- "Total:" text always shows when `showLineDetail` is true
-- The weight measurement (`totalMeasuredWeight.toFixed(2) kg` + hints) only renders when `stage !== "intake" && isWeighedItem`
-- This way at intake, the user sees `Total: 50,000 x 2  100,000` instead of just the price calc alone
+### 1. Proof of Delivery: Immediate Condition Photo DB Persistence
+#### [MODIFY] [OrderDetail.tsx](file:///d:/IPP/IPP-OrderFlow/src/pages/OrderDetail/OrderDetail.tsx)
+- **Persist on upload (`handleUploadProofPhoto`)**:
+  - When `slot === "cond"` (condition photo) is uploaded, immediately save/update the `delivery_proofs` record in Directus (`createDeliveryProof` or `updateDeliveryProof`).
+  - Set `activeProof` in component state to reference this record.
+- **Persist on removal (`handleRemoveStagedProofPhoto`)**:
+  - If a condition photo is deleted, update `delivery_proofs` to clear `cond_photo`.
+- **Hydrate on initial load (`loadData`)**:
+  - When loading the order, if an active (non-archived) `delivery_proofs` record exists in Directus, initialize `condPhotos`, `recvPhotos`, `signedPhotos`, `receiverName`, and COD outcomes from `activeProof`.
+  - This ensures that if a courier refreshes or reopens the page, the uploaded condition photo thumbnail remains and all Proof of Delivery fields stay open.
 
 ---
 
-## 2. Align "Replacement" subStatusBadge to the right of the `<td>` in OrderRow
-
-**Problem**: The `StatusPill`'s "Replacement" badge is not pushed to the right edge of the status `<td>`. The current CSS uses `display: flex` on `.statusCell` and `flex: 1; justify-content: space-between` on the pill's `.wrap`, but `<td>` doesn't behave well with `display: flex` in all browsers.
-
-> [!NOTE]
-> The file is already named `OrderRow.tsx` (not `OrderRows.tsx`), so no rename is needed.
-
-**Fix**: Update [OrderRow.module.css](file:///d:/IPP/IPP-OrderFlow/src/components/OrderRow/OrderRow.module.css) so the `.statusCell` properly pushes the replacement badge to the far right of the cell. Since `<td>` with `display: flex` can be unreliable, we'll keep the approach but ensure it works correctly or switch to a wrapper div.
-
-### [MODIFY] [OrderRow.module.css](file:///d:/IPP/IPP-OrderFlow/src/components/OrderRow/OrderRow.module.css)
-
-Update `.statusCell` styles for proper right-alignment of the Replacement badge.
-
----
-
-## 3. "Signed DO/SI not returned yet" label on order rows
-
-**Problem**: The Orders page has a "pending-docs" filter for "Signed DO/SI not returned yet" (delivered orders where `docs_returned !== true`), but there's no visual indicator on individual order rows in the table showing this status.
-
-**Fix**: 
-1. Add a `pendingDocs` boolean to the `OpenOrder` type (true when `stage === "delivered"` and `docs_returned !== true`)
-2. Fetch the `docs_returned` field in [useOrders.ts](file:///d:/IPP/IPP-OrderFlow/src/hooks/useOrders.ts)
-3. Surface it in the `toOpenOrder` mapping
-4. In [StatusPill.tsx](file:///d:/IPP/IPP-OrderFlow/src/components/StatusPill/StatusPill.tsx), add a `pendingDocs` prop that renders a badge similar to the "Replacement" `subStatusBadge`
-5. Pass it from [OrderRow.tsx](file:///d:/IPP/IPP-OrderFlow/src/components/OrderRow/OrderRow.tsx)
-
-### [MODIFY] [dashboard.ts](file:///d:/IPP/IPP-OrderFlow/src/types/dashboard.ts)
-Add `pendingDocs: boolean` to `OpenOrder`.
-
-### [MODIFY] [useOrders.ts](file:///d:/IPP/IPP-OrderFlow/src/hooks/useOrders.ts)
-- Add `docs_returned` to `orderFields`
-- Pass it through `toOpenOrder` to set `pendingDocs`
-
-### [MODIFY] [StatusPill.tsx](file:///d:/IPP/IPP-OrderFlow/src/components/StatusPill/StatusPill.tsx)
-Add `pendingDocs?: boolean` prop — renders a `subStatusBadge` with an appropriate icon/text.
-
-### [MODIFY] [OrderRow.tsx](file:///d:/IPP/IPP-OrderFlow/src/components/OrderRow/OrderRow.tsx)
-Pass `pendingDocs={order.pendingDocs}` to `<StatusPill>`.
+### 2. In-Place "Customer refused / returned" Form inside Proof of Delivery
+#### [MODIFY] [OrderDetail.tsx](file:///d:/IPP/IPP-OrderFlow/src/pages/OrderDetail/OrderDetail.tsx)
+- **Move refusal form inside Proof of Delivery Card**:
+  - Replace the separate, bottom-of-page `<Card>` (line 8144) with an inline section directly inside the Proof of Delivery card.
+  - When `showRefuseForm` is active, hide `.cardActions` (the `Mark delivered`, `Customer refused`, and `Delivery failed` buttons) and render the refusal form in-place.
+  - When *Cancel* is clicked, toggle `showRefuseForm` off and restore the standard `.cardActions` buttons.
+- **Align Refusal Form with Prototype (`Dev-OrderDetail.jsx:922-1005`)**:
+  - **Header**: *"What did the customer refuse?"* with subtext *"Each item can have its own reason + photos — different items may come back for different reasons."*
+  - **Per-item rows**:
+    - Item name, ordered/sent quantity.
+    - Number input for refused quantity (`refuseQtyMap[l.id]`), decimal for weight units (kg/gram) and integer for counted units.
+    - When refused quantity $> 0$:
+      - Per-item reason input (`refuseReasonsMap[l.id]`) with placeholder *"Reason (optional)"*.
+      - Per-item photo picker (`refusePhotosMap[l.id]`) with camera upload button and thumbnail delete (X) badge.
+  - **"Refuse the whole order" shortcut**: One-tap button that sets all active lines' refused quantities to their maximum sent/ordered quantities.
+  - **Partial Return Warning**: If some items are kept and some returned (`anyAccepted`), display: *"The customer kept some items — add the delivery proof above (received-by name, photos, and the signed/amended invoice) for those."*
+  - **Confirm Return Action (`handleConfirmRefusal`)**:
+    - Stores the per-line return quantities into `order_lines.returned`.
+    - Uploads and links per-line return photos to `line_return_photos`.
+    - Computes de-duplicated order-level `returned_reason` from per-line reasons and writes to `orders.returned_reason`.
+    - If items were kept (partial return), also persists the staged delivery proof (receiver name, photos, COD collection) into `delivery_proofs`.
+    - Transitions order stage to `'returned'` and records an event in `order_history`.
 
 ---
 
-## 4. On Hold → Resume should return to original stage, not always dispatch
-
-**Problem**: `handleHold` sets `stage: "outstanding"` but **doesn't save which stage the order was at**. Then `handleRestore` hardcodes `restoreStage = "dispatch"` for outstanding orders because `cancelled_from` was never set by `handleHold`. The user also wants the button labeled "Resume order" (not "Restore Order") when the order is on hold, with a prominent banner matching the prototype's on-hold card.
-
-**Fix**:
-
-### [MODIFY] [OrderDetail.tsx](file:///d:/IPP/IPP-OrderFlow/src/pages/OrderDetail/OrderDetail.tsx)
-
-**`handleHold` (~line 2674)**: Save the current stage into `cancelled_from` (reuse the same field Cancel uses, since an order can't be both cancelled and on-hold simultaneously) so `handleRestore` can read it back.
-
-```diff
--const holdPatch = { stage: "outstanding" };
-+const holdPatch = { stage: "outstanding", cancelled_from: stage };
-```
-
-**`handleRestore` (~line 2712)**: Use `cancelled_from` for outstanding too (instead of hardcoding `"dispatch"`).
-
-```diff
--const restoreStage = isOutstanding
--  ? "dispatch"
--  : (order.cancelled_from ?? "intake");
-+const restoreStage = order.cancelled_from ?? "intake";
-```
-
-**Button label (~line 5902–5912)**: When the order is outstanding (on hold), show "Resume order" instead of "Restore Order", and use a play icon instead of refresh.
-
-**On-hold banner**: Add a prominent on-hold banner card (like the prototype screenshot — orange border, "On hold" heading, "This order is paused — the process cannot continue until it is resumed.", with a full-width "Resume order" button) that appears when `isOutstanding` is true.
-
-### [MODIFY] [OrderDetail.module.css](file:///d:/IPP/IPP-OrderFlow/src/pages/OrderDetail/OrderDetail.module.css)
-Add styles for the on-hold banner card.
-
----
-
-## Open Questions
-
-> [!IMPORTANT]
-> **"Signed DO/SI not returned yet" badge icon**: Should this use a document/warning icon, or just text? I'll use a small document icon (`doc` or `file`) with the text "Pending DO/SI" to keep it compact in the table row.
-
-> [!IMPORTANT]
-> **On-hold banner placement**: The prototype shows it as a prominent card. Should it go above the item list (near the top of the detail view), or in the actions area at the bottom? Based on the prototype screenshot, it seems like it should be a prominent card near the top — I'll place it right below the stepper/header area.
+### 3. Styling & Polish
+#### [MODIFY] [OrderDetail.module.css](file:///d:/IPP/IPP-OrderFlow/src/pages/OrderDetail/OrderDetail.module.css)
+- Add styling for the in-place refusal card container (`.refusalBox`, `.refusalItemRow`, `.refusalItemInputs`, `.refuseWholeBtn`).
 
 ---
 
 ## Verification Plan
 
+### Automated Tests
+- Run `npm run build` (`tsc -b && vite build`) to verify type safety and bundle generation.
+
 ### Manual Verification
-- Create an order, put it on hold from various stages, then resume — verify it returns to the correct stage each time
-- Check that the "Total:" text appears at intake stage
-- Verify the "Replacement" badge aligns to the right in the order row
-- Filter by "pending-docs" and confirm the badge shows on order rows
-- Check i18n (ID locale) for new translation keys
+1. **Condition Photo Persistence**:
+   - Go to an order in `dispatch` stage.
+   - Upload an item condition photo.
+   - Refresh the page: verify the condition thumbnail is still present and the remaining Proof of Delivery fields are visible.
+2. **In-Place Refusal Form Toggle**:
+   - Click **"Customer refused / returned"**: verify the action buttons disappear and the *"What did the customer refuse?"* section appears in-place.
+   - Click **"Cancel"**: verify the form closes and the action buttons reappear.
+3. **Refusal Form Interactions**:
+   - Click **"Refuse the whole order"**: verify all line quantities fill with max quantities.
+   - Enter a reason and upload a photo for an individual line.
+   - Click **"Confirm return"**: verify the order transitions to `returned`, the return reasons/photos are saved, and the kept/returned counts display correctly.

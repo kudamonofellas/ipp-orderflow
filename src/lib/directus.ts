@@ -561,7 +561,6 @@ export interface CreateOrderInput {
   customer_legal_name?: string | null;
   channel: string;
   stage: string;
-  status?: string;
   sales: string | null;
   deliver_at: string | null;
   order_date: string;

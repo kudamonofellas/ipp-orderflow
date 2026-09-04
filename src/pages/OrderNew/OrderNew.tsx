@@ -489,7 +489,6 @@ export function OrderNew() {
       customer_legal_name: company.trim() || null,
       channel: "horeca",
       stage: "intake",
-      status: "Open",
       sales: sales || null,
       deliver_at: deliverDate || null,
       order_date: todayISO(),

@@ -142,6 +142,10 @@ The items on an order. Replaces `order.lines[]`.
 | `weigh_photo`          | UUID → `photos`          | scale-reading photo                                      |
 | `returned_weigh_photo` | UUID → `photos`          | re-weigh on return                                       |
 | `sort_order`           | INTEGER DEFAULT 0        |                                                          |
+| `inbound_return`       | NUMERIC(12,3)            | snapshot of `returned` taken when a replacement settles before goods physically arrive back — Incoming Return card |
+| `return_verified`      | BOOLEAN                  | per-line confirm flag for the Customer Return / Incoming Return receive step |
+| `return_verified_at`   | TIMESTAMP                | set alongside `return_verified`                          |
+| `returned_reason`      | TEXT                     | **added 2026-09-03** — per-line refusal reason, set by `handleConfirmRefusal`; `orders.returned_reason` stays as the merged summary string used in history text |
 
 ### `line_cuts`
 
@@ -218,9 +222,9 @@ The courier's 3-photo proof set + COD flag. Replaces `order.proof` (`{ cond, rec
 | `archived`     | BOOLEAN DEFAULT FALSE     | earlier run (true) vs current (false) |
 | `created_at`   | TIMESTAMPTZ DEFAULT now() |                                       |
 
-### `draft_weighings`
+### `draft_weighings` — **deleted live 2026-09-03**
 
-In-progress warehouse weighings that survive leaving + reopening an order. Replaces `order.draftCaps` (`{ [lineId]: [{ w, photo }] }`).
+Was going to be in-progress warehouse weighings that survive leaving + reopening an order, replacing `order.draftCaps` (`{ [lineId]: [{ w, photo }] }`). Deleted after confirming 0 rows and 0 code references — this port's weighing inputs already persist straight to `line_weighings` on blur, so the local-only-draft-state problem `draftCaps` solved in the prototype never existed here. Kept below purely as historical record of the never-used spec.
 
 | Column       | Type                      | Notes                                                                       |
 | ------------ | ------------------------- | --------------------------------------------------------------------------- |
@@ -231,9 +235,9 @@ In-progress warehouse weighings that survive leaving + reopening an order. Repla
 | `photo_id`   | UUID → `photos`           |                                                                             |
 | `created_at` | TIMESTAMPTZ DEFAULT now() |                                                                             |
 
-### `purchase_orders`
+### `purchase_orders` — **deleted live 2026-09-03**
 
-The customer PO attached to an order (photo + reference). Replaces `order.po`.
+The customer PO attached to an order (photo + reference), replacing the prototype's real `order.po` field (`Dev-OrderDetail.jsx:1460-1463` — a "PO" card showing an image or file link, `Dev-domain.js:129` cleans up `po.photoId` on order-photo GC). **Correction**: this was initially deleted alongside `draft_weighings` on the (wrong) assumption it had no prototype trace either — it does; the PO-display feature itself was just never built in this port's frontend, unlike `draft_weighings` which was genuinely superseded. 0 live rows either way, so nothing was lost — but if the PO-display feature is ever wanted, this table (spec kept below) would need recreating first.
 
 | Column       | Type                      | Notes               |
 | ------------ | ------------------------- | ------------------- |

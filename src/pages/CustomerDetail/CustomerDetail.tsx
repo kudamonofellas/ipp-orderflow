@@ -354,7 +354,7 @@ export function CustomerDetail() {
                         <td>{o.no}</td>
                         <td>
                           <StatusPill
-                            status={o.stage || o.status}
+                            status={o.stage}
                             isReplacement={o.is_replacement === true}
                             isHold={o.hold === true}
                           />

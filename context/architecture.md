@@ -9,8 +9,8 @@
 | UI          | HugeIcons via Iconify (`@iconify/react` + `@iconify-json/hugeicons`) + plain CSS | Icons + styling. No Tailwind. Light/dark theme (built), EN/Bahasa i18n (not yet built). |
 | Backend API | Directus 12.0.2 (headless CMS)     | REST/GraphQL API, auth, file storage, role ACLs, realtime. Replaces Firebase. |
 | Database    | PostgreSQL (`horeca_orders_dev` / `horeca_orders` db) | Dev vs Prod databases on Postgres. Single source of truth for all business data. |
-| Automation  | n8n (+ its own Postgres)           | WhatsApp intake workflow: parses group messages → draft orders in Directus. **Orphaned as of 2026-08-11** — the frontend's WhatsApp intake UI was fully removed (see `progress-tracker.md`); nothing reads the `messages`/draft-order rows this workflow writes anymore. Backend workflow itself was not touched. |
-| WhatsApp    | Evolution API (+ Postgres + Redis) | WhatsApp integration; webhooks → n8n. Same orphan status as Automation above.  |
+| Automation  | n8n (+ its own Postgres)           | WhatsApp intake workflow: parses group messages → draft orders in Directus. **Orphaned as of 2026-08-11** — the frontend's WhatsApp intake UI was fully removed (see `progress-tracker.md`); nothing reads the `messages`/draft-order rows this workflow writes anymore. Backend workflow itself was not touched. **The `messages` table it wrote to was deleted live 2026-09-03** (0 rows, confirmed dead — the automated-order-creation-from-WhatsApp feature is abandoned) — if this n8n workflow is ever re-triggered, its writes to `messages` will now fail outright; it was not touched/disabled in n8n itself, only its DB target was removed. |
+| WhatsApp    | Evolution API (+ Postgres + Redis) | WhatsApp integration; webhooks → n8n. Same orphan status as Automation above. Its own connection-state log, `connection_events` (855 live rows as of 2026-09-03), was deliberately left alone — still actively written, unlike `messages`. |
 | Files       | Directus Files (`directus_files`)  | Proof photos, attachments — visible across devices.                           |
 | Proxy/TLS   | Traefik + Let's Encrypt            | Reverse proxy, auto-HTTPS on `*.kudafellas.cloud`.                            |
 | Parsing Svc | Shared Parser REST API             | Node endpoint at `/order-api/parse-order`. **No longer called by the frontend** (2026-08-11 removal) — the in-app copy-paste-and-parse flow was removed; only the n8n automation path may still call it. |
@@ -31,7 +31,7 @@
 ## Storage Model
 
 - **Postgres `horeca_orders` (via Directus)**: All business data — orders, customers, products, order lines, cuts, weighings, proofs, returns, history, settings. See `context/schema/snapshot.json` for the current intake-only shape and `context/schema/target-db-schema.md` for the full target.
-- **Directus Files (`directus_files`)**: Proof photos, WhatsApp attachments, documents. Referenced from `attachments.document_file`, `messages.document_file`, and (in the target schema) from `order_lines.weigh_photo`, `delivery_proofs.*_photo`, `line_weighings.photo_id`, `line_photos.photo_id`, etc. — all as UUID FKs → `directus_files.id`. Replaces the prototype's separate `photos` table + IndexedDB `ipp-photos` store.
+- **Directus Files (`directus_files`)**: Proof photos, WhatsApp attachments, documents. Referenced from `attachments.document_file`, and (in the target schema) from `order_lines.weigh_photo`, `delivery_proofs.*_photo`, `line_weighings.photo_id`, `line_photos.photo_id`, etc. — all as UUID FKs → `directus_files.id`. Replaces the prototype's separate `photos` table + IndexedDB `ipp-photos` store.
 - **Directus Users (`directus_users`)**: Team members who log in. Replaces the prototype's `users` table / mock `DEMO_USERS`. Directus roles map to the six business roles.
 - **n8n Postgres**: n8n's own execution state. Not business data; not accessed by the frontend.
 
@@ -43,9 +43,12 @@ further down) is now almost entirely live: `orders` (full pipeline fields, plus 
 which aren't yet in `target-db-schema.md` — add them there), `customers` (incl. `company_name`, also
 missing from the target doc), `products`, `order_lines`, `line_cuts`, `line_weighings`, `line_photos`,
 `line_return_photos`, `order_history`, `delivery_proofs`, `courier_locations`, `role_permissions`,
-`settings`, and `corrections` all exist and are read/written by `src/lib/directus.ts` today. Collections
-not yet confirmed wired up in the frontend: `draft_weighings`, `purchase_orders`, `return_documents` is
-partially wired (return flow reads/writes it). Treat `target-db-schema.md` as materially accurate for
+`settings`, and `corrections` all exist and are read/written by `src/lib/directus.ts` today. `return_documents`
+is partially wired (return flow reads/writes it). **`draft_weighings` and `purchase_orders` were deleted
+live 2026-09-03** — both were 0 rows, 0 code references, and (checked directly) no trace in the prototype
+either; `draft_weighings` mapped to the prototype's `draftCaps` but was superseded before ever being wired
+up, since this port's weighing inputs already persist straight to `line_weighings` on blur instead of
+holding local-only draft state. Treat `target-db-schema.md` as materially accurate for
 column-level detail; re-verify against `snapshot.json` before relying on any single field, since it has
 drifted from the target doc before (see the `products.active` vs `products.oos` incident,
 `progress-tracker.md` 2026-08-05 — **resolved 2026-08-07**: `target-db-schema.md` corrected to document
@@ -68,7 +71,7 @@ Three collections, originally. **Relations array is empty in the snapshot** even
 - `notes` text
 - `created_at` timestamptz, `updated_at` timestamp, default `CURRENT_TIMESTAMP`
 
-**`messages`** (PK: `id` int autoincrement; `message_id` varchar(255) unique NOT NULL — WhatsApp message ID)
+**`messages`** — **deleted live 2026-09-03** (see the note earlier in this doc); kept below as historical record of the legacy schema only, this table no longer exists. (PK: `id` int autoincrement; `message_id` varchar(255) unique NOT NULL — WhatsApp message ID)
 
 - `sender_number` varchar(255), `content` text, `caption` text
 - `has_attachment` bool default false, `document_file` uuid (→ directus_files, not declared as relation)
@@ -81,7 +84,7 @@ Three collections, originally. **Relations array is empty in the snapshot** even
 
 **`attachments`** (PK: `id` int autoincrement)
 
-- `message_id` varchar(255) (FK → `messages.message_id`)
+- `message_id` varchar(255) — **the FK relation to `messages.message_id` was dropped 2026-09-03** when `messages` was deleted (0 rows ever referenced it); the column itself stays, now unconstrained
 - `order_uuid` uuid (FK → `orders.id`) — direct order link
 - `sender_phone` varchar(255)
 - `doc_type` varchar(100), `file_path` varchar(500)
@@ -100,9 +103,9 @@ Directus-adapted version.
 
 #### Existing collections (intake — kept, extended)
 
-- **`orders`** — extended with the pipeline fields below (done). `status` (legacy) coexists with `stage` (current); `stage`'s default maps to `intake`.
-- **`messages`** — WhatsApp intake log, still written by the n8n automation. **No longer read anywhere in the frontend** (2026-08-11 — the dashboard triage panel that read this collection was removed along with the rest of the in-app WhatsApp intake UI). `order_uuid` still links to `orders`.
-- **`attachments`** — kept, and still actively used — this collection is shared: some rows are WhatsApp-sourced (`message_id` set, from the n8n OCR pipeline), others are manually-logged documents added in-app (`message_id` null), and (2026-08-11) delivery-proof photos (`doc_type` `cond`/`recv`/`signed`, `proof_id` → `delivery_proofs.id`). `order_uuid` + `message_id` + `proof_id` link out.
+- **`orders`** — extended with the pipeline fields below (done). `stage`'s default maps to `intake`. The legacy `status` column (planned for the now-abandoned automated-order-creation-from-WhatsApp feature, never otherwise consumed) was removed live 2026-09-03 after confirming every live order already had `stage` set and every code reference to `status` was either a dead write (`"Open"`/`"Draft"` defaults on order creation) or a `row.stage ?? row.status` fallback that never actually triggered.
+- **`messages`** — **deleted live 2026-09-03**. Was the WhatsApp intake log; already unread by the frontend since 2026-08-11 (the dashboard triage panel that read it was removed along with the rest of the in-app WhatsApp intake UI), and confirmed 0 rows / 0 external writes before removal — the automated-order-creation-from-WhatsApp feature it belonged to is abandoned. `attachments.message_id`'s FK relation was dropped in the same pass (the field itself stays — see below — just no longer constrained to a table that no longer exists).
+- **`attachments`** — kept, and still actively used — this collection is shared: some rows are (were) WhatsApp-sourced (`message_id` set, from the n8n OCR pipeline — dead now that `messages` is gone, kept only as an unconstrained nullable field since 0 live rows ever used it), others are manually-logged documents added in-app (`message_id` null), and (2026-08-11) delivery-proof photos (`doc_type` `cond`/`recv`/`signed`, `proof_id` → `delivery_proofs.id`). `order_uuid` + `proof_id` link out.
 
 #### Pipeline collections (built — see the 2026-08-07 note above for what's confirmed live)
 
@@ -115,8 +118,8 @@ Directus-adapted version.
 - **`line_return_photos`** — return-evidence photos per line. Fields: `line_id` → `order_lines`, `photo_id` → `directus_files`, `sort_order` INT.
 - **`order_history`** — append-only audit trail (replaces `order.history[]`). Fields: `order_id` → `orders`, `at` TIMESTAMPTZ, `who` (→ `directus_users`), `what` TEXT, `stage` TEXT.
 - **`delivery_proofs`** — one row per delivery *attempt* (replaces `order.proof` + `order.proofLog[]` — the relational form of the prototype's append-only `proofLog`). Fields: `order_id` → `orders`, `cond_photo` / `recv_photo` / `signed_photo` → `directus_files` (first photo per slot only — full multi-photo lives on `attachments`, see above), `cod` BOOL, `name` TEXT, `archived` BOOL, `created_at`. Superseded attempts (hand-off reset, failed-delivery retry) get `archived: true` instead of being deleted — `readDeliveryProofs()` excludes archived rows by default, so exactly one non-archived row represents "the current/confirmed attempt" for an order at any time.
-- **`draft_weighings`** — in-progress warehouse weighings that survive leaving + reopening an order (replaces `order.draftCaps`). Fields: `order_id` → `orders`, `line_id` (no FK — drafts may outlive a line briefly), `weight` NUMERIC(10,3), `photo_id` → `directus_files`, `created_at`.
-- **`purchase_orders`** — customer PO attached to an order (photo + ref). One-to-one with `orders`. Fields: `order_id` → `orders`, `photo_id` → `directus_files`, `ref` TEXT.
+- **`draft_weighings`** — **deleted live 2026-09-03**. Was going to be in-progress warehouse weighings that survive leaving + reopening an order (mapped to the prototype's `draftCaps`), but the port's actual weighing inputs persist straight to `line_weighings` on blur instead — the local-only-state problem `draftCaps` solved never existed here, so this table was 0 rows and 0 code references from the start.
+- **`purchase_orders`** — **deleted live 2026-09-03**. Was going to be a customer PO attached to an order (photo + ref); 0 rows, 0 code references, and no trace of it in the prototype either — no feature was ever actually planned around it beyond the schema stub.
 - **`return_documents`** — signed return DO/SI artifacts. Fields: `order_id` → `orders`, `kind` (signed_doc/signed_draft/note), `photo_id` → `directus_files`.
 - **`courier_locations`** — ephemeral live courier GPS (replaces BroadcastChannel `ipp-live-loc`). Upserted per ping. Fields: `courier` (→ `directus_users`), `lat` NUMERIC(9,6), `lng` NUMERIC(9,6), `at` TIMESTAMPTZ. Prefer Directus realtime subscriptions over polling.
 - **`role_permissions`** — Owner-configurable per-role capability overrides (replaces `settings.permissions`). Composite PK (`capability`, `role`). Owner is always allowed and not stored here. Absence of a row falls back to the coded default in the domain layer.
@@ -131,16 +134,14 @@ The pipeline-tracking fields are live: `no` (unique human order number, e.g. `IP
 
 The snapshot's `relations` array is empty even though FK columns exist at the DB level. Register these as Directus M2O relations so the SDK auto-resolves them:
 
-- `messages.order_uuid` → `orders.id`
-- `attachments.message_id` → `messages.message_id`
+- ~~`messages.order_uuid` → `orders.id`~~ / ~~`attachments.message_id` → `messages.message_id`~~ / ~~`messages.document_file` → `directus_files.id`~~ — moot, `messages` deleted 2026-09-03
 - `attachments.order_uuid` → `orders.id`
 - `attachments.document_file` → `directus_files.id`
 - `attachments.proof_id` → `delivery_proofs.id` (registered live 2026-08-11, unlike the others in this list — confirmed as an actual M2O relation in Directus, not just an FK column)
-- `messages.document_file` → `directus_files.id`
 - `orders.customer_id` → `customers.id`
 - `order_lines.order_id` → `orders.id`, `order_lines.product_id` → `products.id`, `order_lines.weigh_photo` / `returned_weigh_photo` → `directus_files.id`
 - `line_cuts` / `line_weighings` / `line_photos` / `line_return_photos` `.line_id` → `order_lines.id`
-- `order_history` / `delivery_proofs` / `draft_weighings` / `purchase_orders` / `return_documents` `.order_id` → `orders.id`
+- `order_history` / `delivery_proofs` / `return_documents` `.order_id` → `orders.id`
 - `courier_locations.courier` → `directus_users.id`
 
 ### Key relationships
@@ -156,8 +157,6 @@ erDiagram
     order_lines ||--o{ line_return_photos : "return evidence"
     orders ||--o{ order_history : "audited by"
     orders ||--o{ delivery_proofs : "proven by"
-    orders ||--o{ draft_weighings : "in-progress"
-    orders ||--|{ purchase_orders : "has"
     orders ||--o{ return_documents : "has"
     directus_files ||--o{ order_lines : "weigh_photo"
     directus_files ||--o{ delivery_proofs : "cond/recv/signed"
@@ -165,8 +164,6 @@ erDiagram
     directus_files ||--o{ line_photos : "photo"
     directus_users ||--o{ orders : "sales/created by"
     courier_locations }o--|| directus_users : "courier"
-    messages }o--|| orders : "order_uuid"
-    attachments }o--|| messages : "message_id"
     attachments }o--|| orders : "order_uuid"
 ```
 

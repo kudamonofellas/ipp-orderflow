@@ -122,7 +122,7 @@ function toOpenOrder(
   return {
     id: row.id,
     no: row.no ?? "—",
-    status: row.stage ?? row.status ?? "Draft",
+    status: row.stage ?? "Draft",
     orderDate: formatDate(row.order_date ?? row.created_at),
     deliveryDate: formatDate(row.delivery_date),
     salesRep: row.sales_rep ?? "—",
@@ -167,7 +167,6 @@ export function useOpenOrders(sort: string = "-no"): UseOpenOrdersResult {
         "id",
         "no",
         "stage",
-        "status",
         "order_date",
         "delivery_date",
         "customer_name",

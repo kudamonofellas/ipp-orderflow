@@ -97,7 +97,6 @@ function toOpenOrder(
     id: string;
     no?: string | null;
     stage?: string | null;
-    status?: string | null;
     order_date?: string | null;
     delivery_date?: string | null;
     sales_rep?: string | null;
@@ -112,7 +111,7 @@ function toOpenOrder(
   },
   linesByOrderId: Map<string, OpenOrderLine[]>,
 ): OpenOrder {
-  const currentStage = row.stage ?? row.status ?? "Draft";
+  const currentStage = row.stage ?? "Draft";
   return {
     id: row.id,
     no: row.no ?? "—",
@@ -247,11 +246,7 @@ export function useOrders(
           },
         ];
       } else if (stageFilter !== "all") {
-        // Try the `stage` field first; fall back to legacy `status` for old rows.
-        filter._or = [
-          { stage: { _eq: stageFilter } },
-          { status: { _eq: stageFilter } },
-        ];
+        filter.stage = { _eq: stageFilter };
       }
 
       if (search.trim()) {
@@ -276,7 +271,6 @@ export function useOrders(
         "id",
         "no",
         "stage",
-        "status",
         "order_date",
         "delivery_date",
         "customer_name",
