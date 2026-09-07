@@ -40,8 +40,10 @@ export function Login() {
           </span>
         </div>
 
-        <h1 className={styles.title}>{t("Sign in")}</h1>
-        <p className={styles.subtitle}>{t("Enter your account credentials.")}</p>
+        <h1 className={styles.title}>{t("Log in")}</h1>
+        <p className={styles.subtitle}>
+          {t("Enter your account credentials.")}
+        </p>
 
         <form className={styles.form} onSubmit={handleSubmit}>
           <label className={styles.field}>
@@ -80,6 +82,7 @@ export function Login() {
           <Button
             type="submit"
             variant="primary"
+            buttonStyle="fullWidth"
             size="lg"
             disabled={submitting || loading || !email || !password}
           >

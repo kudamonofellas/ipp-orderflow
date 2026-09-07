@@ -32,6 +32,13 @@
       }
     },
     {
+      "collection": "connection_events",
+      "meta": null,
+      "schema": {
+        "name": "connection_events"
+      }
+    },
+    {
       "collection": "corrections",
       "meta": {
         "accountability": "all",
@@ -1109,6 +1116,144 @@
         "has_auto_increment": false,
         "foreign_key_table": "delivery_proofs",
         "foreign_key_column": "id"
+      }
+    },
+    {
+      "collection": "connection_events",
+      "field": "id",
+      "type": "integer",
+      "meta": null,
+      "schema": {
+        "name": "id",
+        "table": "connection_events",
+        "data_type": "integer",
+        "default_value": "nextval('connection_events_id_seq'::regclass)",
+        "max_length": null,
+        "numeric_precision": 32,
+        "numeric_scale": 0,
+        "is_nullable": false,
+        "is_unique": true,
+        "is_primary_key": true,
+        "is_generated": false,
+        "generation_expression": null,
+        "has_auto_increment": true,
+        "foreign_key_table": null,
+        "foreign_key_column": null
+      }
+    },
+    {
+      "collection": "connection_events",
+      "field": "instance_name",
+      "type": "text",
+      "meta": null,
+      "schema": {
+        "name": "instance_name",
+        "table": "connection_events",
+        "data_type": "text",
+        "default_value": null,
+        "max_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null,
+        "is_nullable": true,
+        "is_unique": false,
+        "is_primary_key": false,
+        "is_generated": false,
+        "generation_expression": null,
+        "has_auto_increment": false,
+        "foreign_key_table": null,
+        "foreign_key_column": null
+      }
+    },
+    {
+      "collection": "connection_events",
+      "field": "state",
+      "type": "text",
+      "meta": null,
+      "schema": {
+        "name": "state",
+        "table": "connection_events",
+        "data_type": "text",
+        "default_value": null,
+        "max_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null,
+        "is_nullable": true,
+        "is_unique": false,
+        "is_primary_key": false,
+        "is_generated": false,
+        "generation_expression": null,
+        "has_auto_increment": false,
+        "foreign_key_table": null,
+        "foreign_key_column": null
+      }
+    },
+    {
+      "collection": "connection_events",
+      "field": "status_reason",
+      "type": "integer",
+      "meta": null,
+      "schema": {
+        "name": "status_reason",
+        "table": "connection_events",
+        "data_type": "integer",
+        "default_value": null,
+        "max_length": null,
+        "numeric_precision": 32,
+        "numeric_scale": 0,
+        "is_nullable": true,
+        "is_unique": false,
+        "is_primary_key": false,
+        "is_generated": false,
+        "generation_expression": null,
+        "has_auto_increment": false,
+        "foreign_key_table": null,
+        "foreign_key_column": null
+      }
+    },
+    {
+      "collection": "connection_events",
+      "field": "raw_payload",
+      "type": "json",
+      "meta": null,
+      "schema": {
+        "name": "raw_payload",
+        "table": "connection_events",
+        "data_type": "jsonb",
+        "default_value": null,
+        "max_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null,
+        "is_nullable": true,
+        "is_unique": false,
+        "is_primary_key": false,
+        "is_generated": false,
+        "generation_expression": null,
+        "has_auto_increment": false,
+        "foreign_key_table": null,
+        "foreign_key_column": null
+      }
+    },
+    {
+      "collection": "connection_events",
+      "field": "created_at",
+      "type": "timestamp",
+      "meta": null,
+      "schema": {
+        "name": "created_at",
+        "table": "connection_events",
+        "data_type": "timestamp with time zone",
+        "default_value": "now()",
+        "max_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null,
+        "is_nullable": true,
+        "is_unique": false,
+        "is_primary_key": false,
+        "is_generated": false,
+        "generation_expression": null,
+        "has_auto_increment": false,
+        "foreign_key_table": null,
+        "foreign_key_column": null
       }
     },
     {
@@ -3378,6 +3523,59 @@
       }
     },
     {
+      "collection": "line_return_photos",
+      "field": "kind",
+      "type": "string",
+      "meta": {
+        "collection": "line_return_photos",
+        "conditions": null,
+        "display": null,
+        "display_options": null,
+        "field": "kind",
+        "group": null,
+        "hidden": false,
+        "interface": "select-dropdown",
+        "note": "Which capture moment this photo belongs to � refusal (courier, at delivery) or receive (warehouse re-weigh)",
+        "options": {
+          "choices": [
+            {
+              "text": "Refusal (courier)",
+              "value": "refusal"
+            },
+            {
+              "text": "Receive (warehouse)",
+              "value": "receive"
+            }
+          ]
+        },
+        "readonly": false,
+        "required": false,
+        "sort": 1,
+        "special": null,
+        "translations": null,
+        "validation": null,
+        "validation_message": null,
+        "width": "full"
+      },
+      "schema": {
+        "name": "kind",
+        "table": "line_return_photos",
+        "data_type": "character varying",
+        "default_value": "receive",
+        "max_length": 255,
+        "numeric_precision": null,
+        "numeric_scale": null,
+        "is_nullable": true,
+        "is_unique": false,
+        "is_primary_key": false,
+        "is_generated": false,
+        "generation_expression": null,
+        "has_auto_increment": false,
+        "foreign_key_table": null,
+        "foreign_key_column": null
+      }
+    },
+    {
       "collection": "line_weighing_photos",
       "field": "weighing_id",
       "type": "uuid",
@@ -4881,6 +5079,48 @@
         "max_length": null,
         "numeric_precision": null,
         "numeric_scale": null,
+        "is_nullable": true,
+        "is_unique": false,
+        "is_primary_key": false,
+        "is_generated": false,
+        "generation_expression": null,
+        "has_auto_increment": false,
+        "foreign_key_table": null,
+        "foreign_key_column": null
+      }
+    },
+    {
+      "collection": "order_lines",
+      "field": "returned_weight",
+      "type": "decimal",
+      "meta": {
+        "collection": "order_lines",
+        "conditions": null,
+        "display": null,
+        "display_options": null,
+        "field": "returned_weight",
+        "group": null,
+        "hidden": false,
+        "interface": "input",
+        "note": "Actual weighed kg for a catch-weight (loaf) line returned by the customer, entered by the warehouse at receive/verify time � matches the prototype's returnedWeight",
+        "options": null,
+        "readonly": false,
+        "required": false,
+        "sort": 22,
+        "special": null,
+        "translations": null,
+        "validation": null,
+        "validation_message": null,
+        "width": "full"
+      },
+      "schema": {
+        "name": "returned_weight",
+        "table": "order_lines",
+        "data_type": "numeric",
+        "default_value": null,
+        "max_length": null,
+        "numeric_precision": 10,
+        "numeric_scale": 3,
         "is_nullable": true,
         "is_unique": false,
         "is_primary_key": false,
@@ -7574,6 +7814,48 @@
         "table": "orders",
         "data_type": "boolean",
         "default_value": false,
+        "max_length": null,
+        "numeric_precision": null,
+        "numeric_scale": null,
+        "is_nullable": true,
+        "is_unique": false,
+        "is_primary_key": false,
+        "is_generated": false,
+        "generation_expression": null,
+        "has_auto_increment": false,
+        "foreign_key_table": null,
+        "foreign_key_column": null
+      }
+    },
+    {
+      "collection": "orders",
+      "field": "return_dispatch",
+      "type": "json",
+      "meta": {
+        "collection": "orders",
+        "conditions": null,
+        "display": null,
+        "display_options": null,
+        "field": "return_dispatch",
+        "group": null,
+        "hidden": false,
+        "interface": "input-code",
+        "note": "Tracked hand-off for the revised DO/SI going out to be signed ({mode, taken_by, taken_at, service?, ref?, deliver_geo?}) - mirrors the prototype's returnDispatch. Set only while return_settle==\"sign\".",
+        "options": null,
+        "readonly": false,
+        "required": false,
+        "sort": 68,
+        "special": null,
+        "translations": null,
+        "validation": null,
+        "validation_message": null,
+        "width": "full"
+      },
+      "schema": {
+        "name": "return_dispatch",
+        "table": "orders",
+        "data_type": "json",
+        "default_value": null,
         "max_length": null,
         "numeric_precision": null,
         "numeric_scale": null,

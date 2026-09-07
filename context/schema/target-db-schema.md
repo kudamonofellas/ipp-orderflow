@@ -102,6 +102,7 @@ The core pipeline record. Replaces the order objects in `store.jsx` → `seed()`
 | `is_replacement`    | BOOLEAN DEFAULT FALSE          | this order is a replacement for a returned one                                                                                                      |
 | `partial_return`    | BOOLEAN DEFAULT FALSE          |                                                                                                                                                     |
 | `returned_reason`   | TEXT                           |                                                                                                                                                     |
+| `return_dispatch`   | JSON                           | **added 2026-09-03** — tracked hand-off for a revised DO/SI going out to be signed (`return_settle === 'sign'`): `{mode: 'delivery'\|'pickup'\|'third', taken_by, taken_at, service?, ref?, deliver_geo?}`. Scoped to this one return cycle so it never overwrites the order's own `taken_by`/`pickup`/`third_party` (the original delivery's hand-off). Mirrors the prototype's `order.returnDispatch` |
 | `created_at`        | TIMESTAMPTZ DEFAULT now()      |                                                                                                                                                     |
 | `updated_at`        | TIMESTAMPTZ DEFAULT now()      |                                                                                                                                                     |
 | `hold`              | BOOLEAN DEFAULT FALSE          | **live but undocumented until 2026-08-07** — freezes an order out of the Finance-parallel-queue count while at `cold` |
@@ -146,6 +147,7 @@ The items on an order. Replaces `order.lines[]`.
 | `return_verified`      | BOOLEAN                  | per-line confirm flag for the Customer Return / Incoming Return receive step |
 | `return_verified_at`   | TIMESTAMP                | set alongside `return_verified`                          |
 | `returned_reason`      | TEXT                     | **added 2026-09-03** — per-line refusal reason, set by `handleConfirmRefusal`; `orders.returned_reason` stays as the merged summary string used in history text |
+| `returned_weight`      | NUMERIC(10,3)            | **added 2026-09-03** — actual scale-weighed kg for a catch-weight (loaf) line returned by the customer, entered by the warehouse at receive/verify time (`ReturnLineBox`'s `weighReady` gate); never written for pure weight-unit (kg/gram) lines, whose `returned` count already IS the kg amount. Matches the prototype's `returnedWeight` |
 
 ### `line_cuts`
 
@@ -184,7 +186,8 @@ Per-item proof / condition photos (the `line.photos[]` array).
 
 ### `line_return_photos`
 
-Return-evidence photos per line. Replaces `line.returnPhotos[]`.
+Return-evidence photos per line. Replaces `line.returnPhotos[]` /
+`line.returnedWeighPhoto`.
 
 | Column       | Type                          | Notes   |
 | ------------ | ----------------------------- | ------- |
@@ -192,6 +195,7 @@ Return-evidence photos per line. Replaces `line.returnPhotos[]`.
 | `line_id`    | UUID NOT NULL → `order_lines` | CASCADE |
 | `photo_id`   | UUID NOT NULL → `photos`      |         |
 | `sort_order` | INTEGER DEFAULT 0             |         |
+| `kind`       | TEXT                          | **added 2026-09-03** — `'refusal'` (courier's evidence at delivery, prototype's `line.returnPhotos[]`) or `'receive'` (warehouse's re-weigh photo, prototype's `line.returnedWeighPhoto`). Both used to write here indistinguishably; existing rows backfilled to `'receive'` (confirmed via live data — every pre-existing row was in fact a receive-step photo). New rows default to `'receive'` if omitted. |
 
 ### `order_history`
 
@@ -209,6 +213,8 @@ Append-only audit trail. Replaces `order.history[]`.
 ### `delivery_proofs`
 
 The courier's 3-photo proof set + COD flag. Replaces `order.proof` (`{ cond, recv, signed, cod, name }`). Multiple archived runs live here too (replaces `order.proofLog[]`).
+
+**Note (2026-09-03)**: `cond_photo`/`recv_photo`/`signed_photo` are single-slot "primary photo" pointers, kept for back-compat — the actual live multi-photo store for each slot is `attachments` (`doc_type` = `'cond'`/`'recv'`/`'signed'`, `proof_id` FK here), written immediately on every upload (not just at final confirm/abandon as before), so a page reload mid-attempt no longer loses anything beyond the first photo per slot.
 
 | Column         | Type                      | Notes                                 |
 | -------------- | ------------------------- | ------------------------------------- |

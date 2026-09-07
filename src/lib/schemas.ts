@@ -33,6 +33,20 @@ export const LatLngSchema = z.object({
   lng: z.number(),
 });
 
+/** `orders.return_dispatch` — the tracked hand-off for a revised DO/SI going
+ *  out to be signed (`return_settle === 'sign'`), mirroring the main
+ *  dispatch's own taken_by/pickup/third_party fields but scoped to this one
+ *  return cycle instead of overwriting the order's own hand-off state.
+ *  Matches the prototype's `order.returnDispatch` (Dev-OrderDetail.jsx:446). */
+export const ReturnDispatchSchema = z.object({
+  mode: z.enum(["delivery", "pickup", "third"]),
+  taken_by: z.string(),
+  taken_at: z.string(),
+  service: z.string().nullable().optional(),
+  ref: z.string().nullable().optional(),
+  deliver_geo: GeoStampSchema.nullable().optional(),
+});
+
 /** `orders.undo_snapshot` — the pre-delivery state, written on advancing to
  *  `delivered`, consumed (and cleared) by the quiet "Undo" action. */
 export const UndoSnapshotSchema = z.object({
@@ -43,6 +57,20 @@ export const UndoSnapshotSchema = z.object({
   proofId: z.string().nullable().optional(),
   who: z.string().nullable(),
   at: z.string(),
+  /** Per-line `order_lines` fields this action is about to overwrite,
+   *  restored by Undo alongside the `orders`-table revert above (added
+   *  2026-09-03). `changedFields` only ever covers the `orders` row — unlike
+   *  the prototype, which stores `lines` as one field on a single denormalized
+   *  order document (so its own equivalent snapshot reverts every line for
+   *  free), this port's `order_lines` is a separate table with no snapshot
+   *  of its own, so a handler that also writes lines must capture their
+   *  before-state here or Undo silently leaves them changed. */
+  lineSnapshots: z
+    .array(
+      z.object({ id: z.string(), fields: z.record(z.string(), z.unknown()) }),
+    )
+    .nullable()
+    .optional(),
 });
 
 /**
@@ -124,6 +152,7 @@ export const OrdersCollectionSchema = z.object({
   return_received_at: z.string().nullable().optional(),
   return_settle: z.string().nullable().optional(),
   return_doc: z.string().nullable().optional(),
+  return_dispatch: ReturnDispatchSchema.nullable().optional(),
   return_inbound: z.boolean().nullable().optional(),
   is_replacement: z.boolean().nullable().optional(),
   partial_return: z.boolean().nullable().optional(),
@@ -239,6 +268,12 @@ export const OrderLinesCollectionSchema = z.object({
   // merged orders.returned_reason stays as a summary string, this is the
   // precise per-line value the Customer Return card renders.
   returned_reason: z.string().nullable().optional(),
+  // Actual weighed kg for a catch-weight (loaf) line returned by the
+  // customer — entered by the warehouse at receive/verify time, matches the
+  // prototype's `returnedWeight` (Dev-OrderDetail.jsx:389). Never written
+  // for pure weight-unit (kg/gram) lines — their `returned` count already
+  // IS the kg amount.
+  returned_weight: numeric,
 });
 
 /** Directus `order_history` collection row (append-only). */
@@ -297,12 +332,13 @@ export const LineWeighingPhotosCollectionArraySchema = z.array(
 /** Directus `line_return_photos` collection row — return-evidence photos per
  *  line: the courier's refusal-evidence at delivery, and the warehouse's
  *  scale/condition photos when receiving the goods back in (both write here;
- *  distinguished only by which stage the order was at when captured). */
+ *  distinguished by `kind`, added 2026-09-03 — 'refusal' or 'receive'). */
 export const LineReturnPhotosCollectionSchema = z.object({
   id: z.string(),
   line_id: z.string(),
   photo_id: z.string(),
   sort_order: z.number().nullable().optional(),
+  kind: z.enum(["refusal", "receive"]).nullable().optional(),
 });
 export const LineReturnPhotosCollectionArraySchema = z.array(
   LineReturnPhotosCollectionSchema,

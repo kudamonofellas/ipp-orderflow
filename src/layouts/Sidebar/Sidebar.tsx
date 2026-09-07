@@ -188,10 +188,10 @@ export function Sidebar() {
             backgroundColor: "transparent",
             gap: "var(--space-md)",
           }}
-          aria-label="Sign out"
-          title={t("Sign out")}
+          aria-label="Log out"
+          title={t("Log out")}
         >
-          {!collapsed && <span>{t("Sign out")}</span>}
+          {!collapsed && <span>{t("Log out")}</span>}
         </Button>
       </div>
 

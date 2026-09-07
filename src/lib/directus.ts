@@ -1373,6 +1373,7 @@ export async function createLineReturnPhoto(input: {
   line_id: string;
   photo_id: string;
   sort_order?: number;
+  kind?: "refusal" | "receive";
 }): Promise<DirectusResult<LineReturnPhotosCollection>> {
   try {
     const raw = await getClient().request(

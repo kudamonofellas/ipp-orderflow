@@ -253,6 +253,7 @@ export function Orders() {
                     type="button"
                     variant="ghost"
                     align="left"
+                    buttonStyle="fullWidth"
                     className={[
                       styles.dropdownItem,
                       stage === opt.key ? styles.dropdownItemActive : "",

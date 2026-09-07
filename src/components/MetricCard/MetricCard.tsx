@@ -79,6 +79,7 @@ export function MetricCard({
               <Button
                 type="button"
                 variant="ghost"
+                buttonStyle="fullWidth"
                 align="left"
                 onClick={() => {
                   onRangeChange?.({ type: "all" }, "All time");
@@ -91,6 +92,7 @@ export function MetricCard({
                 type="button"
                 variant="ghost"
                 align="left"
+                buttonStyle="fullWidth"
                 onClick={() => {
                   onRangeChange?.({ type: "today" }, "Today");
                   setOpen(false);
@@ -101,6 +103,7 @@ export function MetricCard({
               <Button
                 type="button"
                 variant="ghost"
+                buttonStyle="fullWidth"
                 align="left"
                 onClick={() => {
                   onRangeChange?.({ type: "week" }, "This Week");
