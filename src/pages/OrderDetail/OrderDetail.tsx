@@ -5763,13 +5763,18 @@ export function OrderDetail() {
                         </span>
                       )}
                       {showSendingPill && (
-                        <span
-                          className={`${styles.pill} ${sendingQty < qty ? styles.pillWarning : styles.pillAccent}`}
-                        >
-                          {sendingQty < qty
-                            ? `${t("sending")} ${sendingQty} ${t("of")} ${qty} ${t("(")} ${qty - sendingQty} ${t("to follow")} ${t(")")}`
-                            : `${t("sending")} ${sendingQty} ${t("of")} ${qty}`}
-                        </span>
+                        <div className={styles.inputBadge}>
+                          {t("sending")}
+                          <span className={styles.sendingValue}>
+                            {sendingQty}
+                          </span>
+                          {t("of")} {qty}
+                          {sendingQty < qty && (
+                            <span className={styles.toFollowHint}>
+                              {"("} {qty - sendingQty} {t("to follow")} {")"}
+                            </span>
+                          )}
+                        </div>
                       )}
                       {/* Cold Storage only, and never on kg/gram — matches
                           the prototype's exact gate (`Dev-OrderDetail.jsx
@@ -5973,7 +5978,10 @@ export function OrderDetail() {
                     {(lineCutsByLine[line.id] ?? []).length > 0 && (
                       <div className={styles.cuttingInstructions}>
                         {(lineCutsByLine[line.id] ?? []).map((c) => (
-                          <div key={c.id} className={styles.cuttingInstruction}>
+                          <div
+                            key={c.id}
+                            className={`${styles.pill} ${styles.pillAccent}`}
+                          >
                             <Icon name="knife" size={14} />
                             <span>{c.text}</span>
                           </div>
@@ -6407,570 +6415,6 @@ export function OrderDetail() {
               );
             })()}
 
-          {/* "Customer return" card — separate from the "Returned" status
-              banner up in the stepper section (which stays a plain status
-              banner for every returned order); this one is the actual
-              receive/decide/sign workflow, placed right after the Delivery
-              Proof card. Two things tell an order is returned: the plain
-              banner, and this card. */}
-          {isReturned && !isCancelled && (
-            <Card className={styles.errorCard}>
-              <div className={styles.headerRow}>
-                <h3 className={styles.sectionTitle}>Customer return</h3>
-              </div>
-              <div className={styles.cardContent}>
-                {canReceiveReturn && !order.return_received && (
-                  <div className={styles.cardListColumn}>
-                    <span className={styles.row}>
-                      <p className={styles.fieldLabel}>{t("Warehouse ")}</p>
-                      <p className={styles.muted}>— receive & verify</p>
-                      <div className={styles.separator}></div>
-                    </span>
-                    <p>
-                      {t(
-                        "Weigh or count what actually came back, then confirm.",
-                      )}
-                    </p>
-                  </div>
-                )}
-                {lines
-                  .filter((l) => Number(l.returned) > 0)
-                  .map((l) => (
-                    <ReturnLineBox
-                      key={l.id}
-                      line={l}
-                      pendingAmount={Number(l.returned)}
-                      returnedReason={l.returned_reason}
-                      orderReturnReceived={order.return_received}
-                      canReceiveReturn={canReceiveReturn}
-                      confirming={confirmingReceive}
-                      reopening={undoingInbound}
-                      onConfirm={handleConfirmReturnLine}
-                      onReopen={handleReopenReturnLine}
-                      receiveQtyValue={receiveQtyMap[l.id]}
-                      onReceiveQtyChange={(lineId, value) =>
-                        setReceiveQtyMap((prev) => ({
-                          ...prev,
-                          [lineId]: value,
-                        }))
-                      }
-                      weightValue={verifyWeightMap[l.id]}
-                      onWeightChange={(lineId, value) =>
-                        setVerifyWeightMap((prev) => ({
-                          ...prev,
-                          [lineId]: value,
-                        }))
-                      }
-                      refusalPhotos={refusePhotosMap[l.id] ?? []}
-                      photos={receivePhotosMap[l.id] ?? []}
-                      onUploadPhoto={handleUploadReceiveWeighPhoto}
-                      onRemovePhoto={handleRemoveReceiveWeighPhoto}
-                      onOpenImage={openImageGallery}
-                      t={t}
-                    />
-                  ))}
-
-                {inSettleBucket && (
-                  <div className={styles.cardListColumn}>
-                    {canDecideReturn && (
-                      <span className={styles.row}>
-                        <p className={styles.fieldLabel}>{t("Admin ")}</p>
-                        <p className={styles.muted}>
-                          — update Accurate, then process
-                        </p>
-                        <div className={styles.separator}></div>
-                      </span>
-                    )}
-                    {canDecideReturn ? (
-                      <>
-                        {!order.return_received && (
-                          <p>
-                            {lines.some(
-                              (l) =>
-                                Number(l.returned) > 0 && isWeighedUnit(l.unit),
-                            )
-                              ? t(
-                                  "Goods not back yet — counted quantities are exact; the kg/loaf credit is provisional until the warehouse weighs the return.",
-                                )
-                              : t(
-                                  "Goods not back yet — quantities are exact (counted). You can prepare everything now.",
-                                )}
-                          </p>
-                        )}
-                        <select
-                          className={styles.editInput}
-                          style={{ width: "100%" }}
-                          value={selectedDocType}
-                          onChange={(e) => setSelectedDocType(e.target.value)}
-                        >
-                          <option value="">
-                            {t("— how is this settled in Accurate? —")}
-                          </option>
-                          {RETURN_DOC_OPTIONS.map((opt) => (
-                            <option key={opt.key} value={opt.key}>
-                              {t(opt.label)}
-                            </option>
-                          ))}
-                        </select>
-                        {selectedDocType === "return-note" && (
-                          <>
-                            <label className={styles.row}>
-                              <Checkbox
-                                size="sm"
-                                checked={retPrinted}
-                                onChange={setRetPrinted}
-                                label={t("Input in Accurate & printed")}
-                              />
-                              {t("Input in Accurate & printed")}
-                            </label>
-
-                            <div
-                              className={styles.proofFieldRow}
-                              style={{
-                                borderColor:
-                                  noteFileIds.length > 0
-                                    ? "var(--accent-primary)"
-                                    : "var(--border-subtle)",
-                              }}
-                            >
-                              <div className={styles.proofFieldMain}>
-                                <div className={styles.left}>
-                                  <Icon
-                                    name="check"
-                                    size={18}
-                                    className={
-                                      noteFileIds.length > 0
-                                        ? styles.proofCheckFilled
-                                        : styles.proofCheckEmpty
-                                    }
-                                  />
-                                  <span className={styles.fieldLabel}>
-                                    {noteFileIds.length > 0
-                                      ? t("Photo attached")
-                                      : t(
-                                          "Photo of the return note (optional)",
-                                        )}
-                                  </span>
-                                </div>
-                                {noteFileIds.length > 0 && (
-                                  <div className={styles.thumbnailsContainer}>
-                                    {noteFileIds.map((fileId) => (
-                                      <div
-                                        key={fileId}
-                                        className={styles.thumbnailItem}
-                                        onClick={() =>
-                                          setActiveImageModal({
-                                            url: getAssetUrl(fileId),
-                                            title: t(
-                                              "Photo of the return note",
-                                            ),
-                                          })
-                                        }
-                                      >
-                                        <img
-                                          src={getAssetUrl(fileId)}
-                                          alt=""
-                                          className={styles.thumbnailImg}
-                                        />
-                                        <div
-                                          className={styles.thumbnailHoverTrash}
-                                          title={t("Delete image")}
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleRemoveReturnNotePhoto(fileId);
-                                          }}
-                                        >
-                                          <Icon name="trash" size={14} />
-                                        </div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                                <input
-                                  ref={noteFileInputRef}
-                                  type="file"
-                                  accept="image/*"
-                                  style={{ display: "none" }}
-                                  onChange={handleUploadReturnNotePhoto}
-                                />
-                                <Button
-                                  type="button"
-                                  variant="tertiary"
-                                  icon="camera"
-                                  iconOnly
-                                  title={t("Upload")}
-                                  onClick={() =>
-                                    noteFileInputRef.current?.click()
-                                  }
-                                />
-                              </div>
-                            </div>
-                          </>
-                        )}
-
-                        <div className={styles.cardActions}>
-                          <Button
-                            type="button"
-                            variant="primary"
-                            buttonStyle="fullWidth"
-                            icon="check"
-                            onClick={handleConfirmSettle}
-                            disabled={
-                              !selectedDocType ||
-                              confirmingSettle ||
-                              (selectedDocType === "return-note" &&
-                                !retPrinted) ||
-                              (!!selectedDoc &&
-                                !selectedDoc.replacement &&
-                                selectedDoc.key !== "revise-return" &&
-                                !order.return_received)
-                            }
-                          >
-                            {confirmingSettle
-                              ? t("Saving…")
-                              : !selectedDoc
-                                ? t("Confirm & close")
-                                : selectedDoc.replacement
-                                  ? t("Send replacement — back to Cold Storage")
-                                  : selectedDoc.key === "revise-return"
-                                    ? t("Send revised DO/SI for signing")
-                                    : t("Confirm & close")}
-                          </Button>
-                        </div>
-                        <div className={styles.hints}>
-                          {selectedDoc &&
-                            !selectedDoc.replacement &&
-                            selectedDoc.key !== "revise-return" &&
-                            !order.return_received && (
-                              <p
-                                className={styles.infoHint}
-                                style={{ color: "var(--state-warning)" }}
-                              >
-                                {t(
-                                  "The order closes only after the warehouse receives the goods.",
-                                )}
-                              </p>
-                            )}
-                          {selectedDoc && (
-                            <div className={styles.infoHint}>
-                              <div className={styles.iconWrapper}>
-                                <Icon
-                                  name="infoCircle"
-                                  style={{ color: "var(--text-muted)" }}
-                                />
-                              </div>
-                              <p className={styles.muted}>
-                                {selectedDoc.key === "single-replace"
-                                  ? t(
-                                      "ONE document: the original DO/SI is revised to show what the customer finally keeps incl. the replacement. Best for a like-for-like swap.",
-                                    )
-                                  : selectedDoc.key === "separate-replace"
-                                    ? t(
-                                        "TWO documents: a Sales Return Note credits what came back + a NEW DO/SI for the replacement shipment. Best when the replacement differs (item / kg / price) or ships another day.",
-                                      )
-                                    : selectedDoc.key === "revise-return"
-                                      ? t(
-                                          "The revised DO/SI goes to the customer to sign before the order closes.",
-                                        )
-                                      : t(
-                                          "Returned goods credited — the order closes.",
-                                        )}
-                              </p>
-                            </div>
-                          )}
-                        </div>
-                      </>
-                    ) : (
-                      <p className={styles.infoHint}>
-                        {order.return_received
-                          ? t(
-                              "Received — waiting for an admin to update the Accurate documents and decide.",
-                            )
-                          : t(
-                              "Waiting for an admin to update Accurate & decide — this can run before the goods arrive.",
-                            )}
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                {inSignBucket && (
-                  <div className={styles.cardListColumn}>
-                    {!canSignReturn ? (
-                      <p className={styles.muted}>
-                        {t(
-                          "Revised DO/SI is out with the customer to sign — waiting for the signed copy.",
-                        )}
-                      </p>
-                    ) : !order.return_dispatch?.taken_by ? (
-                      /* PHASE A — not yet taken: the courier takes the
-                         revised DO/SI for signing via the same tracked
-                         hand-off as a normal dispatch. */
-                      <>
-                        <div className={styles.row}>
-                          <p className={styles.fieldLabel}>
-                            {t("Take the revised DO/SI for signing")}
-                          </p>
-                          <div className={styles.separator}></div>
-                        </div>
-                        <p className={styles.secondary}>
-                          {t(
-                            "Carry the revised DO/SI to the customer, get it signed, and bring the signed copy back.",
-                          )}
-                        </p>
-                        {!showThirdPartyForm ? (
-                          <div className={styles.cardActions}>
-                            <Button
-                              type="button"
-                              variant="primary"
-                              icon="delivered"
-                              buttonStyle="fullWidth"
-                              onClick={handleTakeReturnDispatchOwnCourier}
-                              disabled={choosingMode}
-                            >
-                              {t("Take this delivery")}
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              icon="pickup"
-                              buttonStyle="fullWidth"
-                              onClick={handleTakeReturnDispatchPickup}
-                              disabled={choosingMode}
-                            >
-                              {t("Customer collects & signs")}
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              icon="scooter"
-                              buttonStyle="fullWidth"
-                              onClick={() => setShowThirdPartyForm(true)}
-                              disabled={choosingMode}
-                            >
-                              {t("Send by online courier (Gojek / Grab …)")}
-                            </Button>
-                          </div>
-                        ) : (
-                          <div className={styles.thirdPartyForm}>
-                            <select
-                              className={styles.editInput}
-                              aria-label={t("Courier service")}
-                              value={thirdPartyService}
-                              onChange={(e) =>
-                                setThirdPartyService(e.target.value)
-                              }
-                            >
-                              {THIRD_PARTY_SERVICES.map((svc) => (
-                                <option key={svc} value={svc}>
-                                  {svc === "Other" ? t("Other") : svc}
-                                </option>
-                              ))}
-                            </select>
-                            <input
-                              type="text"
-                              className={styles.editInput}
-                              placeholder={t("Tracking / order ref (optional)")}
-                              value={thirdPartyRef}
-                              onChange={(e) => setThirdPartyRef(e.target.value)}
-                              style={{ flex: 1, minWidth: 160 }}
-                            />
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              onClick={() => setShowThirdPartyForm(false)}
-                              disabled={choosingMode}
-                            >
-                              {t("Cancel")}
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="primary"
-                              onClick={handleConfirmReturnDispatchThirdParty}
-                              disabled={choosingMode}
-                            >
-                              {choosingMode
-                                ? t("Saving…")
-                                : `${t("Hand to")} ${thirdPartyService}`}
-                            </Button>
-                          </div>
-                        )}
-                        {canDecideReturn && (
-                          <Button
-                            type="button"
-                            variant="tertiary"
-                            size="sm"
-                            style={{ marginTop: 8 }}
-                            onClick={handleChangeReturnDocument}
-                          >
-                            {t("Change document")}
-                          </Button>
-                        )}
-                      </>
-                    ) : (
-                      /* PHASE B — taken: deliver, capture the signed copy,
-                         close. Own-courier mode also streams live GPS
-                         (silent — see the useDriverLive call above). */
-                      <>
-                        <span className={styles.row}>
-                          <p className={styles.fieldLabel}>
-                            {t("Revised DO/SI ")}
-                          </p>
-                          <p className={styles.muted}>— out for signing</p>
-                          <div className={styles.separator}></div>
-                        </span>
-                        <div className={styles.rowStretch}>
-                          <p className={styles.secondary}>
-                            {t("Taken by")}{" "}
-                            <strong>
-                              {displayName(order.return_dispatch.taken_by)}
-                            </strong>
-                            {order.return_dispatch.taken_at
-                              ? ` on ${formatTakenAt(order.return_dispatch.taken_at)}`
-                              : ""}
-                            {order.return_dispatch.mode === "third" &&
-                            order.return_dispatch.service
-                              ? ` · ${order.return_dispatch.service}${
-                                  order.return_dispatch.ref
-                                    ? ` (${order.return_dispatch.ref})`
-                                    : ""
-                                }`
-                              : ""}
-                            {order.return_dispatch.mode === "pickup"
-                              ? ` · ${t("customer collects")}`
-                              : ""}
-                          </p>
-                          <Button
-                            type="button"
-                            variant="tertiary"
-                            onClick={handleResetReturnDispatch}
-                            className={styles.inlineButton}
-                          >
-                            {t("change")}
-                          </Button>
-                        </div>
-
-                        <div className={styles.proofFieldMain}>
-                          <div className={styles.left}>
-                            <Icon
-                              name="check"
-                              size={18}
-                              className={
-                                signedDocFileId
-                                  ? styles.proofCheckFilled
-                                  : styles.proofCheckEmpty
-                              }
-                            />
-                            <span className={styles.fieldLabel}>
-                              {signedDocFileId
-                                ? t("Photo attached")
-                                : `${t("Photo of the signed DO/SI")} · ${t("required")}`}
-                            </span>
-                          </div>
-                          {signedDocFileId && (
-                            <div className={styles.thumbnailsContainer}>
-                              <div
-                                className={styles.thumbnailItem}
-                                onClick={() =>
-                                  setActiveImageModal({
-                                    url: getAssetUrl(signedDocFileId),
-                                    title: t("Photo of the signed DO/SI"),
-                                  })
-                                }
-                              >
-                                <img
-                                  src={getAssetUrl(signedDocFileId)}
-                                  alt=""
-                                  className={styles.thumbnailImg}
-                                />
-                                <div
-                                  className={styles.thumbnailHoverTrash}
-                                  title={t("Delete image")}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setSignedDocFileId(null);
-                                  }}
-                                >
-                                  <Icon name="trash" size={14} />
-                                </div>
-                              </div>
-                            </div>
-                          )}
-                          <input
-                            ref={signedDocFileInputRef}
-                            type="file"
-                            accept="image/*"
-                            style={{ display: "none" }}
-                            onChange={handleUploadSignedDoc}
-                          />
-                          <Button
-                            type="button"
-                            variant="tertiary"
-                            icon="camera"
-                            iconOnly
-                            title={t("Upload")}
-                            onClick={() =>
-                              signedDocFileInputRef.current?.click()
-                            }
-                          />
-                        </div>
-                        {!signedDocFileId && (
-                          <p
-                            className={styles.infoHint}
-                            style={{ color: "var(--warning-text)" }}
-                          >
-                            {t(
-                              "Add the signed-DO/SI photo to close the order.",
-                            )}
-                          </p>
-                        )}
-                        {signedDocFileId && !order.return_received && (
-                          <p
-                            className={styles.infoHint}
-                            style={{ color: "var(--warning-text)" }}
-                          >
-                            {t(
-                              "The order closes only after the warehouse receives the goods.",
-                            )}
-                          </p>
-                        )}
-                        <div className={styles.cardActions}>
-                          <Button
-                            type="button"
-                            variant="primary"
-                            icon="check"
-                            buttonStyle="fullWidth"
-                            onClick={handleCloseSignedReturn}
-                            disabled={
-                              !signedDocFileId ||
-                              !order.return_received ||
-                              closingSigned
-                            }
-                          >
-                            {closingSigned
-                              ? t("Saving…")
-                              : t("Mark signed & close")}
-                          </Button>
-                        </div>
-                        {canDecideReturn && (
-                          <Button
-                            type="button"
-                            variant="tertiary"
-                            size="sm"
-                            style={{ marginTop: 6 }}
-                            onClick={handleChangeReturnDocument}
-                          >
-                            {t("Change document")}
-                          </Button>
-                        )}
-                      </>
-                    )}
-                  </div>
-                )}
-              </div>
-            </Card>
-          )}
-
           {/* Part-delivered decision card — separate from the "Outstanding"
               status card up in the stepper section (which stays a plain
               status banner for every outstanding order); this one renders
@@ -7350,173 +6794,6 @@ export function OrderDetail() {
               </Card>
             )}
 
-          {/* Return Settlement — a persistent, ungated record of how a return
-              was settled in Accurate (kept on the order for disputes), unlike
-              the Documents section below which is Admin/Finance/Owner only.
-              Ported from the prototype's own ungated `order.returnDoc` card
-              (Dev-OrderDetail.jsx:1492-1508). */}
-          {order.return_doc && (
-            <Card>
-              <div className={styles.headerRow}>
-                <h3 className={styles.sectionTitle}>
-                  {t("Return settlement")}
-                </h3>
-              </div>
-              <div className={styles.cardContent}>
-                <div className={styles.docList}>
-                  <div className={styles.docRow}>
-                    <p>
-                      {t("Document")} · <strong>{order.return_doc}</strong>
-                    </p>
-                  </div>
-
-                  {lines
-                    .filter((l) => Number(l.returned) > 0)
-                    .map((l) => (
-                      <div key={l.id} className={styles.docRow}>
-                        <div className={styles.docTop}>
-                          <p>
-                            {l.name} · {t("returned")}{" "}
-                            <strong>
-                              {l.returned} {l.unit}
-                            </strong>
-                          </p>
-                          {renderThumbnails(
-                            (receivePhotosMap[l.id] ?? []).map((p) => ({
-                              url: p.url,
-                              title: `${t("Scale photo")} · ${l.name}`,
-                              receiveLineId: l.id,
-                              receivePhotoId: p.id,
-                            })),
-                          )}
-                        </div>
-                      </div>
-                    ))}
-
-                  {returnDocs.some((d) => d.photo_id) && (
-                    <div className={styles.docRow}>
-                      <div className={styles.docTop}>
-                        <p className={styles.docType}>
-                          {t("Return documents")}
-                        </p>
-                        {renderThumbnails(
-                          returnDocs
-                            .filter((d) => d.photo_id)
-                            .map((d) => ({
-                              url: getAssetUrl(d.photo_id!),
-                              title: RETURN_DOC_KIND_LABELS[d.kind] ?? d.kind,
-                            })),
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </Card>
-          )}
-
-          {/* Incoming Return — the replacement was ordered before the goods
-              came back; the warehouse receives + verifies them here, in
-              parallel, whatever stage the replacement is now at. Same
-              visual chrome as the Customer Return card above — this is the
-              stage-independent counterpart for a replacement that already
-              re-entered the pipeline. `!isReturned` is a defensive guard,
-              not just a stylistic choice: `return_inbound` should only ever
-              be true once `stage` has moved past `returned` (settling into
-              a replacement flips both in the same write) — but a stale or
-              hand-edited row can leave `return_inbound` true while `stage`
-              never actually left `returned`, which would otherwise render
-              this card *and* the isReturned card above simultaneously for
-              the same order. Ported from the prototype's
-              `order.returnInbound` card (Dev-OrderDetail.jsx:1535-1561). */}
-          {!isReturned && order.return_inbound && (
-            <Card className={styles.errorCard}>
-              <div className={styles.headerRow}>
-                <h3 className={styles.sectionTitle}>Customer return</h3>
-              </div>
-              <p className={styles.fieldLabel}>
-                {t("Warehouse — receive & verify")}
-              </p>
-              <p style={{ margin: "0.25rem 0 0.75rem" }}>
-                {t(
-                  "The replacement is already in the pipeline — weigh/verify the returned goods when they arrive.",
-                )}
-              </p>
-              {lines
-                .filter(
-                  (l) => Number(l.inbound_return) > 0 || l.return_verified,
-                )
-                .map((l) => (
-                  <ReturnLineBox
-                    key={l.id}
-                    line={l}
-                    pendingAmount={Number(l.inbound_return)}
-                    returnedReason={l.returned_reason}
-                    orderReturnReceived={order.return_received}
-                    canReceiveReturn={canReceiveReturn}
-                    confirming={confirmingInbound}
-                    reopening={undoingInbound}
-                    onConfirm={handleConfirmInboundLine}
-                    onReopen={handleReopenInboundLine}
-                    receiveQtyValue={receiveQtyMap[l.id]}
-                    onReceiveQtyChange={(lineId, value) =>
-                      setReceiveQtyMap((prev) => ({
-                        ...prev,
-                        [lineId]: value,
-                      }))
-                    }
-                    weightValue={verifyWeightMap[l.id]}
-                    onWeightChange={(lineId, value) =>
-                      setVerifyWeightMap((prev) => ({
-                        ...prev,
-                        [lineId]: value,
-                      }))
-                    }
-                    refusalPhotos={refusePhotosMap[l.id] ?? []}
-                    photos={receivePhotosMap[l.id] ?? []}
-                    onUploadPhoto={handleUploadReceiveWeighPhoto}
-                    onRemovePhoto={handleRemoveReceiveWeighPhoto}
-                    onOpenImage={openImageGallery}
-                    t={t}
-                  />
-                ))}
-              <p className={styles.infoHint} style={{ marginTop: "0.75rem" }}>
-                {t(
-                  "Waiting for an admin to update Accurate & decide — this can run before the goods arrive.",
-                )}
-              </p>
-            </Card>
-          )}
-          {!isReturned &&
-            !order.return_inbound &&
-            order.return_received &&
-            lines.some((l) => Number(l.returned) > 0) &&
-            !isDelivered &&
-            !isCancelled && (
-              <div className={styles.undoRow}>
-                <div className={styles.left}>
-                  <Icon name="infoCircle" />
-                  {t("Incoming return received")}
-                  {order.return_received_at
-                    ? ` · ${formatClock(order.return_received_at)}`
-                    : ""}
-                </div>
-                {canReceiveReturn && (
-                  <Button
-                    type="button"
-                    variant="tertiary"
-                    icon="undo"
-                    size="sm"
-                    className={styles.inlineButton}
-                    onClick={handleUndoInbound}
-                    disabled={undoingInbound}
-                  >
-                    {t("Undo")}
-                  </Button>
-                )}
-              </div>
-            )}
-
           {/* Stage Action Controls */}
           {/* Mirrors every top-level gate inside the block below — the div
            *  itself has no visible content of its own, so it must only
@@ -7545,6 +6822,7 @@ export function OrderDetail() {
               showTermsRow ||
               showTermsDone ||
               showFinanceGateForm ||
+              showFinanceUndoRow ||
               (canUndo && !!order.undo_snapshot) ||
               (canTrackCourier &&
                 handoffMode === "delivery" &&
@@ -7571,6 +6849,39 @@ export function OrderDetail() {
                     {advancing ? t("Saving…") : t(flow.advanceLabel)}
                   </Button>
                 )}
+
+              {showFinanceUndoRow && (
+                <Card className={styles.warningCard}>
+                  <div className={styles.headerRow}>
+                    <div
+                      className={styles.sectionTitle}
+                      style={{ color: "var(--state-warning)" }}
+                    >
+                      {t("Payment cleared by Finance")}
+                    </div>
+                  </div>
+                  <p>
+                    {t("Payment cleared by Finance")} —{" "}
+                    {stage === "cold"
+                      ? t("cleared while still at Cold Storage.")
+                      : t("the order has moved on past the gate.")}{" "}
+                    {t("Cleared by mistake?")}
+                  </p>
+                  <div className={styles.cardActions}>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={handleUndoFinanceClear}
+                      disabled={approvingFinance}
+                      buttonStyle="fullWidth"
+                      icon="undo"
+                      tone="warning"
+                    >
+                      {t("Undo payment clearance")}
+                    </Button>
+                  </div>
+                </Card>
+              )}
 
               {/* Cold Storage — "Pull & weigh" card, replacing the generic
                   advance button for this stage. Ported from the prototype's
@@ -9129,45 +8440,6 @@ export function OrderDetail() {
                 </Card>
               )}
 
-              {showFinanceUndoRow && (
-                <Card className={styles.warningCard}>
-                  <div className={styles.headerRow}>
-                    <div className={styles.row}>
-                      <Icon
-                        name="paymentSuccess"
-                        size={20}
-                        style={{ color: "var(--state-warning)" }}
-                      />
-                      <div
-                        className={styles.sectionTitle}
-                        style={{ color: "var(--state-warning)" }}
-                      >
-                        {t("Payment cleared by Finance")}
-                      </div>
-                    </div>
-                  </div>
-                  <p>
-                    {t("Payment cleared by Finance")} —{" "}
-                    {stage === "cold"
-                      ? t("cleared while still at Cold Storage.")
-                      : t("the order has moved on past the gate.")}{" "}
-                    {t("Cleared by mistake?")}
-                  </p>
-                  <div className={styles.cardActions}>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      onClick={handleUndoFinanceClear}
-                      disabled={approvingFinance}
-                      icon="undo"
-                      tone="warning"
-                    >
-                      {t("Undo payment clearance")}
-                    </Button>
-                  </div>
-                </Card>
-              )}
-
               {showFinanceGateForm && (
                 <Card>
                   <div className={styles.headerRowLeft}>
@@ -9390,6 +8662,736 @@ export function OrderDetail() {
                   />
                 )}
             </div>
+          )}
+
+          {/* Incoming Return — the replacement was ordered before the goods
+              came back; the warehouse receives + verifies them here, in
+              parallel, whatever stage the replacement is now at. Same
+              visual chrome as the Customer Return card above — this is the
+              stage-independent counterpart for a replacement that already
+              re-entered the pipeline. `!isReturned` is a defensive guard,
+              not just a stylistic choice: `return_inbound` should only ever
+              be true once `stage` has moved past `returned` (settling into
+              a replacement flips both in the same write) — but a stale or
+              hand-edited row can leave `return_inbound` true while `stage`
+              never actually left `returned`, which would otherwise render
+              this card *and* the isReturned card above simultaneously for
+              the same order. Ported from the prototype's
+              `order.returnInbound` card (Dev-OrderDetail.jsx:1535-1561) —
+              including its role gate: the prototype wraps the WHOLE card in
+              `['Warehouse','Owner'].includes(role)`, no read-only fallback
+              for anyone else (unlike the main Customer Return card above).
+              This is a Warehouse-internal operational note, not something
+              Courier/Admin/Finance/Production ever see — reported directly
+              (Courier was seeing this card for order 260821023). */}
+          {!isReturned && order.return_inbound && canReceiveReturn && (
+            <Card className={styles.errorCard}>
+              <div className={styles.headerRow}>
+                <h3 className={styles.sectionTitle}>
+                  Incoming return — receive & verify
+                </h3>
+              </div>
+              <div className={styles.cardContent}>
+                <div className={styles.cardListColumn}>
+                  <p>
+                    {t(
+                      "The replacement is already in the pipeline — weigh/verify the returned goods when they arrive.",
+                    )}
+                  </p>
+                </div>
+                {lines
+                  .filter(
+                    (l) => Number(l.inbound_return) > 0 || l.return_verified,
+                  )
+                  .map((l) => (
+                    <ReturnLineBox
+                      key={l.id}
+                      line={l}
+                      pendingAmount={Number(l.inbound_return)}
+                      returnedReason={l.returned_reason}
+                      orderReturnReceived={order.return_received}
+                      canReceiveReturn={canReceiveReturn}
+                      confirming={confirmingInbound}
+                      reopening={undoingInbound}
+                      onConfirm={handleConfirmInboundLine}
+                      onReopen={handleReopenInboundLine}
+                      receiveQtyValue={receiveQtyMap[l.id]}
+                      onReceiveQtyChange={(lineId, value) =>
+                        setReceiveQtyMap((prev) => ({
+                          ...prev,
+                          [lineId]: value,
+                        }))
+                      }
+                      weightValue={verifyWeightMap[l.id]}
+                      onWeightChange={(lineId, value) =>
+                        setVerifyWeightMap((prev) => ({
+                          ...prev,
+                          [lineId]: value,
+                        }))
+                      }
+                      refusalPhotos={refusePhotosMap[l.id] ?? []}
+                      photos={receivePhotosMap[l.id] ?? []}
+                      onUploadPhoto={handleUploadReceiveWeighPhoto}
+                      onRemovePhoto={handleRemoveReceiveWeighPhoto}
+                      onOpenImage={openImageGallery}
+                      t={t}
+                    />
+                  ))}
+              </div>
+              <p className={styles.infoHint} style={{ marginTop: "0.75rem" }}>
+                {t(
+                  "Waiting for an admin to update Accurate & decide — this can run before the goods arrive.",
+                )}
+              </p>
+            </Card>
+          )}
+          {!isReturned &&
+            !order.return_inbound &&
+            order.return_received &&
+            lines.some((l) => Number(l.returned) > 0) &&
+            !isDelivered &&
+            !isCancelled && (
+              <div className={styles.undoRow}>
+                <div className={styles.left}>
+                  <Icon name="infoCircle" />
+                  {t("Incoming return received")}
+                  {order.return_received_at
+                    ? ` · ${formatClock(order.return_received_at)}`
+                    : ""}
+                </div>
+                {canReceiveReturn && (
+                  <Button
+                    type="button"
+                    variant="tertiary"
+                    icon="undo"
+                    size="sm"
+                    className={styles.inlineButton}
+                    onClick={handleUndoInbound}
+                    disabled={undoingInbound}
+                  >
+                    {t("Undo")}
+                  </Button>
+                )}
+              </div>
+            )}
+
+          {/* "Customer return" card — separate from the "Returned" status
+              banner up in the stepper section (which stays a plain status
+              banner for every returned order); this one is the actual
+              receive/decide/sign workflow, placed right after the Delivery
+              Proof card. Two things tell an order is returned: the plain
+              banner, and this card. */}
+          {isReturned && !isCancelled && (
+            <Card className={styles.errorCard}>
+              <div className={styles.headerRow}>
+                <h3 className={styles.sectionTitle}>Customer return</h3>
+              </div>
+              <div className={styles.cardContent}>
+                {canReceiveReturn && !order.return_received && (
+                  <div className={styles.cardListColumn}>
+                    <span className={styles.row}>
+                      <p className={styles.fieldLabel}>{t("Warehouse ")}</p>
+                      <p className={styles.muted}>— receive & verify</p>
+                      <div className={styles.separator}></div>
+                    </span>
+                    <p>
+                      {t(
+                        "Weigh or count what actually came back, then confirm.",
+                      )}
+                    </p>
+                  </div>
+                )}
+                {lines
+                  .filter((l) => Number(l.returned) > 0)
+                  .map((l) => (
+                    <ReturnLineBox
+                      key={l.id}
+                      line={l}
+                      pendingAmount={Number(l.returned)}
+                      returnedReason={l.returned_reason}
+                      orderReturnReceived={order.return_received}
+                      canReceiveReturn={canReceiveReturn}
+                      confirming={confirmingReceive}
+                      reopening={undoingInbound}
+                      onConfirm={handleConfirmReturnLine}
+                      onReopen={handleReopenReturnLine}
+                      receiveQtyValue={receiveQtyMap[l.id]}
+                      onReceiveQtyChange={(lineId, value) =>
+                        setReceiveQtyMap((prev) => ({
+                          ...prev,
+                          [lineId]: value,
+                        }))
+                      }
+                      weightValue={verifyWeightMap[l.id]}
+                      onWeightChange={(lineId, value) =>
+                        setVerifyWeightMap((prev) => ({
+                          ...prev,
+                          [lineId]: value,
+                        }))
+                      }
+                      refusalPhotos={refusePhotosMap[l.id] ?? []}
+                      photos={receivePhotosMap[l.id] ?? []}
+                      onUploadPhoto={handleUploadReceiveWeighPhoto}
+                      onRemovePhoto={handleRemoveReceiveWeighPhoto}
+                      onOpenImage={openImageGallery}
+                      t={t}
+                    />
+                  ))}
+
+                {inSettleBucket && (
+                  <div className={styles.cardListColumn}>
+                    {canDecideReturn && (
+                      <span className={styles.row}>
+                        <p className={styles.fieldLabel}>{t("Admin ")}</p>
+                        <p className={styles.muted}>
+                          — update Accurate, then process
+                        </p>
+                        <div className={styles.separator}></div>
+                      </span>
+                    )}
+                    {canDecideReturn ? (
+                      <>
+                        {!order.return_received && (
+                          <p>
+                            {lines.some(
+                              (l) =>
+                                Number(l.returned) > 0 && isWeighedUnit(l.unit),
+                            )
+                              ? t(
+                                  "Goods not back yet — counted quantities are exact; the kg/loaf credit is provisional until the warehouse weighs the return.",
+                                )
+                              : t(
+                                  "Goods not back yet — quantities are exact (counted). You can prepare everything now.",
+                                )}
+                          </p>
+                        )}
+                        <select
+                          className={styles.editInput}
+                          style={{ width: "100%" }}
+                          value={selectedDocType}
+                          onChange={(e) => setSelectedDocType(e.target.value)}
+                        >
+                          <option value="">
+                            {t("— how is this settled in Accurate? —")}
+                          </option>
+                          {RETURN_DOC_OPTIONS.map((opt) => (
+                            <option key={opt.key} value={opt.key}>
+                              {t(opt.label)}
+                            </option>
+                          ))}
+                        </select>
+                        {selectedDocType === "return-note" && (
+                          <>
+                            <label className={styles.row}>
+                              <Checkbox
+                                size="sm"
+                                checked={retPrinted}
+                                onChange={setRetPrinted}
+                                label={t("Input in Accurate & printed")}
+                              />
+                              {t("Input in Accurate & printed")}
+                            </label>
+
+                            <div
+                              className={styles.proofFieldRow}
+                              style={{
+                                borderColor:
+                                  noteFileIds.length > 0
+                                    ? "var(--accent-primary)"
+                                    : "var(--border-subtle)",
+                              }}
+                            >
+                              <div className={styles.proofFieldMain}>
+                                <div className={styles.left}>
+                                  <Icon
+                                    name="check"
+                                    size={18}
+                                    className={
+                                      noteFileIds.length > 0
+                                        ? styles.proofCheckFilled
+                                        : styles.proofCheckEmpty
+                                    }
+                                  />
+                                  <span className={styles.fieldLabel}>
+                                    {noteFileIds.length > 0
+                                      ? t("Photo attached")
+                                      : t(
+                                          "Photo of the return note (optional)",
+                                        )}
+                                  </span>
+                                </div>
+                                {noteFileIds.length > 0 && (
+                                  <div className={styles.thumbnailsContainer}>
+                                    {noteFileIds.map((fileId) => (
+                                      <div
+                                        key={fileId}
+                                        className={styles.thumbnailItem}
+                                        onClick={() =>
+                                          setActiveImageModal({
+                                            url: getAssetUrl(fileId),
+                                            title: t(
+                                              "Photo of the return note",
+                                            ),
+                                          })
+                                        }
+                                      >
+                                        <img
+                                          src={getAssetUrl(fileId)}
+                                          alt=""
+                                          className={styles.thumbnailImg}
+                                        />
+                                        <div
+                                          className={styles.thumbnailHoverTrash}
+                                          title={t("Delete image")}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleRemoveReturnNotePhoto(fileId);
+                                          }}
+                                        >
+                                          <Icon name="trash" size={14} />
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                                <input
+                                  ref={noteFileInputRef}
+                                  type="file"
+                                  accept="image/*"
+                                  style={{ display: "none" }}
+                                  onChange={handleUploadReturnNotePhoto}
+                                />
+                                <Button
+                                  type="button"
+                                  variant="tertiary"
+                                  icon="camera"
+                                  iconOnly
+                                  title={t("Upload")}
+                                  onClick={() =>
+                                    noteFileInputRef.current?.click()
+                                  }
+                                />
+                              </div>
+                            </div>
+                          </>
+                        )}
+
+                        <div className={styles.cardActions}>
+                          <Button
+                            type="button"
+                            variant="primary"
+                            buttonStyle="fullWidth"
+                            icon="check"
+                            onClick={handleConfirmSettle}
+                            disabled={
+                              !selectedDocType ||
+                              confirmingSettle ||
+                              (selectedDocType === "return-note" &&
+                                !retPrinted) ||
+                              (!!selectedDoc &&
+                                !selectedDoc.replacement &&
+                                selectedDoc.key !== "revise-return" &&
+                                !order.return_received)
+                            }
+                          >
+                            {confirmingSettle
+                              ? t("Saving…")
+                              : !selectedDoc
+                                ? t("Confirm & close")
+                                : selectedDoc.replacement
+                                  ? t("Send replacement — back to Cold Storage")
+                                  : selectedDoc.key === "revise-return"
+                                    ? t("Send revised DO/SI for signing")
+                                    : t("Confirm & close")}
+                          </Button>
+                        </div>
+                        <div className={styles.hints}>
+                          {selectedDoc &&
+                            !selectedDoc.replacement &&
+                            selectedDoc.key !== "revise-return" &&
+                            !order.return_received && (
+                              <p
+                                className={styles.infoHint}
+                                style={{ color: "var(--state-warning)" }}
+                              >
+                                {t(
+                                  "The order closes only after the warehouse receives the goods.",
+                                )}
+                              </p>
+                            )}
+                          {selectedDoc && (
+                            <div className={styles.infoHint}>
+                              <div className={styles.iconWrapper}>
+                                <Icon
+                                  name="infoCircle"
+                                  style={{ color: "var(--text-muted)" }}
+                                />
+                              </div>
+                              <p className={styles.muted}>
+                                {selectedDoc.key === "single-replace"
+                                  ? t(
+                                      "ONE document: the original DO/SI is revised to show what the customer finally keeps incl. the replacement. Best for a like-for-like swap.",
+                                    )
+                                  : selectedDoc.key === "separate-replace"
+                                    ? t(
+                                        "TWO documents: a Sales Return Note credits what came back + a NEW DO/SI for the replacement shipment. Best when the replacement differs (item / kg / price) or ships another day.",
+                                      )
+                                    : selectedDoc.key === "revise-return"
+                                      ? t(
+                                          "The revised DO/SI goes to the customer to sign before the order closes.",
+                                        )
+                                      : t(
+                                          "Returned goods credited — the order closes.",
+                                        )}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </>
+                    ) : (
+                      <p className={styles.infoHint}>
+                        {order.return_received
+                          ? t(
+                              "Received — waiting for an admin to update the Accurate documents and decide.",
+                            )
+                          : t(
+                              "Waiting for an admin to update Accurate & decide — this can run before the goods arrive.",
+                            )}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {inSignBucket && (
+                  <div className={styles.cardListColumn}>
+                    {!canSignReturn ? (
+                      <p className={styles.muted}>
+                        {t(
+                          "Revised DO/SI is out with the customer to sign — waiting for the signed copy.",
+                        )}
+                      </p>
+                    ) : !order.return_dispatch?.taken_by ? (
+                      /* PHASE A — not yet taken: the courier takes the
+                         revised DO/SI for signing via the same tracked
+                         hand-off as a normal dispatch. */
+                      <>
+                        <div className={styles.row}>
+                          <p className={styles.fieldLabel}>
+                            {t("Take the revised DO/SI for signing")}
+                          </p>
+                          <div className={styles.separator}></div>
+                        </div>
+                        <div className={styles.rowStretch}>
+                          <p className={styles.secondary}>
+                            {t(
+                              "Carry the revised DO/SI to the customer, get it signed, and bring the signed copy back.",
+                            )}
+                          </p>
+                          {canDecideReturn && (
+                            <Button
+                              type="button"
+                              variant="tertiary"
+                              className={styles.inlineButton}
+                              onClick={handleChangeReturnDocument}
+                            >
+                              {t("Change document")}
+                            </Button>
+                          )}
+                        </div>
+                        {!showThirdPartyForm ? (
+                          <div className={styles.cardActions}>
+                            <Button
+                              type="button"
+                              variant="primary"
+                              icon="delivered"
+                              buttonStyle="fullWidth"
+                              onClick={handleTakeReturnDispatchOwnCourier}
+                              disabled={choosingMode}
+                            >
+                              {t("Take this delivery")}
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              icon="pickup"
+                              buttonStyle="fullWidth"
+                              onClick={handleTakeReturnDispatchPickup}
+                              disabled={choosingMode}
+                            >
+                              {t("Customer collects & signs")}
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              icon="scooter"
+                              buttonStyle="fullWidth"
+                              onClick={() => setShowThirdPartyForm(true)}
+                              disabled={choosingMode}
+                            >
+                              {t("Send by online courier (Gojek / Grab …)")}
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className={styles.thirdPartyForm}>
+                            <select
+                              className={styles.editInput}
+                              aria-label={t("Courier service")}
+                              value={thirdPartyService}
+                              onChange={(e) =>
+                                setThirdPartyService(e.target.value)
+                              }
+                            >
+                              {THIRD_PARTY_SERVICES.map((svc) => (
+                                <option key={svc} value={svc}>
+                                  {svc === "Other" ? t("Other") : svc}
+                                </option>
+                              ))}
+                            </select>
+                            <input
+                              type="text"
+                              className={styles.editInput}
+                              placeholder={t("Tracking / order ref (optional)")}
+                              value={thirdPartyRef}
+                              onChange={(e) => setThirdPartyRef(e.target.value)}
+                              style={{ flex: 1, minWidth: 160 }}
+                            />
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              onClick={() => setShowThirdPartyForm(false)}
+                              disabled={choosingMode}
+                            >
+                              {t("Cancel")}
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="primary"
+                              onClick={handleConfirmReturnDispatchThirdParty}
+                              disabled={choosingMode}
+                            >
+                              {choosingMode
+                                ? t("Saving…")
+                                : `${t("Hand to")} ${thirdPartyService}`}
+                            </Button>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      /* PHASE B — taken: deliver, capture the signed copy,
+                         close. Own-courier mode also streams live GPS
+                         (silent — see the useDriverLive call above). */
+                      <>
+                        <span className={styles.row}>
+                          <p className={styles.fieldLabel}>
+                            {t("Revised DO/SI ")}
+                          </p>
+                          <p className={styles.muted}>— out for signing</p>
+                          <div className={styles.separator}></div>
+                        </span>
+                        <div className={styles.rowStretch}>
+                          <p className={styles.secondary}>
+                            {t("Taken by")}{" "}
+                            <strong>
+                              {displayName(order.return_dispatch.taken_by)}
+                            </strong>
+                            {order.return_dispatch.taken_at
+                              ? ` on ${formatTakenAt(order.return_dispatch.taken_at)}`
+                              : ""}
+                            {order.return_dispatch.mode === "third" &&
+                            order.return_dispatch.service
+                              ? ` · ${order.return_dispatch.service}${
+                                  order.return_dispatch.ref
+                                    ? ` (${order.return_dispatch.ref})`
+                                    : ""
+                                }`
+                              : ""}
+                            {order.return_dispatch.mode === "pickup"
+                              ? ` · ${t("customer collects")}`
+                              : ""}
+                          </p>
+                          <Button
+                            type="button"
+                            variant="tertiary"
+                            onClick={handleResetReturnDispatch}
+                            className={styles.inlineButton}
+                          >
+                            {t("change")}
+                          </Button>
+                        </div>
+
+                        <div className={styles.proofFieldMain}>
+                          <div className={styles.left}>
+                            <Icon
+                              name="check"
+                              size={18}
+                              className={
+                                signedDocFileId
+                                  ? styles.proofCheckFilled
+                                  : styles.proofCheckEmpty
+                              }
+                            />
+                            <span className={styles.fieldLabel}>
+                              {signedDocFileId
+                                ? t("Photo attached")
+                                : `${t("Photo of the signed DO/SI")} · ${t("required")}`}
+                            </span>
+                          </div>
+                          {signedDocFileId && (
+                            <div className={styles.thumbnailsContainer}>
+                              <div
+                                className={styles.thumbnailItem}
+                                onClick={() =>
+                                  setActiveImageModal({
+                                    url: getAssetUrl(signedDocFileId),
+                                    title: t("Photo of the signed DO/SI"),
+                                  })
+                                }
+                              >
+                                <img
+                                  src={getAssetUrl(signedDocFileId)}
+                                  alt=""
+                                  className={styles.thumbnailImg}
+                                />
+                                <div
+                                  className={styles.thumbnailHoverTrash}
+                                  title={t("Delete image")}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSignedDocFileId(null);
+                                  }}
+                                >
+                                  <Icon name="trash" size={14} />
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                          <input
+                            ref={signedDocFileInputRef}
+                            type="file"
+                            accept="image/*"
+                            style={{ display: "none" }}
+                            onChange={handleUploadSignedDoc}
+                          />
+                          <Button
+                            type="button"
+                            variant="tertiary"
+                            icon="camera"
+                            iconOnly
+                            title={t("Upload")}
+                            onClick={() =>
+                              signedDocFileInputRef.current?.click()
+                            }
+                          />
+                        </div>
+                        {!signedDocFileId && (
+                          <p
+                            className={styles.infoHint}
+                            style={{ color: "var(--warning-text)" }}
+                          >
+                            {t(
+                              "Add the signed-DO/SI photo to close the order.",
+                            )}
+                          </p>
+                        )}
+                        {signedDocFileId && !order.return_received && (
+                          <p
+                            className={styles.infoHint}
+                            style={{ color: "var(--warning-text)" }}
+                          >
+                            {t(
+                              "The order closes only after the warehouse receives the goods.",
+                            )}
+                          </p>
+                        )}
+                        <div className={styles.cardActions}>
+                          <Button
+                            type="button"
+                            variant="primary"
+                            icon="check"
+                            buttonStyle="fullWidth"
+                            onClick={handleCloseSignedReturn}
+                            disabled={
+                              !signedDocFileId ||
+                              !order.return_received ||
+                              closingSigned
+                            }
+                          >
+                            {closingSigned
+                              ? t("Saving…")
+                              : t("Mark signed & close")}
+                          </Button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            </Card>
+          )}
+
+          {/* Return Settlement — a persistent, ungated record of how a return
+              was settled in Accurate (kept on the order for disputes), unlike
+              the Documents section below which is Admin/Finance/Owner only.
+              Ported from the prototype's own ungated `order.returnDoc` card
+              (Dev-OrderDetail.jsx:1492-1508). */}
+          {order.return_doc && (
+            <Card>
+              <div className={styles.headerRow}>
+                <h3 className={styles.sectionTitle}>
+                  {t("Return settlement")}
+                </h3>
+              </div>
+              <div className={styles.cardContent}>
+                <div className={styles.docList}>
+                  <div className={styles.docRow}>
+                    <p>
+                      {t("Document")} · <strong>{order.return_doc}</strong>
+                    </p>
+                  </div>
+
+                  {lines
+                    .filter((l) => Number(l.returned) > 0)
+                    .map((l) => (
+                      <div key={l.id} className={styles.docRow}>
+                        <div className={styles.docTop}>
+                          <p>
+                            {l.name} · {t("returned")}{" "}
+                            <strong>
+                              {l.returned} {l.unit}
+                            </strong>
+                          </p>
+                          {renderThumbnails(
+                            (receivePhotosMap[l.id] ?? []).map((p) => ({
+                              url: p.url,
+                              title: `${t("Scale photo")} · ${l.name}`,
+                              receiveLineId: l.id,
+                              receivePhotoId: p.id,
+                            })),
+                          )}
+                        </div>
+                      </div>
+                    ))}
+
+                  {returnDocs.some((d) => d.photo_id) && (
+                    <div className={styles.docRow}>
+                      <div className={styles.docTop}>
+                        <p className={styles.docType}>
+                          {t("Return documents")}
+                        </p>
+                        {renderThumbnails(
+                          returnDocs
+                            .filter((d) => d.photo_id)
+                            .map((d) => ({
+                              url: getAssetUrl(d.photo_id!),
+                              title: RETURN_DOC_KIND_LABELS[d.kind] ?? d.kind,
+                            })),
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </Card>
           )}
 
           {/* Documents Section — Admin/Finance/Owner only, matching the

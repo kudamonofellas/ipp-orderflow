@@ -734,12 +734,13 @@
   font: var(--text-body);
   font-weight: 600;
   text-align: right;
-  min-width: 20px;
+  min-width: 32px;
 }
 
 .unitTag {
   font: var(--text-body);
   font-weight: 600;
+  width: 40px;
   color: var(--text-primary);
 }
 
@@ -901,18 +902,6 @@
   .thumbnailHoverTrash {
     opacity: 1;
   }
-}
-
-.cuttingInstruction {
-  display: flex;
-  align-items: center;
-  gap: var(--space-xs);
-  font: var(--text-caption);
-  color: var(--text-secondary);
-  border: 1px solid var(--border-default);
-  padding: 4px 10px;
-  border-radius: var(--radius-xl);
-  align-self: flex-start;
 }
 
 .cuttingInstructions {
