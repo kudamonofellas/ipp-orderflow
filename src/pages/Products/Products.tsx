@@ -5,7 +5,8 @@ import { Icon } from '../../components/Icon/Icon';
 import { Card } from '../../components/Card/Card';
 import { SortableTh } from '../../components/SortableTh/SortableTh';
 import { Toggle } from '../../components/Toggle/Toggle';
-import { readProducts, updateProduct, aggregateProducts } from '../../lib/directus';
+import { readProducts, updateProduct, createProduct, aggregateProducts } from '../../lib/directus';
+import { productsToCSV, parseProductCSV, downloadText } from '../../lib/csv';
 import { useAuth } from '../../hooks/useAuth';
 import { useLanguage } from '../../hooks/useLanguage';
 import { useDialog } from '../../hooks/useDialog';
@@ -25,6 +26,11 @@ export function Products() {
   const canManageProducts = can('manage_products');
   const canToggleOOS = can('flag_out_of_stock');
   const canView = can('browseProducts');
+  const canExport = can('exportCSV');
+  const [importing, setImporting] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const importInputRef = useRef<HTMLInputElement>(null);
+  const [refreshNonce, setRefreshNonce] = useState(0);
 
   // Defence-in-depth: the route is already wrapped in <Guarded cap="browseProducts">
   // (App.tsx), but this survives even if that wrapper is ever dropped in a
@@ -128,7 +134,75 @@ export function Products() {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [search, page, sortBy, activeFilter, buildFilter]);
+  }, [search, page, sortBy, activeFilter, buildFilter, refreshNonce]);
+
+  async function handleExport() {
+    setExporting(true);
+    const res = await readProducts({
+      limit: -1,
+      fields: [
+        'id',
+        'name',
+        'accurate_name',
+        'category',
+        'origin',
+        'grade',
+        'brand',
+        'form',
+        'pack',
+        'catch_weight',
+        'fixed_pack',
+        'ppn',
+      ],
+    });
+    setExporting(false);
+    if (res.error || !res.data) {
+      alert(res.error ?? 'Unknown error', { title: t('Export failed') });
+      return;
+    }
+    downloadText(
+      `ipp-products-${new Date().toISOString().slice(0, 10)}.csv`,
+      productsToCSV(res.data),
+    );
+  }
+
+  async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImporting(true);
+    try {
+      const text = await file.text();
+      const existingRes = await readProducts({ limit: -1 });
+      if (existingRes.error || !existingRes.data) {
+        alert(existingRes.error ?? 'Unknown error', {
+          title: t("Couldn't read the current product list"),
+        });
+        return;
+      }
+      const rows = parseProductCSV(text, existingRes.data);
+      let created = 0;
+      let updated = 0;
+      let failed = 0;
+      for (const row of rows) {
+        const res = row.id
+          ? await updateProduct(row.id, row.patch)
+          : await createProduct(row.patch);
+        if (res.error) failed++;
+        else if (row.id) updated++;
+        else created++;
+      }
+      alert(
+        `Imported · ${rows.length} products (${created} new, ${updated} updated${failed > 0 ? `, ${failed} failed` : ''})`,
+        { title: t('Import complete') },
+      );
+      setRefreshNonce((n) => n + 1);
+    } catch {
+      alert(t("Couldn't read that CSV file."), { title: t('Import failed') });
+    } finally {
+      setImporting(false);
+      e.target.value = '';
+    }
+  }
 
   const handleSearchChange = (value: string) => {
     setSearch(value);
@@ -210,6 +284,35 @@ export function Products() {
               onChange={(e) => handleSearchChange(e.target.value)}
             />
           </div>
+          {canExport && (
+            <Button
+              type="button"
+              variant="secondary"
+              icon="download"
+              onClick={handleExport}
+              disabled={exporting}
+            >
+              {exporting ? t('Exporting…') : t('Export')}
+            </Button>
+          )}
+          {canManageProducts && (
+            <Button
+              type="button"
+              variant="secondary"
+              icon="upload"
+              onClick={() => importInputRef.current?.click()}
+              disabled={importing}
+            >
+              {importing ? t('Importing…') : t('Import')}
+            </Button>
+          )}
+          <input
+            ref={importInputRef}
+            type="file"
+            accept=".csv,text/csv"
+            style={{ display: 'none' }}
+            onChange={handleImportFile}
+          />
           {canManageProducts && (
             <Button
               type="button"

@@ -115,6 +115,26 @@
 .stopName {
   font: var(--text-h3);
   color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.signBadge {
+  font: var(--text-caption);
+  font-weight: 600;
+  padding: 2px var(--space-sm);
+  border-radius: var(--radius-xl);
+  background: color-mix(in srgb, var(--state-error), transparent 90%);
+  color: var(--state-error);
+  white-space: nowrap;
+}
+
+.reorderRow {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex-shrink: 0;
 }
 
 .orderNo {

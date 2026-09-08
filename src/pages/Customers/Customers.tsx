@@ -8,7 +8,8 @@ import { useLanguage } from '../../hooks/useLanguage';
 import { Avatar } from '../../components/Avatar/Avatar';
 import { SortableTh } from '../../components/SortableTh/SortableTh';
 import { getInitials } from '../../lib/initials';
-import { readCustomers, aggregateCustomers } from '../../lib/directus';
+import { readCustomers, aggregateCustomers, createCustomer, updateCustomer } from '../../lib/directus';
+import { customersToCSV, parseCustomerCSV, downloadText } from '../../lib/csv';
 import type { CustomersCollection } from '../../types/directus';
 import styles from './Customers.module.css';
 
@@ -22,6 +23,13 @@ export function Customers() {
   const { t } = useLanguage();
   const canManage = auth.can('manage_customers');
   const canView = auth.can('browseCustomers');
+  // Exporting customers dumps their contacts/addresses — gate it on
+  // contact-visibility too, not just exportCSV (matches the prototype's
+  // combined `exportCSV && seeCustomerContact` check).
+  const canExport = auth.can('exportCSV') && auth.can('seeCustomerContact');
+  const [importing, setImporting] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   // Defence-in-depth: the route is already wrapped in <Guarded cap="browseCustomers">
   // (App.tsx), but this survives even if that wrapper is ever dropped in a
@@ -48,6 +56,7 @@ export function Customers() {
   }
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshNonce, setRefreshNonce] = useState(0);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -103,7 +112,71 @@ export function Customers() {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [search, page, sortBy]);
+  }, [search, page, sortBy, refreshNonce]);
+
+  async function handleExport() {
+    setExporting(true);
+    const res = await readCustomers({
+      limit: -1,
+      fields: [
+        'id',
+        'name',
+        'company_name',
+        'area',
+        'contact',
+        'address',
+        'sales',
+        'pay_timing',
+        'pay_method',
+        'term_days',
+        'credit_limit',
+      ],
+    });
+    setExporting(false);
+    if (res.error || !res.data) {
+      window.alert(`Failed to export: ${res.error}`);
+      return;
+    }
+    downloadText(
+      `ipp-customers-${new Date().toISOString().slice(0, 10)}.csv`,
+      customersToCSV(res.data),
+    );
+  }
+
+  async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImporting(true);
+    try {
+      const text = await file.text();
+      const existingRes = await readCustomers({ limit: -1 });
+      if (existingRes.error || !existingRes.data) {
+        window.alert(`Couldn't read the current customer list: ${existingRes.error}`);
+        return;
+      }
+      const rows = parseCustomerCSV(text, existingRes.data);
+      let created = 0;
+      let updated = 0;
+      let failed = 0;
+      for (const row of rows) {
+        const res = row.id
+          ? await updateCustomer(row.id, row.patch)
+          : await createCustomer(row.patch);
+        if (res.error) failed++;
+        else if (row.id) updated++;
+        else created++;
+      }
+      window.alert(
+        `Imported · ${rows.length} customers (${created} new, ${updated} updated${failed > 0 ? `, ${failed} failed` : ''})`,
+      );
+      setRefreshNonce((n) => n + 1);
+    } catch {
+      window.alert("Couldn't read that CSV file.");
+    } finally {
+      setImporting(false);
+      e.target.value = '';
+    }
+  }
 
   // Reset to page 1 when search changes
   const handleSearch = (value: string) => {
@@ -141,6 +214,35 @@ export function Customers() {
               onChange={(e) => handleSearch(e.target.value)}
             />
           </div>
+          {canExport && (
+            <Button
+              type="button"
+              variant="secondary"
+              icon="download"
+              onClick={handleExport}
+              disabled={exporting}
+            >
+              {exporting ? t('Exporting…') : t('Export')}
+            </Button>
+          )}
+          {canManage && (
+            <Button
+              type="button"
+              variant="secondary"
+              icon="upload"
+              onClick={() => importInputRef.current?.click()}
+              disabled={importing}
+            >
+              {importing ? t('Importing…') : t('Import')}
+            </Button>
+          )}
+          <input
+            ref={importInputRef}
+            type="file"
+            accept=".csv,text/csv"
+            style={{ display: 'none' }}
+            onChange={handleImportFile}
+          />
           {canManage && (
             <Button
               type="button"

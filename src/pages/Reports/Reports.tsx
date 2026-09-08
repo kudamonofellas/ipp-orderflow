@@ -79,6 +79,7 @@ export function Reports() {
     termsOverdue,
     customerVolume,
     productDemand,
+    cycleTime,
   } = useReports(range);
 
   const cleanPct =
@@ -434,6 +435,54 @@ export function Reports() {
                   );
                 })}
               </div>
+            )}
+          </div>
+
+          <div>
+            <h2 className={styles.sectionHeading}>{t("Cycle time per stage")}</h2>
+            {cycleTime.measured === 0 ? (
+              <p className={styles.noData}>{t("No data in this period")}</p>
+            ) : (
+              <Card>
+                {cycleTime.slowest && (
+                  <p className={styles.noData} style={{ marginBottom: "var(--space-sm)" }}>
+                    {t("Bottleneck")}:{" "}
+                    <strong style={{ color: "var(--state-warning)" }}>
+                      {t(cycleTime.slowest.label)}
+                    </strong>{" "}
+                    — {cycleTime.slowest.avgHours.toFixed(1)}h {t("avg")}
+                  </p>
+                )}
+                <div className={styles.demandList}>
+                  {cycleTime.stages.map((s) => {
+                    const maxHours = Math.max(
+                      1,
+                      ...cycleTime.stages.map((x) => x.avgHours),
+                    );
+                    const isSlow = cycleTime.slowest?.stage === s.stage;
+                    return (
+                      <div key={s.stage} className={styles.demandRow}>
+                        <span className={styles.demandName}>{t(s.label)}</span>
+                        <div className={styles.demandBarTrack}>
+                          <div
+                            className={styles.demandBarFill}
+                            style={{
+                              width: `${(s.avgHours / maxHours) * 100}%`,
+                              background: isSlow ? "var(--state-warning)" : undefined,
+                            }}
+                          />
+                        </div>
+                        <span className={styles.demandQty}>
+                          {s.n ? `${s.avgHours.toFixed(1)}h` : "—"}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className={styles.noData} style={{ marginTop: "var(--space-sm)" }}>
+                  {t("Average hours an order sits in each stage")}
+                </p>
+              </Card>
             )}
           </div>
         </>

@@ -153,6 +153,9 @@ export const OrdersCollectionSchema = z.object({
   return_settle: z.string().nullable().optional(),
   return_doc: z.string().nullable().optional(),
   return_dispatch: ReturnDispatchSchema.nullable().optional(),
+  // Courier-chosen delivery stop order on the Deliveries run-sheet — see
+  // useDeliveries.ts.
+  run_seq: z.number().nullable().optional(),
   return_inbound: z.boolean().nullable().optional(),
   is_replacement: z.boolean().nullable().optional(),
   partial_return: z.boolean().nullable().optional(),

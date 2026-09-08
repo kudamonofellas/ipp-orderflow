@@ -41,7 +41,8 @@ export function Deliveries() {
     if (!canView) navigate("/", { replace: true });
   }, [canView, navigate]);
 
-  const { mine, others, loading, error } = useDeliveries(userId);
+  const { mine, others, loading, error, moveStop } = useDeliveries(userId);
+  const ownRunStops = mine.filter((s) => s.isOwnRun);
 
   // The real hand-off/proof-capture flow lives on the order's own detail
   // page (OrderDetail.tsx) — this page used to bare-flip the stage directly,
@@ -81,7 +82,12 @@ export function Deliveries() {
                     <div className={styles.heroLeft}>
                       <span className={styles.badgeFilled}>{nextStop.sequence}</span>
                       <div className={styles.heroInfo}>
-                        <span className={styles.stopName}>{nextStop.customerName}</span>
+                        <span className={styles.stopName}>
+                          {nextStop.customerName}
+                          {nextStop.isSignRun && (
+                            <span className={styles.signBadge}>{t("DO/SI to sign")}</span>
+                          )}
+                        </span>
                         <span className={styles.orderNo}>{nextStop.orderNo}</span>
                         {nextStop.address && (
                           <span className={styles.address}>
@@ -91,14 +97,15 @@ export function Deliveries() {
                         )}
                       </div>
                     </div>
-                    {nextStop.isCOD ? (
-                      <span className={styles.codChip}>
-                        <Icon name="cash" size={16} />
-                        {currency.format(nextStop.amount)}
-                      </span>
-                    ) : (
-                      <span className={styles.noCash}>{t("No Cash")}</span>
-                    )}
+                    {!nextStop.isSignRun &&
+                      (nextStop.isCOD ? (
+                        <span className={styles.codChip}>
+                          <Icon name="cash" size={16} />
+                          {currency.format(nextStop.amount)}
+                        </span>
+                      ) : (
+                        <span className={styles.noCash}>{t("No Cash")}</span>
+                      ))}
                   </div>
                   <div className={styles.heroActions}>
                     <Button
@@ -111,7 +118,7 @@ export function Deliveries() {
                     >
                       {t("Navigate")}
                     </Button>
-                    {canMarkDelivered && (
+                    {canMarkDelivered && !nextStop.isSignRun && (
                       <Button
                         type="button"
                         variant="secondary"
@@ -123,7 +130,43 @@ export function Deliveries() {
                         {t("Mark delivered")}
                       </Button>
                     )}
+                    {nextStop.isSignRun && (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="lg"
+                        icon="chevronRight"
+                        buttonStyle="fullWidth"
+                        onClick={() => goToOrder(nextStop.orderId)}
+                      >
+                        {t("Open order")}
+                      </Button>
+                    )}
                   </div>
+                  {nextStop.isOwnRun && ownRunStops.length > 1 && (
+                    <div className={styles.reorderRow}>
+                      <Button
+                        type="button"
+                        variant="tertiary"
+                        size="sm"
+                        icon="chevronUp"
+                        iconOnly
+                        aria-label={t("Move up")}
+                        disabled={ownRunStops[0]?.orderId === nextStop.orderId}
+                        onClick={() => moveStop(nextStop.orderId, -1)}
+                      />
+                      <Button
+                        type="button"
+                        variant="tertiary"
+                        size="sm"
+                        icon="chevronDown"
+                        iconOnly
+                        aria-label={t("Move down")}
+                        disabled={ownRunStops[ownRunStops.length - 1]?.orderId === nextStop.orderId}
+                        onClick={() => moveStop(nextStop.orderId, 1)}
+                      />
+                    </div>
+                  )}
                 </Card>
               </div>
 
@@ -140,7 +183,12 @@ export function Deliveries() {
                       >
                         <span className={styles.badgeOutline}>{stop.sequence}</span>
                         <div className={styles.stopInfo}>
-                          <span className={styles.stopName}>{stop.customerName}</span>
+                          <span className={styles.stopName}>
+                            {stop.customerName}
+                            {stop.isSignRun && (
+                              <span className={styles.signBadge}>{t("DO/SI to sign")}</span>
+                            )}
+                          </span>
                           <span className={styles.orderNo}>{stop.orderNo}</span>
                           {stop.address && (
                             <span className={styles.addressCompact}>
@@ -149,10 +197,40 @@ export function Deliveries() {
                             </span>
                           )}
                         </div>
-                        {stop.isCOD ? (
-                          <span className={styles.codAmountLight}>{currency.format(stop.amount)}</span>
-                        ) : (
-                          <span className={styles.noCashLight}>{t("No Cash")}</span>
+                        {!stop.isSignRun &&
+                          (stop.isCOD ? (
+                            <span className={styles.codAmountLight}>{currency.format(stop.amount)}</span>
+                          ) : (
+                            <span className={styles.noCashLight}>{t("No Cash")}</span>
+                          ))}
+                        {stop.isOwnRun && ownRunStops.length > 1 && (
+                          <div
+                            className={styles.reorderRow}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <Button
+                              type="button"
+                              variant="tertiary"
+                              size="sm"
+                              icon="chevronUp"
+                              iconOnly
+                              aria-label={t("Move up")}
+                              disabled={ownRunStops[0]?.orderId === stop.orderId}
+                              onClick={() => moveStop(stop.orderId, -1)}
+                            />
+                            <Button
+                              type="button"
+                              variant="tertiary"
+                              size="sm"
+                              icon="chevronDown"
+                              iconOnly
+                              aria-label={t("Move down")}
+                              disabled={
+                                ownRunStops[ownRunStops.length - 1]?.orderId === stop.orderId
+                              }
+                              onClick={() => moveStop(stop.orderId, 1)}
+                            />
+                          </div>
                         )}
                         <Button
                           type="button"
@@ -182,7 +260,12 @@ export function Deliveries() {
                   <Card key={stop.orderId} className={styles.stopCard}>
                     <span className={styles.badgeOutline}>{stop.sequence}</span>
                     <div className={styles.stopInfo}>
-                      <span className={styles.stopName}>{stop.customerName}</span>
+                      <span className={styles.stopName}>
+                        {stop.customerName}
+                        {stop.isSignRun && (
+                          <span className={styles.signBadge}>{t("DO/SI to sign")}</span>
+                        )}
+                      </span>
                       <span className={styles.orderNo}>
                         {stop.orderNo}
                         {stop.takenByName ? ` · ${t("Taken by")} ${stop.takenByName}` : ""}
@@ -194,11 +277,12 @@ export function Deliveries() {
                         </span>
                       )}
                     </div>
-                    {stop.isCOD ? (
-                      <span className={styles.codAmountLight}>{currency.format(stop.amount)}</span>
-                    ) : (
-                      <span className={styles.noCashLight}>{t("No Cash")}</span>
-                    )}
+                    {!stop.isSignRun &&
+                      (stop.isCOD ? (
+                        <span className={styles.codAmountLight}>{currency.format(stop.amount)}</span>
+                      ) : (
+                        <span className={styles.noCashLight}>{t("No Cash")}</span>
+                      ))}
                   </Card>
                 ))}
               </div>

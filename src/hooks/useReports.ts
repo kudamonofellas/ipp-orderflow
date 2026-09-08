@@ -13,7 +13,8 @@
  */
 
 import { useEffect, useState } from 'react';
-import { readOrders, readOrderLines, readCustomers } from '../lib/directus';
+import { readOrders, readOrderLines, readCustomers, readOrderHistoryFeed } from '../lib/directus';
+import { PIPELINE_STAGES, type PipelineStage } from '../lib/pipeline';
 
 export type ReportRangeType = 'today' | '30d' | '90d' | 'all' | 'month' | 'range';
 
@@ -43,6 +44,19 @@ export interface ProductDemandGroup {
   rows: ProductDemandRow[];
 }
 
+export interface CycleTimeStage {
+  stage: PipelineStage;
+  label: string;
+  n: number;
+  avgHours: number;
+}
+
+export interface CycleTimeResult {
+  stages: CycleTimeStage[];
+  slowest: CycleTimeStage | null;
+  measured: number;
+}
+
 interface UseReportsResult {
   loading: boolean;
   error: string | null;
@@ -57,6 +71,62 @@ interface UseReportsResult {
   termsOverdue: number;
   customerVolume: CustomerVolumeRow[];
   productDemand: ProductDemandGroup[];
+  cycleTime: CycleTimeResult;
+}
+
+/** Bottleneck-per-stage — ported from the prototype's `cycleTime()`
+ *  (`Dev-reports.js:263-304`): walks each order's history entries, crediting
+ *  the time between two consecutive entries to whatever stage the order was
+ *  IN during that gap (the first entry is always "Order created", so the
+ *  order starts life credited to `intake`). Only forward-pipeline stages
+ *  are bucketed (matches the prototype's `STAGES` — a detour through
+ *  outstanding/awaiting/returned/cancelled advances `curStage` without ever
+ *  being measured itself, so time resumes accruing correctly once the order
+ *  is back in a forward stage). Unlike the prototype (which falls back to
+ *  scanning `history[i].what` for older entries with no explicit stage),
+ *  this port's `appendOrderHistory` always writes `stage` explicitly, so no
+ *  text-scan fallback is needed. */
+function computeCycleTime(
+  orders: { id: string }[],
+  historyByOrder: Map<string, { at: string | null; stage: string | null }[]>,
+): CycleTimeResult {
+  const acc = new Map<PipelineStage, { totalMs: number; n: number }>();
+  for (const s of PIPELINE_STAGES) acc.set(s.key, { totalMs: 0, n: 0 });
+
+  for (const o of orders) {
+    const h = historyByOrder.get(o.id) ?? [];
+    if (h.length < 2) continue;
+    let curStage: string = 'intake';
+    let curAt = new Date(h[0].at ?? 0).getTime();
+    for (let i = 1; i < h.length; i++) {
+      const at = new Date(h[i].at ?? 0).getTime();
+      if (Number.isFinite(curAt) && Number.isFinite(at) && at >= curAt) {
+        const bucket = acc.get(curStage as PipelineStage);
+        if (bucket) {
+          bucket.totalMs += at - curAt;
+          bucket.n++;
+        }
+      }
+      curStage = h[i].stage || curStage;
+      curAt = at;
+    }
+  }
+
+  const stages: CycleTimeStage[] = PIPELINE_STAGES.map((s) => {
+    const b = acc.get(s.key)!;
+    return {
+      stage: s.key,
+      label: s.label,
+      n: b.n,
+      avgHours: b.n ? b.totalMs / b.n / (60 * 60 * 1000) : 0,
+    };
+  });
+  const measured = stages.filter((s) => s.n > 0);
+  const slowest = measured.reduce<CycleTimeStage | null>(
+    (max, s) => (s.avgHours > (max ? max.avgHours : -1) ? s : max),
+    null,
+  );
+  return { stages, slowest, measured: measured.length };
 }
 
 function toNumber(v: number | string | null | undefined): number {
@@ -116,6 +186,7 @@ export function useReports(range: ReportRange): UseReportsResult {
     termsOverdue: 0,
     customerVolume: [],
     productDemand: [],
+    cycleTime: { stages: [], slowest: null, measured: 0 },
   });
 
   useEffect(() => {
@@ -301,6 +372,30 @@ export function useReports(range: ReportRange): UseReportsResult {
         }))
         .sort((a, b) => b.rows.length - a.rows.length);
 
+      // Cycle time — needs every order's history entries. One bulk query
+      // across the whole scoped order set rather than one round-trip per
+      // order (this report can easily span hundreds of orders).
+      const historyRes =
+        orderIds.length === 0
+          ? { data: [], error: null }
+          : await readOrderHistoryFeed({
+              filter: { order_id: { _in: orderIds } },
+              fields: ['order_id', 'at', 'stage'],
+              sort: ['order_id', 'at'],
+              limit: -1,
+            });
+      if (cancelled) return;
+      const historyByOrder = new Map<string, { at: string | null; stage: string | null }[]>();
+      if (!historyRes.error) {
+        for (const row of historyRes.data ?? []) {
+          if (!row.order_id) continue;
+          const existing = historyByOrder.get(row.order_id) ?? [];
+          existing.push({ at: row.at ?? null, stage: row.stage ?? null });
+          historyByOrder.set(row.order_id, existing);
+        }
+      }
+      const cycleTime = computeCycleTime(orders, historyByOrder);
+
       if (cancelled) return;
       setResult({
         totalOrders,
@@ -314,6 +409,7 @@ export function useReports(range: ReportRange): UseReportsResult {
         termsOverdue,
         customerVolume,
         productDemand,
+        cycleTime,
       });
       setLoading(false);
     }

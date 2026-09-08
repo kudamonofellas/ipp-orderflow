@@ -12,6 +12,7 @@ import { useLanguage } from "../../hooks/useLanguage";
 import { isOrderLocked } from "../../lib/pipeline";
 import {
   readOrder,
+  readOrders,
   readOrderLines,
   readCustomers,
   readProducts,
@@ -102,6 +103,14 @@ export function OrderEdit() {
   const [sales, setSales] = useState("");
   const [contact, setContact] = useState("");
   const [editLines, setEditLines] = useState<EditableLine[]>([]);
+  /** Another order already using the typed order no. — ported from the
+   *  prototype's own inline check (`Dev-OrderEdit.jsx:112-113`), a warning
+   *  only, never blocking Save (matches OrderNew's own softer treatment for
+   *  an edit rather than a fresh create). */
+  const [dupOrderNo, setDupOrderNo] = useState<{
+    id: string;
+    customer_name: string | null;
+  } | null>(null);
 
   /* ── modal state ── */
   const [isAddItemModalOpen, setIsAddItemModalOpen] = useState(false);
@@ -211,6 +220,31 @@ export function OrderEdit() {
       cancelled = true;
     };
   }, [id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function checkDuplicate() {
+      const trimmed = orderNo.trim();
+      if (!order || !trimmed || trimmed === (order.no ?? "").trim()) {
+        if (!cancelled) setDupOrderNo(null);
+        return;
+      }
+      const res = await readOrders({
+        fields: ["id", "customer_name"],
+        filter: { no: { _eq: trimmed }, id: { _neq: order.id } },
+        limit: 1,
+      });
+      if (cancelled) return;
+      const hit = res.data?.[0];
+      setDupOrderNo(
+        hit ? { id: hit.id, customer_name: hit.customer_name ?? null } : null,
+      );
+    }
+    checkDuplicate();
+    return () => {
+      cancelled = true;
+    };
+  }, [orderNo, order]);
 
   function handleCancel() {
     navigate(`/orders/${id}`);
@@ -529,6 +563,9 @@ export function OrderEdit() {
 
   const editSummary = buildEditSummary();
   const hasEditChanges = editSummary !== "Order edited (no change)";
+  // Ported from the prototype's `badQty` (`Dev-OrderEdit.jsx:36,181-182`) —
+  // Save is disabled while any line's qty is 0 or blank.
+  const badQty = editLines.some((l) => (parseFloat(l.qty) || 0) <= 0);
 
   return (
     <div className={styles.container}>
@@ -556,7 +593,9 @@ export function OrderEdit() {
                 <Button
                   type="button"
                   variant="primary"
-                  disabled={!hasEditChanges || submitting || !canEdit}
+                  disabled={
+                    !hasEditChanges || submitting || !canEdit || badQty
+                  }
                   icon="save"
                   onClick={handleSaveAllEdits}
                 >
@@ -570,6 +609,11 @@ export function OrderEdit() {
                 {t("Order")} {order.no}
               </h2>
             </div>
+            {badQty && (
+              <p style={{ fontSize: "0.8rem", color: "var(--state-warning)" }}>
+                {t("Every item needs a quantity above 0.")}
+              </p>
+            )}
           </header>
 
           {error && <div className={styles.error}>{error}</div>}
@@ -585,6 +629,21 @@ export function OrderEdit() {
                   value={orderNo}
                   onChange={(e) => setOrderNo(e.target.value)}
                 />
+                {dupOrderNo && (
+                  <span
+                    style={{
+                      fontSize: "0.75rem",
+                      color: "var(--state-warning)",
+                      marginTop: 4,
+                    }}
+                  >
+                    {t("Another order already uses")} #{orderNo.trim()}
+                    {dupOrderNo.customer_name
+                      ? ` (${dupOrderNo.customer_name})`
+                      : ""}
+                    .
+                  </span>
+                )}
               </label>
               <label className={styles.field}>
                 <span className={styles.label}>{t("Delivery Date")}</span>

@@ -31,6 +31,7 @@ import {
   deleteItem,
   uploadFiles,
   readUsers,
+  createUser,
   updateUser,
   deleteUser,
   readRoles,
@@ -755,6 +756,51 @@ export async function readTeamMembers(): Promise<DirectusResult<TeamMember[]>> {
       } as never),
     );
     return { data: raw as unknown as TeamMember[], error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+/** A real Directus login account needs a password up front — this app has
+ *  no email/SMTP invite flow configured, so rather than depending on that
+ *  (and silently failing if it isn't set up), the Owner creates the account
+ *  with a generated temporary password shown once, for the new hire to
+ *  change on first login. Ported concept from the prototype's inline
+ *  `addUser` (`Dev-Settings.jsx:106`) — that version just appended a
+ *  fake in-memory persona (no real credential involved); this is the
+ *  real-auth equivalent. */
+export function generateTempPassword(): string {
+  const bytes = new Uint8Array(12);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(36).padStart(2, "0"))
+    .join("")
+    .slice(0, 16);
+}
+
+/** Create a new team member's login account (Owner Settings "Team" section). */
+export async function createTeamMember(input: {
+  first_name: string;
+  last_name?: string;
+  email: string;
+  role: string;
+  password: string;
+}): Promise<DirectusResult<{ id: string }>> {
+  try {
+    const raw = await getClient().request(
+      createUser({
+        first_name: input.first_name,
+        last_name: input.last_name || null,
+        email: input.email,
+        role: input.role,
+        password: input.password,
+        status: "active",
+      } as never),
+    );
+    const id = (raw as { id?: string })?.id;
+    if (!id) {
+      return { data: null, error: "User created but no id was returned." };
+    }
+    return { data: { id }, error: null };
   } catch (err) {
     return { data: null, error: errMsg(err) };
   }

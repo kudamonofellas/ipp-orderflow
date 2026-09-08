@@ -11,6 +11,8 @@ import { useDialog } from "../../hooks/useDialog";
 import { useSettings } from "../../hooks/useSettings";
 import { useTeamSettings } from "../../hooks/useTeamSettings";
 import {
+  createTeamMember,
+  generateTempPassword,
   updateTeamMember,
   deleteTeamMember,
   setRolePermission,
@@ -60,6 +62,10 @@ export function Settings() {
   const [editName, setEditName] = useState("");
   const [editRoleId, setEditRoleId] = useState("");
   const [savingMember, setSavingMember] = useState(false);
+  const [newMemberName, setNewMemberName] = useState("");
+  const [newMemberEmail, setNewMemberEmail] = useState("");
+  const [newMemberRoleId, setNewMemberRoleId] = useState("");
+  const [addingMember, setAddingMember] = useState(false);
 
   function handleLangChange(next: "en" | "id") {
     update({ lang: next });
@@ -155,6 +161,42 @@ export function Settings() {
       );
       alert(res.error, { title: t("Couldn't update member status") });
     }
+  }
+
+  /** Ported from the prototype's inline "add team member" row
+   *  (`Dev-Settings.jsx:103-107`) — that version just appended a fake
+   *  in-memory persona (name + role, no real credential). This app uses
+   *  real Directus login accounts, which need an email + password up
+   *  front; since no SMTP invite flow is configured here, a temporary
+   *  password is generated and shown once so the Owner can hand it to the
+   *  new hire to log in and change it. */
+  async function handleAddMember() {
+    const trimmedName = newMemberName.trim();
+    const trimmedEmail = newMemberEmail.trim();
+    if (!trimmedName || !trimmedEmail || !newMemberRoleId) return;
+    setAddingMember(true);
+    const [first, ...rest] = trimmedName.split(/\s+/);
+    const tempPassword = generateTempPassword();
+    const res = await createTeamMember({
+      first_name: first || trimmedName,
+      last_name: rest.join(" "),
+      email: trimmedEmail,
+      role: newMemberRoleId,
+      password: tempPassword,
+    });
+    setAddingMember(false);
+    if (res.error) {
+      alert(res.error, { title: t("Couldn't add team member") });
+      return;
+    }
+    setNewMemberName("");
+    setNewMemberEmail("");
+    setNewMemberRoleId("");
+    reloadTeam();
+    alert(
+      `${t("Account created for")} ${trimmedEmail}. ${t("Temporary password")}: ${tempPassword}\n\n${t("Share this with them securely — it won't be shown again. They should change it after logging in.")}`,
+      { title: t("Team member added") },
+    );
   }
 
   function permValue(
@@ -385,6 +427,52 @@ export function Settings() {
                   </div>
                 );
               })}
+              <div className={styles.teamEditRow}>
+                <div className={styles.teamEditGrid}>
+                  <input
+                    className={styles.input}
+                    value={newMemberName}
+                    onChange={(e) => setNewMemberName(e.target.value)}
+                    placeholder={t("Name")}
+                  />
+                  <input
+                    className={styles.input}
+                    type="email"
+                    value={newMemberEmail}
+                    onChange={(e) => setNewMemberEmail(e.target.value)}
+                    placeholder={t("Email")}
+                  />
+                  <select
+                    className={styles.select}
+                    value={newMemberRoleId}
+                    onChange={(e) => setNewMemberRoleId(e.target.value)}
+                  >
+                    <option value="">{t("Select role…")}</option>
+                    {roles.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className={styles.teamEditFooter}>
+                  <Button
+                    type="button"
+                    variant="primary"
+                    size="md"
+                    icon="add"
+                    disabled={
+                      addingMember ||
+                      !newMemberName.trim() ||
+                      !newMemberEmail.trim() ||
+                      !newMemberRoleId
+                    }
+                    onClick={handleAddMember}
+                  >
+                    {addingMember ? t("Adding…") : t("Add team member")}
+                  </Button>
+                </div>
+              </div>
             </Card>
           )}
         </section>
