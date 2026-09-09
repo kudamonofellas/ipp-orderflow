@@ -1,15 +1,9 @@
 import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import type { IconName } from "../../components/Icon/icons";
 import { Button } from "../../components/Button/Button";
 import { ChannelSelectModal } from "../../components/ChannelSelectModal/ChannelSelectModal";
-import { Icon } from "../../components/Icon/Icon";
 import { IntakeModal } from "../../components/IntakeModal/IntakeModal";
-import { DigestTile } from "../../components/DigestTile/DigestTile";
-import { MetricCard } from "../../components/MetricCard/MetricCard";
 import { NotificationsPopover } from "../../components/NotificationsPopover/NotificationsPopover";
-import { QuickActionCard } from "../../components/QuickActionCard/QuickActionCard";
-import { StagePill } from "../../components/StagePill/StagePill";
 import {
   useCan,
   useCurrentUserId,
@@ -17,12 +11,7 @@ import {
   useRole,
 } from "../../hooks/useAuth";
 import { useLanguage } from "../../hooks/useLanguage";
-import {
-  PIPELINE_STAGES,
-  ROLE_FOCUS,
-  RETURN_STAGES,
-  statusColor,
-} from "../../lib/pipeline";
+import { PIPELINE_STAGES, ROLE_FOCUS, RETURN_STAGES } from "../../lib/pipeline";
 import { useAttentionItems } from "../../hooks/useAttentionItems";
 import { useCashUp } from "../../hooks/useCashUp";
 import {
@@ -34,7 +23,11 @@ import { useOpenOrders } from "../../hooks/useOpenOrders";
 import { usePickList } from "../../hooks/usePickList";
 import { useTodayDigest } from "../../hooks/useTodayDigest";
 import { AttentionPanel } from "./sections/AttentionPanel";
+import { DigestSection } from "./sections/DigestSection";
+import { MetricsRow } from "./sections/MetricsRow";
 import { OpenOrdersPanel } from "./sections/OpenOrdersPanel";
+import { PipelineRow } from "./sections/PipelineRow";
+import { QuickActionsRow } from "./sections/QuickActionsRow";
 import { ReturnWorkflowsPanel } from "./sections/ReturnWorkflowsPanel";
 import styles from "./Dashboard.module.css";
 import type { ParsedOrderDraft } from "../../lib/directus";
@@ -58,13 +51,6 @@ const currency = new Intl.NumberFormat("id-ID", {
   currency: "IDR",
   minimumFractionDigits: 0,
 });
-
-const METRIC_ICONS: Record<string, IconName> = {
-  open: "total",
-  total: "store",
-  delivered: "delivered",
-  cancelled: "cancelled",
-};
 
 /** Admin dashboard — mirrors context/designs/Dashboard.png. */
 export function Dashboard() {
@@ -134,12 +120,6 @@ export function Dashboard() {
     groups: cashUpGroups,
     confirmedIds: cashUpConfirmedIds,
   } = useCashUp();
-  const quickActionCount = [
-    canViewDeliveryRun,
-    canViewPickList,
-    canReconcileCOD,
-  ].filter(Boolean).length;
-
   // "Needs attention today" digest — Owner-only per explicit instruction
   // (reverses an earlier decision this session to also show it to Admin).
   const showDigest = role === "Owner";
@@ -228,7 +208,11 @@ export function Dashboard() {
     <div className={styles.grid}>
       <div className={styles.main}>
         {isLoading ? (
-          <div className={styles.loading}>{t("Loading dashboard…")}</div>
+          <div className={styles.container}>
+            <div className={styles.sectionsContainer}>
+              <p className={styles.muted}>{t("Loading dashboard…")}</p>
+            </div>
+          </div>
         ) : (
           <>
             {/* TopRow: welcome (left) | notifications + New Order (right). */}
@@ -238,50 +222,17 @@ export function Dashboard() {
                 <h1 className={styles.welcomeName}>{currentUserName || "—"}</h1>
               </div>
 
-              {/* Quick-action row — Deliveries / Pick list / Cash-up. Each card
-                stays gated by its capability (hidden entirely, not shown
-                empty); when the capability is present but there's nothing to
-                act on, it renders "-" rather than disappearing. */}
-              {quickActionCount > 0 && (
-                <div
-                  className={styles.quickActionsRow}
-                  style={
-                    {
-                      "--quick-action-count": quickActionCount,
-                    } as React.CSSProperties
-                  }
-                >
-                  {canViewDeliveryRun && (
-                    <QuickActionCard
-                      icon="navigation"
-                      label={t("My deliveries")}
-                      value={
-                        deliveryStops.length > 0 ? deliveryStops.length : "-"
-                      }
-                      title={t("See the delivery run-sheet")}
-                      onClick={() => navigate("/deliveries")}
-                    />
-                  )}
-                  {canViewPickList && (
-                    <QuickActionCard
-                      icon="picklist"
-                      label={t("Pick list")}
-                      value={pickListOrderCount > 0 ? pickListOrderCount : "-"}
-                      title={t("See the aggregate pick list")}
-                      onClick={() => navigate("/picklist")}
-                    />
-                  )}
-                  {canReconcileCOD && (
-                    <QuickActionCard
-                      icon="cash"
-                      label={t("Cash-up")}
-                      value={formatRupiahShort(cashUpRemaining)}
-                      title={t("Reconcile COD cash")}
-                      onClick={() => navigate("/cashup")}
-                    />
-                  )}
-                </div>
-              )}
+              <QuickActionsRow
+                canViewDeliveryRun={canViewDeliveryRun}
+                deliveryStopCount={deliveryStops.length}
+                canViewPickList={canViewPickList}
+                pickListOrderCount={pickListOrderCount}
+                canReconcileCOD={canReconcileCOD}
+                cashUpRemainingLabel={formatRupiahShort(cashUpRemaining)}
+                onNavigateDeliveries={() => navigate("/deliveries")}
+                onNavigatePickList={() => navigate("/picklist")}
+                onNavigateCashUp={() => navigate("/cashup")}
+              />
 
               <div className={styles.topActions}>
                 <NotificationsPopover />
@@ -299,110 +250,62 @@ export function Dashboard() {
               </div>
             </div>
 
-            {/* Digest section (hide/show)&*/}
-            {showDigest && !digest.loading && (
-              <div className={styles.digestSection}>
-                <div className={styles.sectionHeading}>
-                  {t("Needs attention today")}
-                </div>
-                <div className={styles.digestGrid}>
-                  {digestTiles.map((tile) => (
-                    <DigestTile
-                      key={tile.key}
-                      value={tile.value}
-                      label={tile.label}
-                      loud={tile.loud}
-                      onClick={tile.onClick}
-                    />
-                  ))}
-                </div>
-                <div className={styles.doneRow}>
-                  <span className={styles.doneItem}>{t("Done today")}</span>
-                  <span className={styles.separator} />
-                  <span className={styles.doneItem}>
-                    <Icon name="check" size={16} />
-                    {digest.deliveredToday} {t("delivered")}
-                  </span>
-                  <span className={styles.doneItem}>
-                    <Icon name="cash" size={16} />
-                    {currency.format(digest.codCollectedTodayAmount)}{" "}
-                    {t("collected")}
-                  </span>
-                </div>
-              </div>
-            )}
-
-            {/* Metrics row — 4 cards. */}
-            <div className={styles.metricsRow}>
-              {metrics.map((metric) => (
-                <MetricCard
-                  key={metric.id}
-                  icon={METRIC_ICONS[metric.id] ?? "total"}
-                  value={metric.value}
-                  label={t(metric.label)}
-                  rangeLabel={metric.range}
-                  onRangeChange={
-                    metric.id !== "open"
-                      ? (val, label) => {
-                          if (metric.id === "total")
-                            setTotalRange({ val, label });
-                          else if (metric.id === "delivered")
-                            setDeliveredRange({ val, label });
-                          else if (metric.id === "cancelled")
-                            setCancelledRange({ val, label });
-                        }
-                      : undefined
-                  }
+            <div className={styles.sectionsContainer}>
+              {showDigest && !digest.loading && (
+                <DigestSection
+                  tiles={digestTiles}
+                  deliveredToday={digest.deliveredToday}
+                  codCollectedTodayLabel={currency.format(
+                    digest.codCollectedTodayAmount,
+                  )}
                 />
-              ))}
-            </div>
+              )}
 
-            {/* Stage pills grid. Stages owned by the current role are highlighted. */}
-            <div className={styles.pipelineRow}>
-              <div className={styles.sectionHeading}>
-                {t("Current order pipeline")}
-              </div>
-              <div className={styles.currentStages}>
-                {currentPipeline.map((stage) => (
-                  <StagePill
-                    key={stage.stage}
-                    count={stage.count}
-                    label={t(stage.label)}
-                    highlight={focusStages.includes(stage.stage)}
-                    color={statusColor(stage.stage)}
-                    onClick={() => navigate(`/orders?stage=${stage.stage}`)}
-                  />
-                ))}
-              </div>
-            </div>
+              <MetricsRow
+                metrics={metrics}
+                onRangeChange={(metricId, val, label) => {
+                  if (metricId === "total") setTotalRange({ val, label });
+                  else if (metricId === "delivered")
+                    setDeliveredRange({ val, label });
+                  else if (metricId === "cancelled")
+                    setCancelledRange({ val, label });
+                }}
+              />
 
-            {/* 2-column panels: Return Workflows | Needs Attention. */}
-            <div className={styles.panelsGridTwo}>
-              <ReturnWorkflowsPanel
-                stages={returnsWorkflow}
+              <PipelineRow
+                stages={currentPipeline}
                 focusStages={focusStages}
-                currentRole={role}
                 onStageClick={(key) => navigate(`/orders?stage=${key}`)}
               />
-              <AttentionPanel
-                items={attentionItems}
-                onItemClick={(stageKey) =>
-                  navigate(`/orders?stage=${stageKey}`)
-                }
+
+              {/* 2-column panels: Return Workflows | Needs Attention. */}
+              <div className={styles.panelsGridTwo}>
+                <ReturnWorkflowsPanel
+                  stages={returnsWorkflow}
+                  focusStages={focusStages}
+                  currentRole={role}
+                  onStageClick={(key) => navigate(`/orders?stage=${key}`)}
+                />
+                <AttentionPanel
+                  items={attentionItems}
+                  onItemClick={(stageKey) =>
+                    navigate(`/orders?stage=${stageKey}`)
+                  }
+                />
+              </div>
+
+              <OpenOrdersPanel
+                orders={openOrders}
+                loading={ordersLoading}
+                error={error}
+                total={total}
+                page={page}
+                pageSize={pageSize}
+                onPageChange={setPage}
+                sortBy={sortBy}
+                onSortChange={setSortBy}
               />
             </div>
-
-            <OpenOrdersPanel
-              orders={openOrders}
-              loading={ordersLoading}
-              error={error}
-              total={total}
-              page={page}
-              pageSize={pageSize}
-              onPageChange={setPage}
-              sortBy={sortBy}
-              onSortChange={setSortBy}
-            />
           </>
         )}
       </div>

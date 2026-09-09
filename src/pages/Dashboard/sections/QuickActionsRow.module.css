@@ -1,0 +1,11 @@
+.quickActionsRow {
+  display: grid;
+  grid-template-columns: repeat(var(--quick-action-count, 3), minmax(0, 1fr));
+  gap: var(--space-lg);
+}
+
+@media (max-width: 1024px) {
+  .quickActionsRow {
+    grid-template-columns: 1fr;
+  }
+}

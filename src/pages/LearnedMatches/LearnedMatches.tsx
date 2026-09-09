@@ -77,6 +77,7 @@ export function LearnedMatches() {
 
   return (
     <main className={styles.main}>
+      <div className={styles.sectionsContainer}>
       <div className={styles.header}>
         <h1 className={styles.title}>{t("Learned Matches")}</h1>
         {!loading && <span className={styles.count}>{rows.length}</span>}
@@ -190,6 +191,7 @@ export function LearnedMatches() {
           </tbody>
         </table>
       </Card>
+      </div>
     </main>
   );
 }

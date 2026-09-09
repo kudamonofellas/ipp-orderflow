@@ -6,6 +6,13 @@
   margin: 0 auto;
 }
 
+.sectionsContainer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xl);
+  padding: 0 var(--space-xl);
+}
+
 .title {
   font: var(--text-h2);
   color: var(--text-primary);
@@ -235,6 +242,27 @@
   padding: 0 var(--space-lg) var(--space-md);
 }
 
+.teamAddRow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-lg) var(--space-md);
+}
+
+.cardActions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+}
+
+.actionsRow {
+  display: flex;
+  flex-direction: row;
+  gap: var(--space-sm);
+  align-items: center;
+}
+
 /* ===== Corrections review ===== */
 
 .correctionsCard {
@@ -333,7 +361,7 @@
 .teamEditActions {
   display: flex;
   gap: var(--space-sm);
-  flex-shrink: 0;
+  width: 100%;
 }
 
 @media (max-width: 640px) {

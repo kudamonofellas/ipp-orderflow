@@ -303,479 +303,494 @@ export function Settings() {
 
   return (
     <div className={styles.container}>
-      <h1 className={styles.title}>{t("Settings")}</h1>
+      <div className={styles.sectionsContainer}>
+        <h1 className={styles.title}>{t("Settings")}</h1>
 
-      <section>
-        <h2 className={styles.sectionHeading}>{t("Account")}</h2>
-        <Card>
-          <span className={styles.accountName}>{name || "—"}</span>
-          <span className={styles.accountRole}>{role ?? ""}</span>
-        </Card>
-      </section>
-
-      {canManageRoles && (
         <section>
-          <h2 className={styles.sectionHeading}>{t("Team")}</h2>
-          <p className={styles.body}>
-            {t(
-              "Manage who can log in. Toggle a member inactive to block their access without deleting the account.",
-            )}
-          </p>
-          {teamLoading ? (
-            <div className={styles.muted}>{t("Loading team…")}</div>
-          ) : teamError ? (
-            <div className={styles.error}>{teamError}</div>
-          ) : (
-            <Card className={styles.teamCard}>
-              {members.map((m) => {
-                const isEditing = editingId === m.id;
-                return (
-                  <div key={m.id} className={styles.teamMember}>
-                    <div className={styles.teamRowHeader}>
-                      <div className={styles.teamInfo}>
-                        <span className={styles.teamName}>
-                          {`${m.first_name ?? ""} ${m.last_name ?? ""}`.trim() ||
-                            m.email}
-                        </span>
-                        <span className={styles.teamRole}>
-                          {m.role?.name ?? "—"}
-                        </span>
-                      </div>
-                      <div className={styles.teamActions}>
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          size="sm"
-                          iconOnly
-                          icon="pencilEdit"
-                          title={t("Edit")}
-                          isActive={isEditing}
-                          onClick={() =>
-                            isEditing ? cancelEdit() : startEdit(m)
-                          }
-                        >
-                          {t("Edit")}
-                        </Button>
-                        <Toggle
-                          size="md"
-                          label={
-                            m.status === "active"
-                              ? t("Deactivate member")
-                              : t("Activate member")
-                          }
-                          checked={m.status === "active"}
-                          onChange={(next) => handleToggleActive(m, next)}
-                        />
-                      </div>
-                    </div>
-
-                    {isEditing && (
-                      <div className={styles.teamEditRow}>
-                        <div className={styles.teamEditGrid}>
-                          <input
-                            className={styles.input}
-                            value={editName}
-                            onChange={(e) => setEditName(e.target.value)}
-                            placeholder={t("Name")}
-                          />
-                          <select
-                            className={styles.select}
-                            value={editRoleId}
-                            onChange={(e) => setEditRoleId(e.target.value)}
-                          >
-                            {roles.map((r) => (
-                              <option key={r.id} value={r.id}>
-                                {r.name}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                        <div className={styles.teamEditFooter}>
-                          <Button
-                            type="button"
-                            variant="tertiary"
-                            size="sm"
-                            iconOnly
-                            icon="trash"
-                            title={t("Remove member")}
-                            onClick={() => deleteMember(m)}
-                          >
-                            {t("Remove")}
-                          </Button>
-                          <div className={styles.teamEditActions}>
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              size="md"
-                              onClick={cancelEdit}
-                            >
-                              {t("Cancel")}
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="primary"
-                              size="md"
-                              disabled={savingMember}
-                              onClick={() => saveEdit(m.id)}
-                            >
-                              {t("Save")}
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-              <div className={styles.teamEditRow}>
-                <div className={styles.teamEditGrid}>
-                  <input
-                    className={styles.input}
-                    value={newMemberName}
-                    onChange={(e) => setNewMemberName(e.target.value)}
-                    placeholder={t("Name")}
-                  />
-                  <input
-                    className={styles.input}
-                    type="email"
-                    value={newMemberEmail}
-                    onChange={(e) => setNewMemberEmail(e.target.value)}
-                    placeholder={t("Email")}
-                  />
-                  <select
-                    className={styles.select}
-                    value={newMemberRoleId}
-                    onChange={(e) => setNewMemberRoleId(e.target.value)}
-                  >
-                    <option value="">{t("Select role…")}</option>
-                    {roles.map((r) => (
-                      <option key={r.id} value={r.id}>
-                        {r.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className={styles.teamEditFooter}>
-                  <Button
-                    type="button"
-                    variant="primary"
-                    size="md"
-                    icon="add"
-                    disabled={
-                      addingMember ||
-                      !newMemberName.trim() ||
-                      !newMemberEmail.trim() ||
-                      !newMemberRoleId
-                    }
-                    onClick={handleAddMember}
-                  >
-                    {addingMember ? t("Adding…") : t("Add team member")}
-                  </Button>
-                </div>
-              </div>
-            </Card>
-          )}
-        </section>
-      )}
-
-      {isOwner && (
-        <section>
-          <h2 className={styles.sectionHeading}>{t("Roles & Permissions")}</h2>
-          <p className={styles.body}>
-            {t(
-              "Turn each function on or off per role. Owner always has full access. Tap a cell to change it.",
-            )}
-          </p>
-          <Card className={styles.gridCard}>
-            <div className={styles.gridScroll}>
-              <table className={styles.permTable}>
-                <thead>
-                  <tr>
-                    <th></th>
-                    {PERMISSION_GRID_ROLES.map((r) => (
-                      <th key={r}>{t(r)}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {PERMISSION_GRID.map((group) => (
-                    <Fragment key={group.section}>
-                      <tr className={styles.groupRow}>
-                        <td colSpan={PERMISSION_GRID_ROLES.length + 1}>
-                          {t(group.section)}
-                        </td>
-                      </tr>
-                      {group.rows.map(({ cap, label }) => (
-                        <tr key={cap}>
-                          <td className={styles.permLabel}>{t(label)}</td>
-                          {PERMISSION_GRID_ROLES.map((r) => {
-                            const allowed = permValue(r, cap);
-                            return (
-                              <td key={r} className={styles.permCell}>
-                                <Checkbox
-                                  checked={allowed}
-                                  onChange={(next) => toggleCell(r, cap, next)}
-                                  label={`${t(label)} — ${t(r)}`}
-                                />
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      ))}
-                    </Fragment>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <Button
-              type="button"
-              variant="tertiary"
-              className={styles.resetLink}
-              onClick={handleResetPermissions}
-            >
-              {t("Reset permissions to defaults")}
-            </Button>
+          <h2 className={styles.sectionHeading}>{t("Account")}</h2>
+          <Card>
+            <span className={styles.accountName}>{name || "—"}</span>
+            <span className={styles.accountRole}>{role ?? ""}</span>
           </Card>
         </section>
-      )}
 
-      <section>
-        <h2 className={styles.sectionHeading}>{t("Intake Learning")}</h2>
-        <Card>
-          <div className={styles.row}>
-            <Icon name="ai" size={20} className={styles.rowIcon} />
-            <div className={styles.rowInfo}>
-              <span className={styles.rowTitle}>
-                {learnedMatches} {t("learned matches")}
-              </span>
-              <span className={styles.rowNote}>
-                {t(
-                  "Shared knowledge base — every correction your team makes is kept and reused, reviewed here.",
-                )}
-              </span>
-            </div>
-            {canManageSettings && (
+        {canManageRoles && (
+          <section>
+            <h2 className={styles.sectionHeading}>{t("Team")}</h2>
+            <p className={styles.body}>
+              {t(
+                "Manage who can log in. Toggle a member inactive to block their access without deleting the account.",
+              )}
+            </p>
+            {teamLoading ? (
+              <div className={styles.muted}>{t("Loading team…")}</div>
+            ) : teamError ? (
+              <div className={styles.error}>{teamError}</div>
+            ) : (
+              <Card className={styles.teamCard}>
+                {members.map((m) => {
+                  const isEditing = editingId === m.id;
+                  return (
+                    <div key={m.id} className={styles.teamMember}>
+                      <div className={styles.teamRowHeader}>
+                        <div className={styles.teamInfo}>
+                          <span className={styles.teamName}>
+                            {`${m.first_name ?? ""} ${m.last_name ?? ""}`.trim() ||
+                              m.email}
+                          </span>
+                          <span className={styles.teamRole}>
+                            {m.role?.name ?? "—"}
+                          </span>
+                        </div>
+                        <div className={styles.teamActions}>
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            iconOnly
+                            icon="pencilEdit"
+                            title={t("Edit")}
+                            isActive={isEditing}
+                            onClick={() =>
+                              isEditing ? cancelEdit() : startEdit(m)
+                            }
+                          >
+                            {t("Edit")}
+                          </Button>
+                          <Toggle
+                            size="md"
+                            label={
+                              m.status === "active"
+                                ? t("Deactivate member")
+                                : t("Activate member")
+                            }
+                            checked={m.status === "active"}
+                            onChange={(next) => handleToggleActive(m, next)}
+                          />
+                        </div>
+                      </div>
+
+                      {isEditing &&
+                        (() => {
+                          const hasEditChanges =
+                            editName.trim() !==
+                              `${m.first_name ?? ""} ${m.last_name ?? ""}`.trim() ||
+                            editRoleId !== (m.role?.id ?? "");
+                          return (
+                        <div className={styles.teamEditRow}>
+                          <div className={styles.teamEditGrid}>
+                            <input
+                              className={styles.input}
+                              value={editName}
+                              onChange={(e) => setEditName(e.target.value)}
+                              placeholder={t("Name")}
+                            />
+                            <select
+                              className={styles.select}
+                              value={editRoleId}
+                              onChange={(e) => setEditRoleId(e.target.value)}
+                            >
+                              {roles.map((r) => (
+                                <option key={r.id} value={r.id}>
+                                  {r.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className={styles.actionsRow}>
+                            <div className={styles.teamEditActions}>
+                              <Button
+                                type="button"
+                                variant="primary"
+                                size="md"
+                                disabled={savingMember || !hasEditChanges}
+                                onClick={() => saveEdit(m.id)}
+                              >
+                                {t("Save")}
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                size="md"
+                                onClick={cancelEdit}
+                              >
+                                {t("Cancel")}
+                              </Button>
+                            </div>
+                            <div style={{ flexShrink: 0 }}>
+                              <Button
+                                type="button"
+                                variant="tertiary"
+                                size="sm"
+                                icon="trash"
+                                title={t("Remove member")}
+                                onClick={() => deleteMember(m)}
+                              >
+                                {t("Remove member")}
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                          );
+                        })()}
+                    </div>
+                  );
+                })}
+                <div className={styles.teamAddRow}>
+                  <div className={styles.teamEditGrid}>
+                    <input
+                      className={styles.input}
+                      value={newMemberName}
+                      onChange={(e) => setNewMemberName(e.target.value)}
+                      placeholder={t("Name")}
+                    />
+                    <input
+                      className={styles.input}
+                      type="email"
+                      value={newMemberEmail}
+                      onChange={(e) => setNewMemberEmail(e.target.value)}
+                      placeholder={t("Email")}
+                    />
+                    <select
+                      className={styles.select}
+                      value={newMemberRoleId}
+                      onChange={(e) => setNewMemberRoleId(e.target.value)}
+                    >
+                      <option value="">{t("Select role…")}</option>
+                      {roles.map((r) => (
+                        <option key={r.id} value={r.id}>
+                          {r.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className={styles.cardActions}>
+                    <Button
+                      type="button"
+                      variant="primary"
+                      size="md"
+                      buttonStyle="fullWidth"
+                      icon="add"
+                      disabled={
+                        addingMember ||
+                        !newMemberName.trim() ||
+                        !newMemberEmail.trim() ||
+                        !newMemberRoleId
+                      }
+                      onClick={handleAddMember}
+                    >
+                      {addingMember ? t("Adding…") : t("Add team member")}
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            )}
+          </section>
+        )}
+
+        {isOwner && (
+          <section>
+            <h2 className={styles.sectionHeading}>
+              {t("Roles & Permissions")}
+            </h2>
+            <p className={styles.body}>
+              {t(
+                "Turn each function on or off per role. Owner always has full access. Tap a cell to change it.",
+              )}
+            </p>
+            <Card className={styles.gridCard}>
+              <div className={styles.gridScroll}>
+                <table className={styles.permTable}>
+                  <thead>
+                    <tr>
+                      <th></th>
+                      {PERMISSION_GRID_ROLES.map((r) => (
+                        <th key={r}>{t(r)}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {PERMISSION_GRID.map((group) => (
+                      <Fragment key={group.section}>
+                        <tr className={styles.groupRow}>
+                          <td colSpan={PERMISSION_GRID_ROLES.length + 1}>
+                            {t(group.section)}
+                          </td>
+                        </tr>
+                        {group.rows.map(({ cap, label }) => (
+                          <tr key={cap}>
+                            <td className={styles.permLabel}>{t(label)}</td>
+                            {PERMISSION_GRID_ROLES.map((r) => {
+                              const allowed = permValue(r, cap);
+                              return (
+                                <td key={r} className={styles.permCell}>
+                                  <Checkbox
+                                    checked={allowed}
+                                    onChange={(next) =>
+                                      toggleCell(r, cap, next)
+                                    }
+                                    label={`${t(label)} — ${t(r)}`}
+                                  />
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        ))}
+                      </Fragment>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
               <Button
                 type="button"
                 variant="tertiary"
-                onClick={() => navigate("/settings/learned-matches")}
+                className={styles.resetLink}
+                onClick={handleResetPermissions}
               >
-                {t("View all matches")}
+                {t("Reset permissions to defaults")}
               </Button>
-            )}
-          </div>
-        </Card>
-      </section>
-
-      {loading ? (
-        <div className={styles.muted}>{t("Loading settings…")}</div>
-      ) : error ? (
-        <div className={styles.error}>{error}</div>
-      ) : (
-        <>
-          {canManageSettings && (
-            <>
-              <section>
-                <h2 className={styles.sectionHeading}>{t("Cold Storage")}</h2>
-                <Card className={styles.stackedCard}>
-                  <div className={styles.toggleRow}>
-                    <div className={styles.rowInfo}>
-                      <span className={styles.rowTitle}>
-                        {t("Require a proof photo on every item")}
-                      </span>
-                      <span className={styles.rowNote}>
-                        {t(
-                          "Warehouse must attach at least one photo per item before releasing.",
-                        )}
-                      </span>
-                    </div>
-                    <Toggle
-                      label={t("Require a proof photo on every item")}
-                      checked={settings?.require_photo === true}
-                      onChange={(next) =>
-                        handleSettingUpdate({ require_photo: next })
-                      }
-                    />
-                  </div>
-
-                  <div className={styles.toleranceBlock}>
-                    <span className={styles.rowTitle}>
-                      {t("Weigh tolerance vs the order")}
-                    </span>
-                    <div className={styles.toleranceGrid}>
-                      <label className={styles.toleranceField}>
-                        <span className={styles.toleranceLabel}>
-                          {t("Flag if below by (%)")}
-                        </span>
-                        <input
-                          className={styles.input}
-                          type="number"
-                          min={0}
-                          max={100}
-                          value={settings?.tol_below_pct ?? 10}
-                          onChange={(e) =>
-                            handleSettingUpdate({
-                              tol_below_pct: Number(e.target.value),
-                            })
-                          }
-                        />
-                      </label>
-                      <label className={styles.toleranceField}>
-                        <span className={styles.toleranceLabel}>
-                          {t("Flag if above by (%)")}
-                        </span>
-                        <input
-                          className={styles.input}
-                          type="number"
-                          min={0}
-                          max={100}
-                          value={settings?.tol_above_pct ?? 10}
-                          onChange={(e) =>
-                            handleSettingUpdate({
-                              tol_above_pct: Number(e.target.value),
-                            })
-                          }
-                        />
-                      </label>
-                    </div>
-                    <span className={styles.rowNote}>
-                      {t(
-                        "A weighed total outside this range shows a gentle hint — it does not block.",
-                      )}
-                    </span>
-                  </div>
-                </Card>
-              </section>
-
-              <section>
-                <h2 className={styles.sectionHeading}>{t("Dispatch")}</h2>
-                <Card>
-                  <div className={styles.toggleRow}>
-                    <div className={styles.rowInfo}>
-                      <span className={styles.rowTitle}>
-                        {t("Require delivery proof photos")}
-                      </span>
-                      <span className={styles.rowNote}>
-                        {t(
-                          "Courier must attach condition, received-by & signed-invoice photos before marking delivered. Off = photos optional.",
-                        )}
-                      </span>
-                    </div>
-                    <Toggle
-                      label={t("Require delivery proof photos")}
-                      checked={settings?.dispatch_proof_required === true}
-                      onChange={(next) =>
-                        handleSettingUpdate({ dispatch_proof_required: next })
-                      }
-                    />
-                  </div>
-                </Card>
-              </section>
-            </>
-          )}
-
-          <section>
-            <h2 className={styles.sectionHeading}>{t("General")}</h2>
-            <Card>
-              <div className={styles.row}>
-                <Icon name="language" size={20} className={styles.rowIcon} />
-                <div className={styles.rowInfo}>
-                  <span className={styles.rowTitle}>{t("Language")}</span>
-                  <span className={styles.rowNote}>
-                    {t("Sets the default UI language for the whole team.")}
-                  </span>
-                </div>
-                <div className={styles.langButtons}>
-                  <Button
-                    type="button"
-                    variant={lang === "en" ? "primary" : "secondary"}
-                    size="md"
-                    onClick={() => handleLangChange("en")}
-                  >
-                    {t("English")}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant={lang === "id" ? "primary" : "secondary"}
-                    size="md"
-                    onClick={() => handleLangChange("id")}
-                  >
-                    {t("Bahasa")}
-                  </Button>
-                </div>
-              </div>
             </Card>
           </section>
-        </>
-      )}
+        )}
 
-      <section>
-        <h2 className={styles.sectionHeading}>{t("Data")}</h2>
-        <div className={styles.dataStack}>
-          {canBackupRestore && (
-            <Button
-              type="button"
-              variant="secondary"
-              buttonStyle="fullWidth"
-              size="lg"
-              icon="download"
-              onClick={() =>
-                alert(t(NOT_AVAILABLE), { title: t("Backup unavailable") })
-              }
-            >
-              {t("Backup everything (Download)")}
-            </Button>
-          )}
-          <div className={styles.dataRow}>
+        <section>
+          <h2 className={styles.sectionHeading}>{t("Intake Learning")}</h2>
+          <Card>
+            <div className={styles.row}>
+              <Icon name="ai" size={20} className={styles.rowIcon} />
+              <div className={styles.rowInfo}>
+                <span className={styles.rowTitle}>
+                  {learnedMatches} {t("learned matches")}
+                </span>
+                <span className={styles.rowNote}>
+                  {t(
+                    "Shared knowledge base — every correction your team makes is kept and reused, reviewed here.",
+                  )}
+                </span>
+              </div>
+              {canManageSettings && (
+                <Button
+                  type="button"
+                  variant="tertiary"
+                  onClick={() => navigate("/settings/learned-matches")}
+                >
+                  {t("View all matches")}
+                </Button>
+              )}
+            </div>
+          </Card>
+        </section>
+
+        {loading ? (
+          <div className={styles.muted}>{t("Loading settings…")}</div>
+        ) : error ? (
+          <div className={styles.error}>{error}</div>
+        ) : (
+          <>
+            {canManageSettings && (
+              <>
+                <section>
+                  <h2 className={styles.sectionHeading}>{t("Cold Storage")}</h2>
+                  <Card className={styles.stackedCard}>
+                    <div className={styles.toggleRow}>
+                      <div className={styles.rowInfo}>
+                        <span className={styles.rowTitle}>
+                          {t("Require a proof photo on every item")}
+                        </span>
+                        <span className={styles.rowNote}>
+                          {t(
+                            "Warehouse must attach at least one photo per item before releasing.",
+                          )}
+                        </span>
+                      </div>
+                      <Toggle
+                        label={t("Require a proof photo on every item")}
+                        checked={settings?.require_photo === true}
+                        onChange={(next) =>
+                          handleSettingUpdate({ require_photo: next })
+                        }
+                      />
+                    </div>
+
+                    <div className={styles.toleranceBlock}>
+                      <span className={styles.rowTitle}>
+                        {t("Weigh tolerance vs the order")}
+                      </span>
+                      <div className={styles.toleranceGrid}>
+                        <label className={styles.toleranceField}>
+                          <span className={styles.toleranceLabel}>
+                            {t("Flag if below by (%)")}
+                          </span>
+                          <input
+                            className={styles.input}
+                            type="number"
+                            min={0}
+                            max={100}
+                            value={settings?.tol_below_pct ?? 10}
+                            onChange={(e) =>
+                              handleSettingUpdate({
+                                tol_below_pct: Number(e.target.value),
+                              })
+                            }
+                          />
+                        </label>
+                        <label className={styles.toleranceField}>
+                          <span className={styles.toleranceLabel}>
+                            {t("Flag if above by (%)")}
+                          </span>
+                          <input
+                            className={styles.input}
+                            type="number"
+                            min={0}
+                            max={100}
+                            value={settings?.tol_above_pct ?? 10}
+                            onChange={(e) =>
+                              handleSettingUpdate({
+                                tol_above_pct: Number(e.target.value),
+                              })
+                            }
+                          />
+                        </label>
+                      </div>
+                      <span className={styles.rowNote}>
+                        {t(
+                          "A weighed total outside this range shows a gentle hint — it does not block.",
+                        )}
+                      </span>
+                    </div>
+                  </Card>
+                </section>
+
+                <section>
+                  <h2 className={styles.sectionHeading}>{t("Dispatch")}</h2>
+                  <Card>
+                    <div className={styles.toggleRow}>
+                      <div className={styles.rowInfo}>
+                        <span className={styles.rowTitle}>
+                          {t("Require delivery proof photos")}
+                        </span>
+                        <span className={styles.rowNote}>
+                          {t(
+                            "Courier must attach condition, received-by & signed-invoice photos before marking delivered. Off = photos optional.",
+                          )}
+                        </span>
+                      </div>
+                      <Toggle
+                        label={t("Require delivery proof photos")}
+                        checked={settings?.dispatch_proof_required === true}
+                        onChange={(next) =>
+                          handleSettingUpdate({ dispatch_proof_required: next })
+                        }
+                      />
+                    </div>
+                  </Card>
+                </section>
+              </>
+            )}
+
+            <section>
+              <h2 className={styles.sectionHeading}>{t("General")}</h2>
+              <Card>
+                <div className={styles.row}>
+                  <Icon name="language" size={20} className={styles.rowIcon} />
+                  <div className={styles.rowInfo}>
+                    <span className={styles.rowTitle}>{t("Language")}</span>
+                    <span className={styles.rowNote}>
+                      {t("Sets the default UI language for the whole team.")}
+                    </span>
+                  </div>
+                  <div className={styles.langButtons}>
+                    <Button
+                      type="button"
+                      variant={lang === "en" ? "primary" : "secondary"}
+                      size="md"
+                      onClick={() => handleLangChange("en")}
+                    >
+                      {t("English")}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={lang === "id" ? "primary" : "secondary"}
+                      size="md"
+                      onClick={() => handleLangChange("id")}
+                    >
+                      {t("Bahasa")}
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            </section>
+          </>
+        )}
+
+        <section>
+          <h2 className={styles.sectionHeading}>{t("Data")}</h2>
+          <div className={styles.dataStack}>
             {canBackupRestore && (
               <Button
                 type="button"
                 variant="secondary"
                 buttonStyle="fullWidth"
                 size="lg"
-                icon="restore"
+                icon="download"
                 onClick={() =>
-                  alert(t(NOT_AVAILABLE), { title: t("Restore unavailable") })
+                  alert(t(NOT_AVAILABLE), { title: t("Backup unavailable") })
                 }
               >
-                {t("Restore from Backup")}
+                {t("Backup everything (Download)")}
               </Button>
             )}
-            {canExportCSV && (
-              <Button
-                type="button"
-                variant="secondary"
-                buttonStyle="fullWidth"
-                size="lg"
-                icon="export"
-                onClick={() =>
-                  alert(t(NOT_AVAILABLE), { title: t("Export unavailable") })
-                }
-              >
-                {t("Export all orders (CSV)")}
-              </Button>
-            )}
+            <div className={styles.dataRow}>
+              {canBackupRestore && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  buttonStyle="fullWidth"
+                  size="lg"
+                  icon="restore"
+                  onClick={() =>
+                    alert(t(NOT_AVAILABLE), { title: t("Restore unavailable") })
+                  }
+                >
+                  {t("Restore from Backup")}
+                </Button>
+              )}
+              {canExportCSV && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  buttonStyle="fullWidth"
+                  size="lg"
+                  icon="export"
+                  onClick={() =>
+                    alert(t(NOT_AVAILABLE), { title: t("Export unavailable") })
+                  }
+                >
+                  {t("Export all orders (CSV)")}
+                </Button>
+              )}
+            </div>
+            <span className={styles.rowNote}>
+              {t(
+                "Full backup = orders, customers, settings + all photos in one file. Columns follow your role.",
+              )}
+            </span>
+
+            <div className={styles.divider} />
+
+            <Button
+              type="button"
+              variant="secondary"
+              buttonStyle="fullWidth"
+              size="lg"
+              icon="logout"
+              onClick={handleLogout}
+            >
+              {t("Logout")}
+            </Button>
           </div>
-          <span className={styles.rowNote}>
-            {t(
-              "Full backup = orders, customers, settings + all photos in one file. Columns follow your role.",
-            )}
-          </span>
-
-          <div className={styles.divider} />
-
-          <Button
-            type="button"
-            variant="secondary"
-            buttonStyle="fullWidth"
-            size="lg"
-            icon="logout"
-            onClick={handleLogout}
-          >
-            {t("Logout")}
-          </Button>
-        </div>
-      </section>
+        </section>
+      </div>
     </div>
   );
 }

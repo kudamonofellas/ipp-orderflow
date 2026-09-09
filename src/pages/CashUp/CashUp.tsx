@@ -71,6 +71,7 @@ export function CashUp() {
 
   return (
     <div className={styles.container}>
+      <div className={styles.sectionsContainer}>
       <header className={styles.header}>
         <div className={styles.titleSection}>
           <Button
@@ -170,6 +171,7 @@ export function CashUp() {
           </div>
         ))
       )}
+      </div>
     </div>
   );
 }

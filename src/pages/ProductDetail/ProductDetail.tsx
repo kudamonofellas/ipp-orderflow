@@ -124,16 +124,28 @@ export function ProductDetail() {
   };
 
   if (loading)
-    return <div className={styles.container}>{t("Loading product details…")}</div>;
+    return (
+      <div className={styles.container}>
+        <div className={styles.sectionsContainer}>
+          <p className={styles.muted}>{t("Loading product details…")}</p>
+        </div>
+      </div>
+    );
   if (error)
     return (
-      <div className={styles.container} style={{ color: "var(--state-error)" }}>
-        {t(error)}
+      <div className={styles.container}>
+        <div
+          className={styles.sectionsContainer}
+          style={{ color: "var(--state-error)" }}
+        >
+          {t(error)}
+        </div>
       </div>
     );
 
   return (
     <div className={styles.container}>
+      <div className={styles.sectionsContainer}>
       <header className={styles.header}>
         <div className={styles.topActionsRow}>
           <Button
@@ -233,6 +245,7 @@ export function ProductDetail() {
           )}
         </div>
       </Card>
+      </div>
     </div>
   );
 }

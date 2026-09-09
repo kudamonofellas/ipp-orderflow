@@ -1,9 +1,8 @@
-import { Card } from '../../../components/Card/Card';
-import { useLanguage } from '../../../hooks/useLanguage';
-import { statusColor, ROLE_COLOR, type Stage } from '../../../lib/pipeline';
-import type { Role } from '../../../lib/domain';
-import type { StageCount } from '../../../types/dashboard';
-import styles from './ReturnWorkflowsPanel.module.css';
+import { useLanguage } from "../../../hooks/useLanguage";
+import { statusColor, ROLE_COLOR, type Stage } from "../../../lib/pipeline";
+import type { Role } from "../../../lib/domain";
+import type { StageCount } from "../../../types/dashboard";
+import styles from "./ReturnWorkflowsPanel.module.css";
 
 interface ReturnWorkflowsPanelProps {
   stages: StageCount[];
@@ -24,8 +23,11 @@ export function ReturnWorkflowsPanel({
 }: ReturnWorkflowsPanelProps) {
   const { t } = useLanguage();
   return (
-    <Card style={{ width: '100%' }}>
-      <h3 className={styles.heading}>{t('Return Workflows')}</h3>
+    <div className={styles.section}>
+      <div className={styles.sectionHeadingRow}>
+        <h3 className={styles.sectionHeading}>{t("Return Workflows")}</h3>
+        <div className={styles.separator} />
+      </div>
       <div className={styles.list}>
         {stages.map((stage) => {
           const highlight = focusStages.includes(stage.stage);
@@ -46,12 +48,12 @@ export function ReturnWorkflowsPanel({
           // warning colour).
           const color = !highlight
             ? undefined
-            : stage.stage === 'replacement_transit' && currentRole
+            : stage.stage === "replacement_transit" && currentRole
               ? ROLE_COLOR[currentRole]
               : statusColor(stage.stage);
           const style = color
             ? ({
-                '--stage-color': color,
+                "--stage-color": color,
                 backgroundColor: `color-mix(in srgb, ${color} 12%, var(--bg-surface))`,
                 borderColor: color,
               } as React.CSSProperties)
@@ -60,7 +62,9 @@ export function ReturnWorkflowsPanel({
             <button
               key={stage.stage}
               type="button"
-              className={[styles.pill, highlight ? styles.pillHighlight : ''].filter(Boolean).join(' ')}
+              className={[styles.pill, highlight ? styles.pillHighlight : ""]
+                .filter(Boolean)
+                .join(" ")}
               style={style}
               onClick={() => onStageClick?.(stage.stage)}
             >
@@ -70,13 +74,16 @@ export function ReturnWorkflowsPanel({
               >
                 {stage.count}
               </span>
-              <span className={styles.label} style={color ? { color } : undefined}>
+              <span
+                className={styles.label}
+                style={color ? { color } : undefined}
+              >
                 {t(stage.label)}
               </span>
             </button>
           );
         })}
       </div>
-    </Card>
+    </div>
   );
 }

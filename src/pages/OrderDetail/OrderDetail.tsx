@@ -1092,11 +1092,24 @@ export function OrderDetail() {
 
   /* ────────────── guards ── */
   if (loading)
-    return <div className={styles.muted}>{t("Loading order details…")}</div>;
+    return (
+      <div className={styles.container}>
+        <div className={styles.sectionsContainer}>
+          <div className={styles.muted}>{t("Loading order details…")}</div>
+        </div>
+      </div>
+    );
   if (error || !order)
     return (
-      <div className={styles.muted} style={{ color: "var(--state-error)" }}>
-        {error || t("Order not found.")}
+      <div className={styles.container}>
+        <div className={styles.sectionsContainer}>
+          <div
+            className={styles.muted}
+            style={{ color: "var(--state-error)" }}
+          >
+            {error || t("Order not found.")}
+          </div>
+        </div>
       </div>
     );
 
@@ -5211,6 +5224,7 @@ export function OrderDetail() {
 
   return (
     <div className={styles.container}>
+      <div className={styles.sectionsContainer}>
       {/* ── Main Content & Side Panel Grid ── */}
       <div
         className={[
@@ -9746,6 +9760,7 @@ export function OrderDetail() {
         currentIndex={activeImageModal?.galleryIndex}
         total={activeImageModal?.gallery?.length}
       />
+      </div>
     </div>
   );
 }

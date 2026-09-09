@@ -112,6 +112,7 @@ export function Reports() {
 
   return (
     <div className={styles.container}>
+      <div className={styles.sectionsContainer}>
       <h1 className={styles.title}>{t("Reports")}</h1>
 
       <div className={styles.rangeRow}>
@@ -487,6 +488,7 @@ export function Reports() {
           </div>
         </>
       )}
+      </div>
     </div>
   );
 }

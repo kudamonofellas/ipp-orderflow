@@ -1,8 +1,7 @@
-import { Icon } from '../../../components/Icon/Icon';
-import { Card } from '../../../components/Card/Card';
-import { useLanguage } from '../../../hooks/useLanguage';
-import type { AttentionItem } from '../../../types/dashboard';
-import styles from './AttentionPanel.module.css';
+import { Icon } from "../../../components/Icon/Icon";
+import { useLanguage } from "../../../hooks/useLanguage";
+import type { AttentionItem } from "../../../types/dashboard";
+import styles from "./AttentionPanel.module.css";
 
 interface AttentionPanelProps {
   items: AttentionItem[];
@@ -18,16 +17,21 @@ interface AttentionPanelProps {
 export function AttentionPanel({ items, onItemClick }: AttentionPanelProps) {
   const { t } = useLanguage();
   return (
-    <Card>
-      <h3 className={styles.heading}>{t('Needs Attention')}</h3>
+    <div className={styles.section}>
+      <div className={styles.sectionHeadingRow}>
+        <h3 className={styles.sectionHeading}>{t("Needs Attention")}</h3>
+        <div className={styles.separator}></div>
+      </div>
+
       {items.length === 0 ? (
-        <p className={styles.empty}>{t('Nothing needs attention right now.')}</p>
+        <p className={styles.empty}>
+          {t("Nothing needs attention right now.")}
+        </p>
       ) : (
         <div className={styles.list}>
           {items.map((item) => (
-            <button
+            <div
               key={item.id}
-              type="button"
               className={styles.row}
               onClick={() => onItemClick?.(item.id)}
             >
@@ -36,10 +40,10 @@ export function AttentionPanel({ items, onItemClick }: AttentionPanelProps) {
                 <span className={styles.label}>{t(item.label)}</span>
               </span>
               <span className={styles.countBadge}>{item.count}</span>
-            </button>
+            </div>
           ))}
         </div>
       )}
-    </Card>
+    </div>
   );
 }

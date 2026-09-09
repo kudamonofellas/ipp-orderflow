@@ -203,16 +203,29 @@ export function ProductEdit() {
     }
   };
 
-  if (loading) return <div className={styles.container}>{t('Loading…')}</div>;
+  if (loading)
+    return (
+      <div className={styles.container}>
+        <div className={styles.sectionsContainer}>
+          <p className={styles.muted}>{t('Loading…')}</p>
+        </div>
+      </div>
+    );
   if (error && !name)
     return (
-      <div className={styles.container} style={{ color: 'var(--state-error)' }}>
-        {t(error)}
+      <div className={styles.container}>
+        <div
+          className={styles.sectionsContainer}
+          style={{ color: 'var(--state-error)' }}
+        >
+          {t(error)}
+        </div>
       </div>
     );
 
   return (
     <div className={styles.container}>
+      <div className={styles.sectionsContainer}>
       <div className={styles.mainColumn}>
         {/* ── Sticky Header ── */}
         <header className={styles.header}>
@@ -362,6 +375,7 @@ export function ProductEdit() {
             )}
           </div>
         </Card>
+      </div>
       </div>
     </div>
   );

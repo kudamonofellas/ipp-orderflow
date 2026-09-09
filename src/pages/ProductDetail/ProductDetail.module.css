@@ -6,6 +6,19 @@
   margin: 0 auto;
 }
 
+.sectionsContainer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xl);
+  padding: 0 var(--space-xl);
+}
+
+.muted {
+  font: var(--text-body);
+  color: var(--text-muted);
+  margin: 0;
+}
+
 .header {
   display: flex;
   flex-direction: column;

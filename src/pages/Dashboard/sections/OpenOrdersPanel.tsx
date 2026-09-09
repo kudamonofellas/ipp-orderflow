@@ -80,13 +80,48 @@ export function OpenOrdersPanel({
               <thead>
                 <tr>
                   <th className={styles.arrowHead} aria-label="Expand" />
-                  <SortableTh label={t("Order ID")} sortKey="no" activeSort={activeSort} onSort={handleSort} />
-                  <SortableTh label={t("Stage")} sortKey="stage" activeSort={activeSort} onSort={handleSort} />
-                  <SortableTh label={t("Order Date")} sortKey="order_date" activeSort={activeSort} onSort={handleSort} />
-                  <SortableTh label={t("Delivery Date")} sortKey="delivery_date" activeSort={activeSort} onSort={handleSort} />
-                  <SortableTh label={t("Sales Rep")} sortKey="sales" activeSort={activeSort} onSort={handleSort} />
-                  <SortableTh label={t("Customer")} sortKey="customer_name" activeSort={activeSort} onSort={handleSort} />
-                  <SortableTh label={t("Items")} sortKey="items" activeSort={activeSort} onSort={handleSort} />
+                  <SortableTh
+                    label={t("Order ID")}
+                    sortKey="no"
+                    activeSort={activeSort}
+                    onSort={handleSort}
+                  />
+                  <SortableTh
+                    label={t("Stage")}
+                    sortKey="stage"
+                    activeSort={activeSort}
+                    onSort={handleSort}
+                  />
+                  <SortableTh
+                    label={t("Order Date")}
+                    sortKey="order_date"
+                    activeSort={activeSort}
+                    onSort={handleSort}
+                  />
+                  <SortableTh
+                    label={t("Delivery Date")}
+                    sortKey="delivery_date"
+                    activeSort={activeSort}
+                    onSort={handleSort}
+                  />
+                  <SortableTh
+                    label={t("Sales Rep")}
+                    sortKey="sales"
+                    activeSort={activeSort}
+                    onSort={handleSort}
+                  />
+                  <SortableTh
+                    label={t("Customer")}
+                    sortKey="customer_name"
+                    activeSort={activeSort}
+                    onSort={handleSort}
+                  />
+                  <SortableTh
+                    label={t("Items")}
+                    sortKey="items"
+                    activeSort={activeSort}
+                    onSort={handleSort}
+                  />
                 </tr>
               </thead>
               {displayOrders.map((order) => (

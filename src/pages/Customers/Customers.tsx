@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '../../components/Button/Button';
 import { Icon } from '../../components/Icon/Icon';
-import { Card } from '../../components/Card/Card';
 import { useAuth } from '../../hooks/useAuth';
 import { useLanguage } from '../../hooks/useLanguage';
 import { Avatar } from '../../components/Avatar/Avatar';
@@ -197,6 +196,7 @@ export function Customers() {
 
   return (
     <main className={styles.main}>
+      <div className={styles.sectionsContainer}>
       <div className={styles.header}>
         <h1 className={styles.title}>{t('Customers')}</h1>
         {!loading && (
@@ -256,7 +256,7 @@ export function Customers() {
         </div>
       </div>
 
-      <Card>
+      <div className={styles.tableWrapper}>
         <table className={styles.table}>
           <thead>
             <tr>
@@ -362,7 +362,8 @@ export function Customers() {
         </footer>
 
 
-      </Card>
+      </div>
+      </div>
     </main>
   );
 }

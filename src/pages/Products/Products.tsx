@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '../../components/Button/Button';
 import { Icon } from '../../components/Icon/Icon';
-import { Card } from '../../components/Card/Card';
 import { SortableTh } from '../../components/SortableTh/SortableTh';
 import { Toggle } from '../../components/Toggle/Toggle';
 import { readProducts, updateProduct, createProduct, aggregateProducts } from '../../lib/directus';
@@ -253,6 +252,7 @@ export function Products() {
 
   return (
     <main className={styles.main}>
+      <div className={styles.sectionsContainer}>
 
       <div className={styles.header}>
         <h1 className={styles.title}>{t('Products')}</h1>
@@ -326,7 +326,7 @@ export function Products() {
         </div>
       </div>
 
-      <Card>
+      <div className={styles.tableWrapper}>
         <div>
           <table className={styles.table}>
             <thead>
@@ -441,7 +441,8 @@ export function Products() {
             </div>
           </footer>
         </div>
-      </Card>
+      </div>
+      </div>
     </main>
   );
 }

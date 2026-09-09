@@ -5,6 +5,17 @@
   min-width: 0;
 }
 
+.sectionsContainer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xl);
+  padding: 0 var(--space-xl);
+}
+
+.tableWrapper {
+  overflow: hidden;
+}
+
 .header {
   display: flex;
   align-items: center;

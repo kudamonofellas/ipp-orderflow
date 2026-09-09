@@ -56,6 +56,7 @@ export function Deliveries() {
 
   return (
     <div className={styles.container}>
+      <div className={styles.sectionsContainer}>
       <header className={styles.header}>
         <div className={styles.titleSection}>
           <Button type="button" variant="tertiary" icon="chevronLeft" onClick={() => navigate(backTo)}>
@@ -290,6 +291,7 @@ export function Deliveries() {
           )}
         </>
       )}
+      </div>
     </div>
   );
 }

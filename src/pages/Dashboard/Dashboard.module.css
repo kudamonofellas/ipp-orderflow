@@ -11,27 +11,19 @@
   min-width: 0;
 }
 
-.loading {
+.muted {
   font: var(--text-body);
-  color: var(--text-secondary);
-  padding: var(--space-3xl) var(--space-lg);
-  text-align: center;
+  color: var(--text-muted);
+  margin: 0;
 }
 
-.separator {
-  height: 1px;
-  background: var(--border-subtle);
-  flex-shrink: 0;
-}
-
-/* ===== TopRow: welcome (left) | actions (right) ===== */
 .topRow {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--space-lg);
   flex-wrap: wrap;
-  padding-bottom: var(--space-lg);
+  padding: 0 var(--space-xl) var(--space-lg);
   border-bottom: 1px solid var(--border-subtle);
 }
 
@@ -41,6 +33,13 @@
   justify-content: center;
 }
 
+.sectionsContainer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xl);
+  padding: 0 var(--space-xl);
+}
+
 .label {
   font: var(--text-body);
   color: var(--text-secondary);
@@ -48,13 +47,6 @@
 
 .heading {
   font: var(--text-h3);
-}
-
-.sectionHeading {
-  font: var(--text-label);
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-wide);
 }
 
 .welcomeName {
@@ -68,117 +60,20 @@
   gap: var(--space-md);
 }
 
-.pipelineRow {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
-}
-
-/* ===== Metrics row — 4 cards ===== */
-.metricsRow {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--space-lg);
-}
-
-/* ===== Quick-action row — Deliveries / Pick list / Cash-up =====
-   Column count tracks how many cards are actually rendered (role-gated —
-   1, 2, or 3), via a --quick-action-count custom property set inline, so
-   the visible cards always stretch to fill the row instead of leaving a
-   gap where a hidden card's column would have been. */
-.quickActionsRow {
-  display: grid;
-  grid-template-columns: repeat(var(--quick-action-count, 3), minmax(0, 1fr));
-  gap: var(--space-lg);
-}
-
-/* ===== "Needs attention today" / "Done today" digest ===== */
-.digestSection {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
-}
-
-.digestGrid {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: var(--space-md);
-}
-
-.separator {
-  height: 1px;
-  flex: 1;
-  width: 100%;
-  background: var(--border-subtle);
-  margin: 0 var(--space-md);
-  flex-shrink: 0;
-}
-
-.doneRow {
-  display: flex;
-  align-items: center;
-  gap: var(--space-lg);
-  color: var(--text-primary);
-}
-
-.doneItem {
-  display: flex;
-  align-items: center;
-  gap: var(--space-xs);
-  font: var(--text-body);
-}
-
-/* ===== Stage pills ===== */
-.currentStages {
-  display: grid;
-  grid-template-columns: repeat(8, minmax(0, 1fr));
-  gap: var(--space-md);
-}
-
-/* ===== 2-column panels grid (Return Workflows | Needs Attention) ===== */
+/* ===== 2-column panels grid (Return Workflows | Needs Attention) =====
+   Each panel sizes to its own natural content height — no forced height
+   match, no internal scrolling (removed per direct request). */
 .panelsGridTwo {
   display: grid;
   grid-template-columns: minmax(280px, 1fr) minmax(0, 1.5fr);
   gap: var(--space-lg);
-  align-items: stretch;
-}
-
-/* First child (ReturnWorkflowsPanel) determines the row height */
-.panelsGridTwo > :first-child {
-  height: fit-content;
-}
-
-/* Other panels adjust to ReturnWorkflowsPanel height and scroll internally */
-.panelsGridTwo > :not(:first-child) {
-  height: 0;
-  min-height: 100%;
-  max-height: 100%;
+  align-items: start;
 }
 
 /* ===== Responsive ===== */
 @media (max-width: 1024px) {
-  .metricsRow {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .quickActionsRow {
-    grid-template-columns: 1fr;
-  }
-
-  .digestGrid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .currentStages {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-
   .panelsGridTwo {
     grid-template-columns: 1fr;
-  }
-  .panelsGridTwo > :not(:first-child) {
-    min-height: 320px;
-    max-height: 100%;
   }
 }
 
@@ -186,28 +81,5 @@
   .topRow {
     flex-direction: column;
     align-items: flex-start;
-  }
-
-  .metricsRow {
-    grid-template-columns: 1fr;
-  }
-
-  .digestGrid {
-    grid-template-columns: 1fr;
-  }
-
-  .doneRow {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--space-xs);
-  }
-
-  .currentStages {
-    grid-template-columns: 1fr;
-  }
-
-  .panelsGridTwo > :not(:first-child) {
-    min-height: 320px;
-    max-height: 100%;
   }
 }

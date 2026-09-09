@@ -603,6 +603,7 @@ export function OrderNew() {
 
   return (
     <div className={styles.container}>
+      <div className={styles.sectionsContainer}>
       <div
         className={[
           styles.layoutGrid,
@@ -1227,6 +1228,7 @@ export function OrderNew() {
             </Card>
           </div>
         </aside>
+      </div>
       </div>
       <AddItemModal
         open={isAddItemModalOpen}

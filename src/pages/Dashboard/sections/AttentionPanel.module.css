@@ -1,6 +1,29 @@
-.heading {
-  font: var(--text-h3);
-  margin-bottom: var(--space-lg);
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.sectionHeadingRow {
+  display: flex;
+  align-items: center;
+  flex-direction: row;
+  gap: var(--space-md);
+}
+
+.sectionHeading {
+  font: var(--text-label);
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+}
+
+.separator {
+  height: 1px;
+  flex: 1;
+  width: 100%;
+  background: var(--border-subtle);
+  margin: 0 var(--space-md);
   flex-shrink: 0;
 }
 
@@ -9,10 +32,6 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding-right: var(--space-xs);
 }
 
 .row {
@@ -23,7 +42,7 @@
   width: 100%;
   background: color-mix(in srgb, var(--state-warning), transparent 90%);
   border: 1px solid var(--state-warning);
-  border-radius: var(--space-sm);
+  border-radius: var(--space-md);
   padding: var(--space-md);
   cursor: pointer;
   color: var(--text-secondary);

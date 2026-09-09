@@ -5,6 +5,13 @@
   min-width: 0;
 }
 
+.sectionsContainer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xl);
+  padding: 0 var(--space-xl);
+}
+
 .header {
   display: flex;
   align-items: center;
@@ -70,9 +77,6 @@
 
 /* Table */
 .tableWrapper {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-lg);
   overflow: hidden;
 }
 

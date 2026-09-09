@@ -132,6 +132,7 @@ export function PickList() {
 
   return (
     <div className={styles.container}>
+      <div className={styles.sectionsContainer}>
       <header className={styles.header}>
         <div className={styles.titleSection}>
           <Button
@@ -214,6 +215,7 @@ export function PickList() {
           ))}
         </div>
       )}
+      </div>
     </div>
   );
 }

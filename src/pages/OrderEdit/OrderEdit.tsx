@@ -552,11 +552,24 @@ export function OrderEdit() {
   }
 
   if (loading)
-    return <div className={styles.muted}>{t("Loading order details…")}</div>;
+    return (
+      <div className={styles.container}>
+        <div className={styles.sectionsContainer}>
+          <div className={styles.muted}>{t("Loading order details…")}</div>
+        </div>
+      </div>
+    );
   if (error || !order) {
     return (
-      <div className={styles.muted} style={{ color: "var(--state-error)" }}>
-        {error || t("Order not found.")}
+      <div className={styles.container}>
+        <div className={styles.sectionsContainer}>
+          <div
+            className={styles.muted}
+            style={{ color: "var(--state-error)" }}
+          >
+            {error || t("Order not found.")}
+          </div>
+        </div>
       </div>
     );
   }
@@ -569,6 +582,7 @@ export function OrderEdit() {
 
   return (
     <div className={styles.container}>
+      <div className={styles.sectionsContainer}>
       <div className={styles.layoutGrid}>
         <div className={styles.mainColumn}>
           <header className={styles.header}>
@@ -972,6 +986,7 @@ export function OrderEdit() {
             </Button>
           </Card>
         </div>
+      </div>
       </div>
 
       <AddItemModal

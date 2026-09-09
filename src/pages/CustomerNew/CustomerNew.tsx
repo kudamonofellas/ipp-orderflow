@@ -98,6 +98,7 @@ export function CustomerNew() {
 
   return (
     <div className={styles.container}>
+      <div className={styles.sectionsContainer}>
       <div className={styles.mainColumn}>
         {/* ── Sticky Header ── */}
         <header className={styles.header}>
@@ -313,6 +314,7 @@ export function CustomerNew() {
             </div>
           </div>
         </Card>
+      </div>
       </div>
     </div>
   );

@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import { Card } from "../../components/Card/Card";
 import { Icon } from "../../components/Icon/Icon";
 import { Button } from "../../components/Button/Button";
 import { ChannelSelectModal } from "../../components/ChannelSelectModal/ChannelSelectModal";
@@ -220,6 +219,7 @@ export function Orders() {
 
   return (
     <div className={styles.main}>
+      <div className={styles.sectionsContainer}>
       <div className={styles.header}>
         <h1 className={styles.title}>{t("Orders")}</h1>
         <div className={styles.controls}>
@@ -300,7 +300,7 @@ export function Orders() {
         </div>
       </div>
 
-      <Card>
+      <div>
         <div className={styles.headerWrap}>
           <h3 className={styles.heading}>
             {t(stageCopy.headline)}{" "}
@@ -403,7 +403,8 @@ export function Orders() {
             </footer>
           </>
         )}
-      </Card>
+      </div>
+      </div>
 
       <ChannelSelectModal
         open={orderStep === 1}
