@@ -1,5 +1,6 @@
 .shell {
   min-height: 100vh;
+  min-height: 100dvh;
   background: var(--bg-surface);
   display: flex;
   flex-direction: row;
@@ -10,4 +11,16 @@
   flex: 1 1 0%;
   min-width: 0;
   padding: var(--space-xl) 0;
+}
+
+/* Sidebar → bottom nav below the mobile breakpoint (BottomNav.module.css
+ * flips its own display:none the same width, so the two switch together). */
+@media (max-width: 768px) {
+  .shell > aside {
+    display: none;
+  }
+
+  .content {
+    padding: var(--space-md) 0 calc(64px + env(safe-area-inset-bottom, 0px));
+  }
 }

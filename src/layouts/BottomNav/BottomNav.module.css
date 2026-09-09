@@ -1,0 +1,46 @@
+.bottomNav {
+  display: none;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
+  align-items: center;
+  justify-content: space-around;
+  gap: var(--space-xs);
+  padding: var(--space-sm) var(--space-md)
+    calc(var(--space-sm) + env(safe-area-inset-bottom, 0px));
+  background: var(--bg-surface-hover);
+  border-top: 1px solid var(--border-default);
+  /* Forces its own GPU compositing layer — without this, mobile Safari can
+   * lag/jitter a fixed-position bar during momentum scroll, making it look
+   * like it's dragging along with the page instead of staying put. */
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+.link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  transition:
+    background-color var(--duration-fast) var(--ease-default),
+    color var(--duration-fast) var(--ease-default);
+}
+
+.linkActive {
+  background: var(--accent-primary);
+  color: var(--text-on-accent);
+}
+
+@media (max-width: 768px) {
+  .bottomNav {
+    display: flex;
+  }
+}

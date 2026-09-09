@@ -44,3 +44,21 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Mobile: horizontal scroll row instead of a vertical stack — matches
+ * `context/designs/Mobile - Dashboard.png`. Declared after the 640px block
+ * above so it wins at phone widths. */
+@media (max-width: 768px) {
+  .currentStages {
+    display: flex;
+    grid-template-columns: none;
+    overflow-x: auto;
+    padding-bottom: var(--space-xs);
+    scrollbar-width: thin;
+  }
+
+  .currentStages > * {
+    flex: 0 0 auto;
+    width: 150px;
+  }
+}

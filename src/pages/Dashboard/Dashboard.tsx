@@ -4,6 +4,7 @@ import { Button } from "../../components/Button/Button";
 import { ChannelSelectModal } from "../../components/ChannelSelectModal/ChannelSelectModal";
 import { IntakeModal } from "../../components/IntakeModal/IntakeModal";
 import { NotificationsPopover } from "../../components/NotificationsPopover/NotificationsPopover";
+import { AvatarMenu } from "../../components/AvatarMenu/AvatarMenu";
 import {
   useCan,
   useCurrentUserId,
@@ -215,13 +216,33 @@ export function Dashboard() {
           </div>
         ) : (
           <>
-            {/* TopRow: welcome (left) | notifications + New Order (right). */}
+            {/* TopRow: avatar + welcome (left) | New Order + notifications (right). */}
             <div className={styles.topRow}>
-              <div className={styles.welcome}>
-                <p className={styles.label}>{t("Welcome")}</p>
-                <h1 className={styles.welcomeName}>{currentUserName || "—"}</h1>
+              <div className={styles.welcomeGroup}>
+                <AvatarMenu />
+                <div className={styles.welcome}>
+                  <p className={styles.label}>{t("Welcome")}</p>
+                  <h1 className={styles.welcomeName}>{currentUserName || "—"}</h1>
+                </div>
               </div>
 
+              <div className={styles.topActions}>
+                {canCreateOrders && (
+                  <Button
+                    variant="primary"
+                    size="md"
+                    onClick={startNewOrder}
+                    title={t("Create a new order")}
+                    icon="add"
+                  >
+                    {t("New Order")}
+                  </Button>
+                )}
+                <NotificationsPopover />
+              </div>
+            </div>
+
+            <div className={styles.sectionsContainer}>
               <QuickActionsRow
                 canViewDeliveryRun={canViewDeliveryRun}
                 deliveryStopCount={deliveryStops.length}
@@ -234,23 +255,6 @@ export function Dashboard() {
                 onNavigateCashUp={() => navigate("/cashup")}
               />
 
-              <div className={styles.topActions}>
-                <NotificationsPopover />
-                {canCreateOrders && (
-                  <Button
-                    variant="primary"
-                    size="md"
-                    onClick={startNewOrder}
-                    title={t("Create a new order")}
-                    icon="add"
-                  >
-                    {t("New Order")}
-                  </Button>
-                )}
-              </div>
-            </div>
-
-            <div className={styles.sectionsContainer}>
               {showDigest && !digest.loading && (
                 <DigestSection
                   tiles={digestTiles}

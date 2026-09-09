@@ -15,3 +15,21 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Mobile: horizontal scroll row (2 cards visible at a time, matching
+ * `context/designs/Mobile - Dashboard.png`) instead of a vertical stack.
+ * Declared after the 640px block above so it wins at phone widths. */
+@media (max-width: 768px) {
+  .metricsRow {
+    display: flex;
+    grid-template-columns: none;
+    overflow-x: auto;
+    padding-bottom: var(--space-xs);
+    scrollbar-width: thin;
+  }
+
+  .metricsRow > * {
+    flex: 0 0 auto;
+    width: 62%;
+  }
+}

@@ -2,7 +2,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-3xl);
+  gap: var(--space-sm);
   min-width: 240px;
   padding: var(--space-md) var(--space-lg);
   background-color: var(--bg-surface-hover-dark);
@@ -24,15 +24,10 @@
   box-shadow: var(--focus-ring);
 }
 
-.left {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  min-width: 0;
-}
-
 .iconWrap {
+  display: flex;
   color: var(--accent-primary);
+  order: 1;
 }
 
 .label {
@@ -42,18 +37,56 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.right {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-md);
-  flex-shrink: 0;
-  white-space: nowrap;
+  order: 2;
 }
 
 .value {
   font: var(--text-h3);
   font-weight: 700;
   color: var(--text-primary);
+  white-space: nowrap;
+  order: 3;
+  margin-left: auto;
+}
+
+/* Mobile: value+icon on one line, label on its own line below — matches
+ * `context/designs/Mobile - Dashboard.png`. Same three children, just
+ * reflowed via flex-wrap + order (label forced to a new line via
+ * flex-basis: 100%). */
+@media (max-width: 768px) {
+  .card {
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: flex-start;
+    gap: var(--space-xs) var(--space-sm);
+    background-color: var(--bg-surface-hover);
+    border-color: transparent;
+    border-radius: var(--radius-xl);
+    padding: var(--space-lg);
+  }
+
+  .iconWrap {
+    order: 2;
+    align-self: center;
+  }
+
+  .iconWrap :global(svg) {
+    width: 28px;
+    height: 28px;
+  }
+
+  .value {
+    order: 1;
+    margin-left: 0;
+    font: var(--text-h2);
+    color: var(--accent-primary);
+  }
+
+  .label {
+    order: 3;
+    flex-basis: 100%;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
+  }
 }

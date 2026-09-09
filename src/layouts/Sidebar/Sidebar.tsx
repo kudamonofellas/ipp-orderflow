@@ -11,49 +11,19 @@ import { Link } from "react-router-dom";
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { Icon } from "../../components/Icon/Icon";
-import type { IconName } from "../../components/Icon/icons";
 import { Avatar } from "../../components/Avatar/Avatar";
 import { Button } from "../../components/Button/Button";
 import { getInitials } from "../../lib/initials";
 import { useAuth, useCan, useCurrentUserName } from "../../hooks/useAuth";
 import { useLanguage } from "../../hooks/useLanguage";
-import type { Capability } from "../../lib/domain";
 import { useTheme } from "../../hooks/useTheme";
 import { SidebarContext, type SidebarState } from "./sidebar-context";
 import { useSidebar } from "./useSidebar";
 import { Logo } from "../../components/Logo/Logo";
+import { NAV_ITEMS } from "../navItems";
 import styles from "./Sidebar.module.css";
 
 const STORAGE_KEY = "ipp_sidebar_collapsed";
-
-interface NavItem {
-  to: string;
-  label: string;
-  icon: IconName;
-  /** Hides the link entirely for a role lacking this capability — matches
-   *  the prototype's Dev-Layout.jsx behavior (Sidebar/tab nav hides
-   *  Customers/Products/Reports by capability). Omit for always-visible links. */
-  cap?: Capability;
-}
-
-const NAV_ITEMS: NavItem[] = [
-  { to: "/", label: "Dashboard", icon: "dashboard" },
-  { to: "/orders", label: "Orders", icon: "orders" },
-  {
-    to: "/customers",
-    label: "Customers",
-    icon: "customers",
-    cap: "browseCustomers",
-  },
-  {
-    to: "/products",
-    label: "Products",
-    icon: "products",
-    cap: "browseProducts",
-  },
-  { to: "/reports", label: "Reports", icon: "reports", cap: "accessReports" },
-  { to: "/settings", label: "Settings", icon: "settings" },
-];
 
 export function SidebarProvider({ children }: { children: ReactNode }) {
   const [collapsed, setCollapsed] = useState<boolean>(() => {

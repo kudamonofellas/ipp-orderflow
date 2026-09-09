@@ -1,11 +1,110 @@
 import { useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Button } from "../../../components/Button/Button";
 import { Card } from "../../../components/Card/Card";
+import { Icon } from "../../../components/Icon/Icon";
 import { OrderRow } from "../../../components/OrderRow/OrderRow";
 import { SortableTh } from "../../../components/SortableTh/SortableTh";
+import { StatusPill } from "../../../components/StatusPill/StatusPill";
+import { useCan } from "../../../hooks/useAuth";
 import { useLanguage } from "../../../hooks/useLanguage";
+import { dispatchSubLabel } from "../../../lib/pipeline";
 import type { OpenOrder } from "../../../types/dashboard";
 import styles from "./OpenOrdersPanel.module.css";
+
+const currency = new Intl.NumberFormat("id-ID", {
+  style: "currency",
+  currency: "IDR",
+  minimumFractionDigits: 0,
+});
+
+/**
+ * Compact 2-column (Order ID / Status) card row for the mobile "Open
+ * Orders" list — matches `context/designs/Mobile - Dashboard.png`. A
+ * separate component from `OrderRow` (not a responsive reflow of it)
+ * because `OrderRow` is fundamentally table-shaped (`<tbody>`/`<tr>`), not
+ * something that can also render as a `<div>` card at a narrower width.
+ * Shares the same expand-for-line-items idea, just in a div layout.
+ */
+function MobileOrderRow({ order }: { order: OpenOrder }) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [expanded, setExpanded] = useState(false);
+  const canSeePrices = useCan()("seePrices");
+  const { t } = useLanguage();
+  const lines = order.lines ?? [];
+  const hasItems = lines.length > 0;
+  const subLabel = dispatchSubLabel({
+    stage: order.status,
+    taken_by: order.takenBy,
+    pickup: order.pickup,
+    third_party: order.thirdParty,
+  });
+
+  function toggle(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (hasItems) setExpanded((v) => !v);
+  }
+
+  function handleRowClick() {
+    navigate(`/orders/${order.id}`, {
+      state: { from: location.pathname + location.search },
+    });
+  }
+
+  return (
+    <div className={styles.mobileRowGroup}>
+      <div
+        className={styles.mobileRow}
+        onClick={handleRowClick}
+        aria-expanded={hasItems ? expanded : undefined}
+      >
+        <button
+          type="button"
+          className={styles.mobileArrow}
+          onClick={toggle}
+          aria-label={expanded ? t("Collapse") : t("Expand")}
+        >
+          {hasItems && (
+            <Icon
+              name="circleArrowRight"
+              size={16}
+              className={`${styles.chevron} ${expanded ? styles.chevronOpen : ""}`}
+            />
+          )}
+        </button>
+        <span className={styles.mobileOrderId}>{order.no}</span>
+        <StatusPill
+          status={order.status}
+          subLabel={subLabel}
+          isReplacement={order.isReplacement}
+          pendingDocs={order.pendingDocs}
+          isHold={order.hold}
+        />
+      </div>
+      {expanded && hasItems && (
+        <div className={styles.mobileLines}>
+          {lines.map((line) => {
+            const hasPrice = line.price != null && line.price > 0;
+            const qty = line.qty ?? 0;
+            const subtotal = hasPrice ? (line.price ?? 0) * qty : null;
+            return (
+              <div key={line.id} className={styles.mobileLineRow}>
+                <span className={styles.mobileLineName}>{line.name}</span>
+                <span className={styles.mobileLineQty}>
+                  {qty > 0 ? `${qty} ${line.unit ?? ""}` : ""}
+                  {canSeePrices && subtotal != null
+                    ? ` · ${currency.format(subtotal)}`
+                    : ""}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface OpenOrdersPanelProps {
   orders: OpenOrder[];
@@ -75,7 +174,7 @@ export function OpenOrdersPanel({
         <div className={styles.muted}>No open orders.</div>
       ) : (
         <>
-          <div style={{ overflowX: "auto" }}>
+          <div className={styles.desktopTableWrap} style={{ overflowX: "auto" }}>
             <table className={styles.table}>
               <thead>
                 <tr>
@@ -128,6 +227,12 @@ export function OpenOrdersPanel({
                 <OrderRow key={order.id} order={order} />
               ))}
             </table>
+          </div>
+
+          <div className={styles.mobileList}>
+            {displayOrders.map((order) => (
+              <MobileOrderRow key={order.id} order={order} />
+            ))}
           </div>
 
           <footer className={styles.pagination}>

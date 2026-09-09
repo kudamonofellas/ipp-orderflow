@@ -38,6 +38,96 @@
   width: 40px;
 }
 
+/* ===== Mobile card list (Order ID / Status, expandable) =====
+ * Hidden on desktop; shown instead of the table below the mobile
+ * breakpoint. See `context/designs/Mobile - Dashboard.png`. */
+.mobileList {
+  display: none;
+}
+
+.mobileRowGroup {
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.mobileRowGroup:last-child {
+  border-bottom: none;
+}
+
+.mobileRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-md) 0;
+  cursor: pointer;
+}
+
+.mobileArrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.chevron {
+  transition: transform var(--duration-fast) var(--ease-default);
+}
+
+.chevronOpen {
+  transform: rotate(90deg);
+}
+
+.mobileOrderId {
+  flex: 1;
+  min-width: 0;
+  font: var(--text-body);
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mobileLines {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding: 0 0 var(--space-md) 32px;
+}
+
+.mobileLineRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  font: var(--text-caption);
+  color: var(--text-secondary);
+}
+
+.mobileLineName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mobileLineQty {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+@media (max-width: 768px) {
+  .desktopTableWrap {
+    display: none;
+  }
+
+  .mobileList {
+    display: block;
+  }
+}
+
 /* ===== Pagination ===== */
 .pagination {
   display: flex;

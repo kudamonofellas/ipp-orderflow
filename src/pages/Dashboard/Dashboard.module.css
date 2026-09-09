@@ -27,6 +27,12 @@
   border-bottom: 1px solid var(--border-subtle);
 }
 
+.welcomeGroup {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+}
+
 .welcome {
   display: flex;
   flex-direction: column;
@@ -79,7 +85,11 @@
 
 @media (max-width: 640px) {
   .topRow {
-    flex-direction: column;
-    align-items: flex-start;
+    align-items: center;
+    padding: 0 var(--space-md) var(--space-md);
+  }
+
+  .welcomeName {
+    font: var(--text-h3);
   }
 }

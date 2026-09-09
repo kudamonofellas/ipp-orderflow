@@ -9,3 +9,20 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Mobile: horizontal scroll row instead of a vertical stack — matches
+ * `context/designs/Mobile - Dashboard.png`. */
+@media (max-width: 768px) {
+  .quickActionsRow {
+    display: flex;
+    grid-template-columns: none;
+    overflow-x: auto;
+    padding-bottom: var(--space-xs);
+    scrollbar-width: thin;
+  }
+
+  .quickActionsRow > * {
+    flex: 0 0 auto;
+    min-width: 200px;
+  }
+}

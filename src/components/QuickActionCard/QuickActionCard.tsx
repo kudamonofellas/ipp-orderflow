@@ -11,7 +11,9 @@ interface QuickActionCardProps {
   title?: string;
 }
 
-/** Deliveries / Pick list / Cash-up row card — icon+label left, value+suffix right, `--bg-surface-hover` background. */
+/** Deliveries / Pick list / Cash-up card. Desktop: icon+label left, value right.
+ *  Mobile (`context/designs/Mobile - Dashboard.png`): value+icon on one line,
+ *  label below — same flat markup, reordered via CSS (see .module.css). */
 export function QuickActionCard({
   icon,
   label,
@@ -26,15 +28,11 @@ export function QuickActionCard({
       onClick={onClick}
       title={title}
     >
-      <span className={styles.left}>
-        <span className={styles.iconWrap}>
-          <Icon name={icon} size={24} />
-        </span>
-        <span className={styles.label}>{label}</span>
+      <span className={styles.iconWrap}>
+        <Icon name={icon} size={24} />
       </span>
-      <span className={styles.right}>
-        <span className={styles.value}>{value}</span>
-      </span>
+      <span className={styles.label}>{label}</span>
+      <span className={styles.value}>{value}</span>
     </button>
   );
 }

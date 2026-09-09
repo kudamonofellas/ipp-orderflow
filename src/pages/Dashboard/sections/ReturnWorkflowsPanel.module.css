@@ -33,6 +33,22 @@
   gap: var(--space-sm);
 }
 
+/* Mobile: horizontal scroll row of pills instead of a vertical stack —
+ * matches `context/designs/Mobile - Dashboard.png`. */
+@media (max-width: 768px) {
+  .list {
+    flex-direction: row;
+    overflow-x: auto;
+    padding-bottom: var(--space-xs);
+    scrollbar-width: thin;
+  }
+
+  .pill {
+    flex: 0 0 auto;
+    width: 190px;
+  }
+}
+
 .pill {
   display: flex;
   align-items: center;
