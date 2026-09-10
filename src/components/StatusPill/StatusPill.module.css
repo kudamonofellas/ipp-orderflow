@@ -30,10 +30,13 @@
   color: var(--text-state-warning);
   font: var(--text-caption);
   white-space: nowrap;
-  background: color-mix(in srgb,
-      var(--state-warning, #f59e0b) 12%,
-      transparent);
-  border: 1px solid color-mix(in srgb, var(--state-warning, #f59e0b) 30%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--state-warning, #f59e0b) 12%,
+    transparent
+  );
+  border: 1px solid
+    color-mix(in srgb, var(--state-warning, #f59e0b) 30%, transparent);
   padding: 2px 6px;
 }
 
@@ -48,5 +51,4 @@
   font: var(--text-caption);
   font-weight: 600;
   text-transform: uppercase;
-  color: var(--accent-primary);
 }

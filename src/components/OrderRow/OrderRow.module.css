@@ -4,7 +4,6 @@
 
 .orderGroup td {
   font: var(--text-body);
-  color: var(--text-primary);
   padding: 0 var(--space-md);
   border-top: 1px solid var(--border-subtle);
   transition: background-color var(--duration-fast) var(--ease-default);
@@ -59,14 +58,50 @@
   font-weight: 500;
 }
 
+.cellStage {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.cellDate {
+  flex-shrink: 0;
+  font: var(--text-body);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cellSales {
+  flex-shrink: 0;
+  font: var(--text-body);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cellCustomer {
+  flex-shrink: 0;
+  font: var(--text-body);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cellItems {
+  flex-shrink: 0;
+  font: var(--text-body);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .arrowCell {
   width: 40px;
   text-align: center;
-}
-
-.itemsCount {
-  font-variant-numeric: tabular-nums;
-  color: var(--text-secondary);
 }
 
 /* Arrow starts pointing right (collapsed), rotates to point down (expanded). */
@@ -148,7 +183,7 @@
 
 /* Status cell — stretches the StatusPill so its own internal Replacement
    badge (rendered by StatusPill itself) lands at the right edge of the
-   cell, not just adjacent to the pill. Targets StatusPill's root `.wrap`
+   cell, not just adjacent to the pill. Targets StatusPill's own root `.wrap`
    span generically (`> span:first-child`) rather than reaching into its
    CSS module, so this stays local to this one table instead of changing
    `.wrap`'s default (shrink-to-fit) behavior everywhere else StatusPill

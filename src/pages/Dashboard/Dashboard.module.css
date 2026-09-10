@@ -17,28 +17,6 @@
   margin: 0;
 }
 
-.topRow {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-lg);
-  flex-wrap: wrap;
-  padding: 0 var(--space-xl) var(--space-lg);
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.welcomeGroup {
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
-}
-
-.welcome {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-}
-
 .sectionsContainer {
   display: flex;
   flex-direction: column;
@@ -46,24 +24,8 @@
   padding: 0 var(--space-xl);
 }
 
-.label {
-  font: var(--text-body);
-  color: var(--text-secondary);
-}
-
 .heading {
   font: var(--text-h3);
-}
-
-.welcomeName {
-  font: var(--text-h2);
-  color: var(--accent-primary);
-}
-
-.topActions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
 }
 
 /* ===== 2-column panels grid (Return Workflows | Needs Attention) =====
@@ -79,17 +41,22 @@
 /* ===== Responsive ===== */
 @media (max-width: 1024px) {
   .panelsGridTwo {
-    grid-template-columns: 1fr;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xl);
+  }
+
+  /* Force full width explicitly rather than relying on flex stretch —
+   * each panel's own internal layout (pill rows, etc.) must never be able
+   * to widen it past the available space. */
+  .panelsGridTwo > * {
+    width: 100%;
+    min-width: 0;
   }
 }
 
-@media (max-width: 640px) {
-  .topRow {
-    align-items: center;
-    padding: 0 var(--space-md) var(--space-md);
-  }
-
-  .welcomeName {
-    font: var(--text-h3);
+@media (max-width: 768px) {
+  .sectionsContainer {
+    padding: 0 var(--space-md);
   }
 }

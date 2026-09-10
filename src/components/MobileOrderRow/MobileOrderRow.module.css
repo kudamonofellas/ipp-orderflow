@@ -1,0 +1,200 @@
+/* `width: max-content` (with `min-width: 100%` as the floor for short
+ * rows) so this box's own layout width actually matches `.row`'s full
+ * scrollable content instead of staying capped at the viewport width —
+ * needed so the border-bottom spans the whole scrolled row, and so `.row`
+ * (see below) has a containing block wide enough to keep `.arrow` sticky
+ * for the full scroll range. */
+.rowGroup {
+  width: max-content;
+  min-width: 100%;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+/* No wrap, no shrink — this is what makes the row overflow horizontally.
+ * `width: max-content` makes `.row`'s own box match that overflowing
+ * content's true width (an auto-width flex box would otherwise stay
+ * capped at the viewport width even though its children overflow it) —
+ * required so `.arrow`, a sticky child, has a containing block that stays
+ * in view for the whole scroll range instead of scrolling away partway
+ * through (see the component doc comment for the full explanation). */
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+  padding: var(--space-md) 0;
+  cursor: pointer;
+  height: 64px;
+  flex-wrap: nowrap;
+  width: max-content;
+  min-width: 100%;
+}
+
+/* Pinned to the left edge of `.mobileList`'s scroll area — stays put while
+ * the rest of the row scrolls underneath it. Needs an opaque background
+ * since scrolled content passes directly behind it. */
+.arrow {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 64px;
+  flex-shrink: 0;
+  color: var(--accent-primary);
+  background: var(--bg-surface);
+}
+
+.chevron {
+  transition: transform var(--duration-fast) var(--ease-default);
+}
+
+.chevronOpen {
+  transform: rotate(90deg);
+}
+
+/* Column widths below all reference `--col-*` custom properties declared
+ * once on `OpenOrdersPanel`'s `.mobileList` — the header row (a plain div,
+ * not a real `<table>`) uses the same variables for its own matching
+ * columns, which is what keeps header and data aligned. */
+.orderId {
+  flex-shrink: 0;
+  width: var(--col-id, 100px);
+  font: var(--text-body);
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cellStage {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  width: var(--col-stage, 130px);
+}
+
+.cellDate {
+  flex-shrink: 0;
+  width: var(--col-date, 160px);
+  font: var(--text-body);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cellSales {
+  flex-shrink: 0;
+  width: var(--col-sales, 90px);
+  font: var(--text-body);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cellCustomer {
+  flex-shrink: 0;
+  width: var(--col-customer, 140px);
+  font: var(--text-body);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cellItems {
+  flex-shrink: 0;
+  width: var(--col-items, 90px);
+  font: var(--text-body);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Rendered as a sibling of `.rowGroup` (see the component doc comment),
+ * so its containing block is `.mobileList` itself — the scroll container
+ * never scrolls out of its own view, so this stays reliably stuck, and it
+ * naturally renders at `.mobileList`'s (narrow, viewport-matching) width
+ * rather than inheriting `.rowGroup`'s wide one. */
+.linesRow {
+  position: sticky;
+  left: 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.linesCell {
+  padding-bottom: var(--space-md);
+  background: var(--bg-surface);
+}
+
+.lines {
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  padding: var(--space-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+/* name / qty / unit / subtotal. `lineName` is the only flexible track
+ * (minmax(0, 1fr)) so it soaks up whatever width the fixed qty/unit/
+ * subtotal columns don't need — the others are sized to their own content
+ * (`auto`) rather than competing 1fr tracks, so no width goes unclaimed. */
+.lineRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: var(--space-sm);
+  font: var(--text-caption);
+}
+
+.lineName {
+  font: var(--text-caption);
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lineQty {
+  color: var(--text-muted);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.lineUnit {
+  color: var(--text-muted);
+  width: 24px;
+}
+
+.lineSubtotal {
+  color: var(--text-primary);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  width: 80px;
+}
+
+.totalRow {
+  border-top: 1px solid var(--border-subtle);
+  padding-top: var(--space-xs);
+  margin-top: var(--space-xs);
+}
+
+.totalLabel {
+  grid-column: 1 / span 3;
+  color: var(--text-secondary);
+  text-align: right;
+  font-weight: 500;
+}
+
+.totalValue {
+  color: var(--text-primary);
+  text-align: right;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  width: 80px;
+}

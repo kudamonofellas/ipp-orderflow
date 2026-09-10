@@ -49,20 +49,25 @@
   margin-left: auto;
 }
 
-/* Mobile: value+icon on one line, label on its own line below — matches
- * `context/designs/Mobile - Dashboard.png`. Same three children, just
- * reflowed via flex-wrap + order (label forced to a new line via
- * flex-basis: 100%). */
+/* Mobile: value alone on the top row, icon+label inline together on the
+ * row below — matches `context/designs/Mobile - Dashboard.png`. Same three
+ * children, just reflowed via flex-wrap + order: `.value` gets
+ * flex-basis: 100% to force everything after it onto a new line, where
+ * `.iconWrap` and `.label` then sit side by side. */
 @media (max-width: 768px) {
   .card {
     flex-wrap: wrap;
-    align-items: baseline;
+    align-items: center;
     justify-content: flex-start;
-    gap: var(--space-xs) var(--space-sm);
-    background-color: var(--bg-surface-hover);
-    border-color: transparent;
-    border-radius: var(--radius-xl);
-    padding: var(--space-lg);
+    min-width: 160px;
+  }
+
+  .value {
+    order: 1;
+    flex-basis: 100%;
+    margin-left: 0;
+    font: var(--text-h2);
+    color: var(--accent-primary);
   }
 
   .iconWrap {
@@ -71,20 +76,12 @@
   }
 
   .iconWrap :global(svg) {
-    width: 28px;
-    height: 28px;
-  }
-
-  .value {
-    order: 1;
-    margin-left: 0;
-    font: var(--text-h2);
-    color: var(--accent-primary);
+    width: 20px;
+    height: 20px;
   }
 
   .label {
     order: 3;
-    flex-basis: 100%;
     white-space: normal;
     overflow: visible;
     text-overflow: unset;

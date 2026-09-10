@@ -72,16 +72,16 @@
   transform: rotate(180deg);
 }
 
+/* Portaled to document.body (see MetricCard.tsx) so it can escape the
+ * mobile metrics row's `overflow-x: auto` clipping — `top`/`right` are set
+ * inline from the trigger's bounding rect at open time. */
 .dropdown {
-  position: absolute;
-  top: 100%;
-  right: 0;
-  margin-top: var(--space-sm);
+  position: fixed;
   background: var(--bg-surface);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-md);
-  z-index: 20;
+  z-index: 1000;
   max-width: 160px;
   display: flex;
   flex-direction: column;

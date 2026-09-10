@@ -34,7 +34,13 @@
     color var(--duration-fast) var(--ease-default);
 }
 
-.linkActive {
+/* Compound selector (not just `.linkActive`) so this reliably outranks
+ * both `.link`'s own color (equal specificity otherwise — would depend on
+ * source order, which build-time CSS processing isn't guaranteed to
+ * preserve) and global.css's `a:hover` (which is *more* specific than a
+ * single class, and can get stuck "on" after a tap on touch devices with
+ * no real hover state to clear it). */
+.link.linkActive {
   background: var(--accent-primary);
   color: var(--text-on-accent);
 }

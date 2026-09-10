@@ -31,8 +31,7 @@ export function OrderRow({ order }: { order: OpenOrder }) {
   const count = lines.length;
   const hasItems = count > 0;
   const orderTotal = lines.reduce(
-    (sum, line) =>
-      sum + (line.price ?? 0) * (line.qty ?? 0),
+    (sum, line) => sum + (line.price ?? 0) * (line.qty ?? 0),
     0,
   );
   const subLabel = dispatchSubLabel({
@@ -75,7 +74,7 @@ export function OrderRow({ order }: { order: OpenOrder }) {
           )}
         </td>
         <td className={styles.orderId}>{order.no}</td>
-        <td className={styles.statusCell}>
+        <td className={styles.cellStage}>
           <StatusPill
             status={order.status}
             subLabel={subLabel}
@@ -84,11 +83,11 @@ export function OrderRow({ order }: { order: OpenOrder }) {
             isHold={order.hold}
           />
         </td>
-        <td>{order.orderDate}</td>
-        <td>{order.deliveryDate}</td>
-        <td>{order.salesRep}</td>
-        <td>{order.customerName}</td>
-        <td className={styles.itemsCount}>
+        <td className={styles.cellDate}>{order.orderDate}</td>
+        <td className={styles.cellDate}>{order.deliveryDate}</td>
+        <td className={styles.cellSales}>{order.salesRep}</td>
+        <td className={styles.cellCustomer}>{order.customerName}</td>
+        <td className={styles.cellItems}>
           {count > 0 ? `${count} ${count === 1 ? t("item") : t("items")}` : "-"}
         </td>
       </tr>
@@ -103,9 +102,7 @@ export function OrderRow({ order }: { order: OpenOrder }) {
                 return (
                   <div key={line.id} className={styles.lineRow}>
                     <span className={styles.lineName}>{line.name}</span>
-                    <span className={styles.lineQty}>
-                      {qty > 0 ? qty : ""}
-                    </span>
+                    <span className={styles.lineQty}>{qty > 0 ? qty : ""}</span>
                     <span className={styles.lineUnit}>{line.unit ?? ""}</span>
                     {canSeePrices && (
                       <span className={styles.lineUnitPrice}>

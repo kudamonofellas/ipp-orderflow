@@ -47,7 +47,9 @@ export function SubStatusBadges({
   }
 
   return (
-    <span className={[styles.subStatusWrap, className].filter(Boolean).join(" ")}>
+    <span
+      className={[styles.subStatusWrap, className].filter(Boolean).join(" ")}
+    >
       {isReplacement && (
         <span className={styles.subStatusBadge} title={t("Replacement")}>
           <Icon name="reload" size={11} />
@@ -64,10 +66,7 @@ export function SubStatusBadges({
         </span>
       )}
       {isHold && (
-        <span
-          className={styles.subStatusBadge}
-          title={t("On hold")}
-        >
+        <span className={styles.subStatusBadge} title={t("On hold")}>
           <Icon name="pause" size={11} />
           {t("On hold")}
         </span>
@@ -116,7 +115,9 @@ export function StatusPill({
         }}
       >
         <span className={styles.dot} style={{ backgroundColor: color }} />
-        <span className={styles.label}>{t(displayLabel)}</span>
+        <span className={styles.label} style={{ color: color }}>
+          {t(displayLabel)}
+        </span>
       </span>
       <SubStatusBadges
         isReplacement={isReplacement}

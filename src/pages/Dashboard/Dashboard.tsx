@@ -1,10 +1,7 @@
 import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Button } from "../../components/Button/Button";
 import { ChannelSelectModal } from "../../components/ChannelSelectModal/ChannelSelectModal";
 import { IntakeModal } from "../../components/IntakeModal/IntakeModal";
-import { NotificationsPopover } from "../../components/NotificationsPopover/NotificationsPopover";
-import { AvatarMenu } from "../../components/AvatarMenu/AvatarMenu";
 import {
   useCan,
   useCurrentUserId,
@@ -24,11 +21,11 @@ import { useOpenOrders } from "../../hooks/useOpenOrders";
 import { usePickList } from "../../hooks/usePickList";
 import { useTodayDigest } from "../../hooks/useTodayDigest";
 import { AttentionPanel } from "./sections/AttentionPanel";
+import { DashboardHeader } from "./sections/DashboardHeader";
 import { DigestSection } from "./sections/DigestSection";
 import { MetricsRow } from "./sections/MetricsRow";
 import { OpenOrdersPanel } from "./sections/OpenOrdersPanel";
 import { PipelineRow } from "./sections/PipelineRow";
-import { QuickActionsRow } from "./sections/QuickActionsRow";
 import { ReturnWorkflowsPanel } from "./sections/ReturnWorkflowsPanel";
 import styles from "./Dashboard.module.css";
 import type { ParsedOrderDraft } from "../../lib/directus";
@@ -216,45 +213,22 @@ export function Dashboard() {
           </div>
         ) : (
           <>
-            {/* TopRow: avatar + welcome (left) | New Order + notifications (right). */}
-            <div className={styles.topRow}>
-              <div className={styles.welcomeGroup}>
-                <AvatarMenu />
-                <div className={styles.welcome}>
-                  <p className={styles.label}>{t("Welcome")}</p>
-                  <h1 className={styles.welcomeName}>{currentUserName || "—"}</h1>
-                </div>
-              </div>
-
-              <div className={styles.topActions}>
-                {canCreateOrders && (
-                  <Button
-                    variant="primary"
-                    size="md"
-                    onClick={startNewOrder}
-                    title={t("Create a new order")}
-                    icon="add"
-                  >
-                    {t("New Order")}
-                  </Button>
-                )}
-                <NotificationsPopover />
-              </div>
-            </div>
+            <DashboardHeader
+              currentUserName={currentUserName}
+              canCreateOrders={canCreateOrders}
+              onNewOrder={startNewOrder}
+              canViewDeliveryRun={canViewDeliveryRun}
+              deliveryStopCount={deliveryStops.length}
+              canViewPickList={canViewPickList}
+              pickListOrderCount={pickListOrderCount}
+              canReconcileCOD={canReconcileCOD}
+              cashUpRemainingLabel={formatRupiahShort(cashUpRemaining)}
+              onNavigateDeliveries={() => navigate("/deliveries")}
+              onNavigatePickList={() => navigate("/picklist")}
+              onNavigateCashUp={() => navigate("/cashup")}
+            />
 
             <div className={styles.sectionsContainer}>
-              <QuickActionsRow
-                canViewDeliveryRun={canViewDeliveryRun}
-                deliveryStopCount={deliveryStops.length}
-                canViewPickList={canViewPickList}
-                pickListOrderCount={pickListOrderCount}
-                canReconcileCOD={canReconcileCOD}
-                cashUpRemainingLabel={formatRupiahShort(cashUpRemaining)}
-                onNavigateDeliveries={() => navigate("/deliveries")}
-                onNavigatePickList={() => navigate("/picklist")}
-                onNavigateCashUp={() => navigate("/cashup")}
-              />
-
               {showDigest && !digest.loading && (
                 <DigestSection
                   tiles={digestTiles}

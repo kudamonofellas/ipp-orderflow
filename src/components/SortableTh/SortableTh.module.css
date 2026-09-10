@@ -1,4 +1,7 @@
 .th {
+  font: var(--text-label);
+  color: var(--text-muted);
+  font-weight: 600;
   cursor: pointer;
   user-select: none;
   white-space: nowrap;

@@ -23,7 +23,6 @@
   flex: 1;
   width: 100%;
   background: var(--border-subtle);
-  margin: 0 var(--space-md);
   flex-shrink: 0;
 }
 
@@ -34,18 +33,38 @@
 }
 
 /* Mobile: horizontal scroll row of pills instead of a vertical stack —
- * matches `context/designs/Mobile - Dashboard.png`. */
+ * matches `context/designs/Mobile - Dashboard.png`. `min-width: 0` on
+ * `.section`/`.list` is required so this scroll container is actually
+ * capped at the available width instead of growing to fit its pills (the
+ * classic nested-flex overflow bug) — without it the row bled past the
+ * screen edge instead of scrolling within it. */
 @media (max-width: 768px) {
+  .section {
+    gap: var(--space-sm);
+    min-width: 0;
+  }
+
+  /* Bleeds past `.sectionsContainer`'s right padding (negative margin,
+   * clawed back as padding on the row itself) so the last pill can reach
+   * the true screen edge instead of stopping short — a hard-clipped or
+   * faded edge inside the page's normal inset reads as broken; a
+   * full-bleed edge reads as "there's simply more content to scroll to." */
   .list {
     flex-direction: row;
     overflow-x: auto;
-    padding-bottom: var(--space-xs);
-    scrollbar-width: thin;
+    scrollbar-width: none;
+    min-width: 0;
+    margin-right: calc(-1 * var(--space-md));
+    padding-right: var(--space-md);
+  }
+
+  .list::-webkit-scrollbar {
+    display: none;
   }
 
   .pill {
     flex: 0 0 auto;
-    width: 190px;
+    max-width: 200px;
   }
 }
 

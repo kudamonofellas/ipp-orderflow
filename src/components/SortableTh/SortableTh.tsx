@@ -9,6 +9,9 @@ interface SortableThProps {
   activeSort: string;
   onSort: (nextSort: string) => void;
   className?: string;
+  /** Root element — "th" for a real `<table>` header (default), "div" for
+   *  a div-based mobile header row that mirrors the same column. */
+  as?: "th" | "div";
 }
 
 /**
@@ -25,6 +28,7 @@ export function SortableTh({
   activeSort,
   onSort,
   className,
+  as = "th",
 }: SortableThProps) {
   const isAsc = activeSort === sortKey;
   const isDesc = activeSort === `-${sortKey}`;
@@ -41,8 +45,10 @@ export function SortableTh({
     }
   }
 
+  const Tag = as;
+
   return (
-    <th
+    <Tag
       className={[styles.th, isActive ? styles.active : "", className ?? ""]
         .filter(Boolean)
         .join(" ")}
@@ -64,6 +70,6 @@ export function SortableTh({
           </span>
         )}
       </span>
-    </th>
+    </Tag>
   );
 }

@@ -20,12 +20,19 @@
  * `context/designs/Mobile - Dashboard.png`) instead of a vertical stack.
  * Declared after the 640px block above so it wins at phone widths. */
 @media (max-width: 768px) {
+  /* Bleeds past `.sectionsContainer`'s right padding (negative margin,
+   * clawed back as padding on the row itself) so the last card can reach
+   * the true screen edge instead of stopping short — a hard-clipped or
+   * faded edge inside the page's normal inset reads as broken; a
+   * full-bleed edge reads as "there's simply more content to scroll to." */
   .metricsRow {
     display: flex;
     grid-template-columns: none;
     overflow-x: auto;
-    padding-bottom: var(--space-xs);
-    scrollbar-width: thin;
+    scrollbar-width: none;
+    gap: var(--space-md);
+    margin-right: calc(-1 * var(--space-md));
+    padding-right: var(--space-md);
   }
 
   .metricsRow > * {

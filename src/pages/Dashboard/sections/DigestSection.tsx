@@ -32,6 +32,20 @@ export function DigestSection({
   const { t } = useLanguage();
   return (
     <div className={styles.section}>
+      <div className={styles.sectionHeadingRow}>
+        <span className={styles.sectionHeading}>{t("Done today")}</span>
+        <span className={styles.separator} />
+        <span className={styles.doneItemsGroup}>
+          <span className={styles.doneItem}>
+            <Icon name="check" size={16} />
+            {deliveredToday} {t("delivered")}
+          </span>
+          <span className={styles.doneItem}>
+            <Icon name="cash" size={16} />
+            {codCollectedTodayLabel} {t("collected")}
+          </span>
+        </span>
+      </div>
       <div className={styles.digestGrid}>
         {tiles.map((tile) => (
           <DigestTile
@@ -42,18 +56,6 @@ export function DigestSection({
             onClick={tile.onClick}
           />
         ))}
-      </div>
-      <div className={styles.doneRow}>
-        <span className={styles.doneItem}>{t("Done today")}</span>
-        <span className={styles.separator} />
-        <span className={styles.doneItem}>
-          <Icon name="check" size={16} />
-          {deliveredToday} {t("delivered")}
-        </span>
-        <span className={styles.doneItem}>
-          <Icon name="cash" size={16} />
-          {codCollectedTodayLabel} {t("collected")}
-        </span>
       </div>
     </div>
   );

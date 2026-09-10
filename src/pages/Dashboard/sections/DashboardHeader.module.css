@@ -1,0 +1,116 @@
+/* Desktop: one row — welcome | quickActionsRow | topActions. Avatar hidden
+ * (Sidebar already surfaces account info at this width). */
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-lg);
+  padding: 0 var(--space-xl) var(--space-lg);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.avatarSlot {
+  display: none;
+}
+
+.welcomeGroup {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  order: 1;
+}
+
+.welcome {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.label {
+  font: var(--text-body);
+  color: var(--text-secondary);
+}
+
+.welcomeName {
+  font: var(--text-h2);
+  color: var(--accent-primary);
+}
+
+.quickActionsSlot {
+  order: 2;
+  flex: 1 1 320px;
+  min-width: 0;
+}
+
+/* Capped so cards don't stretch wide/thin on large screens, but still
+ * centered within `.quickActionsSlot` (which itself flexes to fill the
+ * space between welcome and topActions) rather than hugging the left. */
+.quickActionsRow {
+  display: grid;
+  grid-template-columns: repeat(var(--quick-action-count, 3), minmax(0, 1fr));
+  gap: var(--space-lg);
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+@media (max-width: 1024px) {
+  .quickActionsRow {
+    grid-template-columns: 1fr;
+  }
+}
+
+.topActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  order: 3;
+  margin-left: auto;
+}
+
+/* Mobile: welcome (now with avatar, replacing the hidden Sidebar) +
+ * topActions share the first row; quickActionsRow wraps below via
+ * flex-basis: 100% (order swapped with topActions so it lands last). */
+@media (max-width: 768px) {
+  .header {
+    align-items: center;
+    padding: 0 var(--space-md) var(--space-md);
+  }
+
+  .avatarSlot {
+    display: block;
+  }
+
+  .topActions {
+    order: 2;
+  }
+
+  .quickActionsSlot {
+    order: 3;
+    flex-basis: 100%;
+  }
+
+  /* Horizontal scroll row instead of a vertical stack — matches
+   * `context/designs/Mobile - Dashboard.png`. Bleeds past the header's own
+   * right padding (negative margin, clawed back as padding on the row
+   * itself) so the last card can reach all the way to the true screen
+   * edge instead of stopping short — a hard-clipped or faded edge inside
+   * the page's normal inset reads as broken; a full-bleed edge reads as
+   * "there's simply more content to scroll to." */
+  .quickActionsRow {
+    display: flex;
+    grid-template-columns: none;
+    overflow-x: auto;
+    padding-bottom: var(--space-xs);
+    scrollbar-width: none;
+    gap: var(--space-md);
+    max-width: none;
+    margin-left: 0;
+    margin-right: calc(-1 * var(--space-md));
+    padding-right: var(--space-md);
+  }
+
+  .quickActionsRow > * {
+    flex: 0 0 auto;
+    max-width: 160px;
+  }
+}

@@ -38,84 +38,105 @@
   width: 40px;
 }
 
-/* ===== Mobile card list (Order ID / Status, expandable) =====
+/* ===== Mobile card list (full field set, expandable) =====
  * Hidden on desktop; shown instead of the table below the mobile
- * breakpoint. See `context/designs/Mobile - Dashboard.png`. */
-.mobileList {
+ * breakpoint. See `context/designs/Mobile - Dashboard.png`. Row markup
+ * lives in the separate `MobileOrderRow` component (table-shaped `OrderRow`
+ * can't also render as a mobile card, so it isn't a responsive reflow of
+ * it) — this file owns the shared scroll frame + header row. */
+.mobileWrap {
   display: none;
 }
 
-.mobileRowGroup {
+/* The one scroll container for both axes: horizontal scroll carries the
+ * header and every row together (same as scrolling a normal table, not an
+ * independent scroller per row); vertical scroll caps the panel's height.
+ * Explicitly setting both axes avoids the browser silently forcing
+ * `overflow-x` to `auto` behind our backs, which would otherwise turn this
+ * into its own separate horizontal scroller and break the sync.
+ *
+ * The `--col-*` custom properties are the single source of truth for every
+ * column's width, shared by both the header row below and each
+ * `MobileOrderRow` (see that component's `.orderId`/`.cellStage`/etc.) — a
+ * div-based layout has no native column coordination the way a `<table>`
+ * does, so without a shared width per column, header and data drift out of
+ * alignment (each row/label otherwise sizing to its own content). */
+.mobileList {
+  /* Bounds the panel's height so it actually has something to scroll
+   * vertically — without this, the list just grows to fit every row and
+   * the whole page scrolls past it instead, leaving `.mobileHeaderRow`'s
+   * `position: sticky; top: 0` with no scroll boundary to stick against
+   * (nothing to be "stuck" relative to). */
+  max-height: 420px;
+  overflow-x: auto;
+  overflow-y: auto;
+  --col-id: 100px;
+  --col-stage: 160px;
+  --col-date: 160px;
+  --col-sales: 90px;
+  --col-customer: 140px;
+  --col-items: 90px;
+}
+
+/* `width: max-content` so this row's own box matches its (non-wrapping,
+ * overflowing) label content — same reason as `MobileOrderRow`'s `.row`:
+ * without it, `.mobileArrowHead`'s sticky containing block would stay
+ * capped at the viewport width and scroll out of view partway through a
+ * horizontal scroll, breaking its stickiness. */
+.mobileHeaderRow {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+  padding: 0 0 var(--space-sm);
   border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  width: max-content;
+  min-width: 100%;
 }
 
-.mobileRowGroup:last-child {
-  border-bottom: none;
-}
-
-.mobileRow {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  padding: var(--space-md) 0;
-  cursor: pointer;
-}
-
-.mobileArrow {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
+/* Pinned to the left too (on top of the row's own top-pin) so the header's
+ * corner cell stays put on both axes, matching `.arrow` in every row
+ * below it. */
+.mobileArrowHead {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  width: 32px;
   flex-shrink: 0;
-  color: var(--text-muted);
+  background: var(--bg-surface);
 }
 
-.chevron {
-  transition: transform var(--duration-fast) var(--ease-default);
-}
-
-.chevronOpen {
-  transform: rotate(90deg);
-}
-
-.mobileOrderId {
-  flex: 1;
-  min-width: 0;
-  font: var(--text-body);
-  font-weight: 600;
-  color: var(--text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.mobileLines {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
-  padding: 0 0 var(--space-md) 32px;
-}
-
-.mobileLineRow {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-sm);
-  font: var(--text-caption);
-  color: var(--text-secondary);
-}
-
-.mobileLineName {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.mobileLineQty {
+.colId {
+  width: var(--col-id);
   flex-shrink: 0;
-  color: var(--text-muted);
+}
+
+.colStage {
+  width: var(--col-stage);
+  flex-shrink: 0;
+}
+
+.colDate {
+  width: var(--col-date);
+  flex-shrink: 0;
+}
+
+.colSales {
+  width: var(--col-sales);
+  flex-shrink: 0;
+}
+
+.colCustomer {
+  width: var(--col-customer);
+  flex-shrink: 0;
+}
+
+.colItems {
+  width: var(--col-items);
+  flex-shrink: 0;
 }
 
 @media (max-width: 768px) {
@@ -123,7 +144,7 @@
     display: none;
   }
 
-  .mobileList {
+  .mobileWrap {
     display: block;
   }
 }
@@ -158,4 +179,3 @@
   min-width: 3ch;
   text-align: center;
 }
-

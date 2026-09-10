@@ -1411,3 +1411,9 @@
   color: var(--state-warning);
   padding: var(--space-xs) 0;
 }
+
+@media (max-width: 768px) {
+  .sectionsContainer {
+    padding: 0 var(--space-md);
+  }
+}

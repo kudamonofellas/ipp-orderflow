@@ -1,110 +1,12 @@
 import { useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
 import { Button } from "../../../components/Button/Button";
 import { Card } from "../../../components/Card/Card";
-import { Icon } from "../../../components/Icon/Icon";
+import { MobileOrderRow } from "../../../components/MobileOrderRow/MobileOrderRow";
 import { OrderRow } from "../../../components/OrderRow/OrderRow";
 import { SortableTh } from "../../../components/SortableTh/SortableTh";
-import { StatusPill } from "../../../components/StatusPill/StatusPill";
-import { useCan } from "../../../hooks/useAuth";
 import { useLanguage } from "../../../hooks/useLanguage";
-import { dispatchSubLabel } from "../../../lib/pipeline";
 import type { OpenOrder } from "../../../types/dashboard";
 import styles from "./OpenOrdersPanel.module.css";
-
-const currency = new Intl.NumberFormat("id-ID", {
-  style: "currency",
-  currency: "IDR",
-  minimumFractionDigits: 0,
-});
-
-/**
- * Compact 2-column (Order ID / Status) card row for the mobile "Open
- * Orders" list — matches `context/designs/Mobile - Dashboard.png`. A
- * separate component from `OrderRow` (not a responsive reflow of it)
- * because `OrderRow` is fundamentally table-shaped (`<tbody>`/`<tr>`), not
- * something that can also render as a `<div>` card at a narrower width.
- * Shares the same expand-for-line-items idea, just in a div layout.
- */
-function MobileOrderRow({ order }: { order: OpenOrder }) {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const [expanded, setExpanded] = useState(false);
-  const canSeePrices = useCan()("seePrices");
-  const { t } = useLanguage();
-  const lines = order.lines ?? [];
-  const hasItems = lines.length > 0;
-  const subLabel = dispatchSubLabel({
-    stage: order.status,
-    taken_by: order.takenBy,
-    pickup: order.pickup,
-    third_party: order.thirdParty,
-  });
-
-  function toggle(e: React.MouseEvent) {
-    e.stopPropagation();
-    if (hasItems) setExpanded((v) => !v);
-  }
-
-  function handleRowClick() {
-    navigate(`/orders/${order.id}`, {
-      state: { from: location.pathname + location.search },
-    });
-  }
-
-  return (
-    <div className={styles.mobileRowGroup}>
-      <div
-        className={styles.mobileRow}
-        onClick={handleRowClick}
-        aria-expanded={hasItems ? expanded : undefined}
-      >
-        <button
-          type="button"
-          className={styles.mobileArrow}
-          onClick={toggle}
-          aria-label={expanded ? t("Collapse") : t("Expand")}
-        >
-          {hasItems && (
-            <Icon
-              name="circleArrowRight"
-              size={16}
-              className={`${styles.chevron} ${expanded ? styles.chevronOpen : ""}`}
-            />
-          )}
-        </button>
-        <span className={styles.mobileOrderId}>{order.no}</span>
-        <StatusPill
-          status={order.status}
-          subLabel={subLabel}
-          isReplacement={order.isReplacement}
-          pendingDocs={order.pendingDocs}
-          isHold={order.hold}
-        />
-      </div>
-      {expanded && hasItems && (
-        <div className={styles.mobileLines}>
-          {lines.map((line) => {
-            const hasPrice = line.price != null && line.price > 0;
-            const qty = line.qty ?? 0;
-            const subtotal = hasPrice ? (line.price ?? 0) * qty : null;
-            return (
-              <div key={line.id} className={styles.mobileLineRow}>
-                <span className={styles.mobileLineName}>{line.name}</span>
-                <span className={styles.mobileLineQty}>
-                  {qty > 0 ? `${qty} ${line.unit ?? ""}` : ""}
-                  {canSeePrices && subtotal != null
-                    ? ` · ${currency.format(subtotal)}`
-                    : ""}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
 
 interface OpenOrdersPanelProps {
   orders: OpenOrder[];
@@ -118,7 +20,14 @@ interface OpenOrdersPanelProps {
   onSortChange?: (sort: string) => void;
 }
 
-/** Open Orders panel: table of orders with expandable line rows + pagination. */
+/** Open Orders panel: table of orders with expandable line rows + pagination.
+ *  Below the mobile breakpoint, `MobileOrderRow` renders the same fields as
+ *  a div-based card row instead of the real `<table>` (which can't also
+ *  render as a card at that width) — its header row uses `SortableTh
+ *  as="div"` so clicking still sorts, and both header and rows pull their
+ *  column widths from shared `--col-*` custom properties declared here on
+ *  `.mobileList`, which is what keeps them aligned (a div layout has no
+ *  native column coordination the way a real table does). */
 export function OpenOrdersPanel({
   orders,
   loading,
@@ -174,7 +83,10 @@ export function OpenOrdersPanel({
         <div className={styles.muted}>No open orders.</div>
       ) : (
         <>
-          <div className={styles.desktopTableWrap} style={{ overflowX: "auto" }}>
+          <div
+            className={styles.desktopTableWrap}
+            style={{ overflowX: "auto" }}
+          >
             <table className={styles.table}>
               <thead>
                 <tr>
@@ -229,10 +141,75 @@ export function OpenOrdersPanel({
             </table>
           </div>
 
-          <div className={styles.mobileList}>
-            {displayOrders.map((order) => (
-              <MobileOrderRow key={order.id} order={order} />
-            ))}
+          <div className={styles.mobileWrap}>
+            {/* One shared 2D scroll container for the header + every row —
+             * horizontal scroll moves them together like an ordinary table;
+             * the header additionally stays pinned to the top (`position:
+             * sticky`) through the list's own vertical scroll. */}
+            <div className={styles.mobileList}>
+              <div className={styles.mobileHeaderRow}>
+                <span className={styles.mobileArrowHead} aria-hidden="true" />
+                <SortableTh
+                  as="div"
+                  className={styles.colId}
+                  label={t("Order ID")}
+                  sortKey="no"
+                  activeSort={activeSort}
+                  onSort={handleSort}
+                />
+                <SortableTh
+                  as="div"
+                  className={styles.colStage}
+                  label={t("Stage")}
+                  sortKey="stage"
+                  activeSort={activeSort}
+                  onSort={handleSort}
+                />
+                <SortableTh
+                  as="div"
+                  className={styles.colDate}
+                  label={t("Order Date")}
+                  sortKey="order_date"
+                  activeSort={activeSort}
+                  onSort={handleSort}
+                />
+                <SortableTh
+                  as="div"
+                  className={styles.colDate}
+                  label={t("Delivery Date")}
+                  sortKey="delivery_date"
+                  activeSort={activeSort}
+                  onSort={handleSort}
+                />
+                <SortableTh
+                  as="div"
+                  className={styles.colSales}
+                  label={t("Sales Rep")}
+                  sortKey="sales"
+                  activeSort={activeSort}
+                  onSort={handleSort}
+                />
+                <SortableTh
+                  as="div"
+                  className={styles.colCustomer}
+                  label={t("Customer")}
+                  sortKey="customer_name"
+                  activeSort={activeSort}
+                  onSort={handleSort}
+                />
+                <SortableTh
+                  as="div"
+                  className={styles.colItems}
+                  label={t("Items")}
+                  sortKey="items"
+                  activeSort={activeSort}
+                  onSort={handleSort}
+                />
+              </div>
+              {displayOrders.map((order) => (
+                <MobileOrderRow key={order.id} order={order} />
+              ))}
+            </div>
           </div>
 
           <footer className={styles.pagination}>

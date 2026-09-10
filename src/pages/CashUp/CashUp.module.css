@@ -172,6 +172,12 @@
   }
 }
 
+@media (max-width: 768px) {
+  .sectionsContainer {
+    padding: 0 var(--space-md);
+  }
+}
+
 @media (max-width: 640px) {
   .orderRow {
     flex-wrap: wrap;

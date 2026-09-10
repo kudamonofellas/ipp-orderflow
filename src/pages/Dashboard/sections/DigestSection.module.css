@@ -23,37 +23,13 @@
   flex: 1;
   width: 100%;
   background: var(--border-subtle);
-  margin: 0 var(--space-md);
   flex-shrink: 0;
 }
 
-.sectionHeading {
-  font: var(--text-label);
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-wide);
-}
-
-.digestGrid {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: var(--space-md);
-}
-
-.separator {
-  height: 1px;
-  flex: 1;
-  width: 100%;
-  background: var(--border-subtle);
-  margin: 0 var(--space-md);
-  flex-shrink: 0;
-}
-
-.doneRow {
+.doneItemsGroup {
   display: flex;
   align-items: center;
-  gap: var(--space-lg);
-  color: var(--text-primary);
+  gap: var(--space-md);
 }
 
 .doneItem {
@@ -61,6 +37,12 @@
   align-items: center;
   gap: var(--space-xs);
   font: var(--text-body);
+}
+
+.digestGrid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--space-md);
 }
 
 @media (max-width: 1024px) {
@@ -73,33 +55,43 @@
   .digestGrid {
     grid-template-columns: 1fr;
   }
-
-  .doneRow {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--space-xs);
-  }
 }
 
-/* Mobile: horizontal scroll row instead of a vertical stack — matches
- * `context/designs/Mobile - Dashboard.png`. Declared after the 640px block
- * above so it wins at phone widths (both ranges overlap there). */
+/* Mobile: "Done today" + separator stay on their own row; the delivered/
+ * collected items wrap onto a second row below (as a group, so the two
+ * stay side by side rather than each getting its own line) — matches
+ * `context/designs/Mobile - Dashboard.png`. The tile grid also switches to
+ * a horizontal scroll row instead of a vertical stack. Declared after the
+ * 640px block above so it wins at phone widths (both ranges overlap there). */
 @media (max-width: 768px) {
+  .section {
+    gap: var(--space-sm);
+  }
+
+  .sectionHeadingRow {
+    flex-wrap: wrap;
+  }
+
+  .doneItemsGroup {
+    flex-basis: 100%;
+  }
+
+  /* Bleeds past `.sectionsContainer`'s right padding (negative margin,
+   * clawed back as padding on the row itself) so the last tile can reach
+   * the true screen edge instead of stopping short — a hard-clipped or
+   * faded edge inside the page's normal inset reads as broken; a
+   * full-bleed edge reads as "there's simply more content to scroll to." */
   .digestGrid {
     display: flex;
     grid-template-columns: none;
     overflow-x: auto;
-    padding-bottom: var(--space-xs);
-    scrollbar-width: thin;
+    scrollbar-width: none;
+    margin-right: calc(-1 * var(--space-md));
+    padding-right: var(--space-md);
   }
 
   .digestGrid > * {
     flex: 0 0 auto;
-    min-width: 160px;
-  }
-
-  .doneRow {
-    flex-direction: row;
-    align-items: center;
+    min-width: 180px;
   }
 }

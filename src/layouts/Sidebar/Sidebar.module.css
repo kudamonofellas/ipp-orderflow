@@ -110,7 +110,6 @@
 .separator {
   height: 1px;
   background: var(--border-default);
-  margin: 0 var(--space-md);
   flex-shrink: 0;
 }
 

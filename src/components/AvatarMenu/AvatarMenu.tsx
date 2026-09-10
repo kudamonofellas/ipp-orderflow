@@ -84,11 +84,7 @@ export function AvatarMenu() {
             <Icon name={theme === "dark" ? "sun" : "moon"} size={18} />
             {theme === "dark" ? t("Light mode") : t("Dark mode")}
           </button>
-          <button
-            type="button"
-            className={styles.item}
-            onClick={handleLogout}
-          >
+          <button type="button" className={styles.item} onClick={handleLogout}>
             <Icon name="logout" size={18} />
             {t("Log out")}
           </button>

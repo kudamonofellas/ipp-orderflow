@@ -319,7 +319,6 @@
 
 /* Responsive collapse */
 @media (max-width: 992px) {
-
   .layoutGridWithPanel,
   .layoutGridFull {
     grid-template-columns: 1fr;
@@ -348,5 +347,11 @@
 
   .row {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .sectionsContainer {
+    padding: 0 var(--space-md);
   }
 }
