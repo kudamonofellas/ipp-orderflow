@@ -206,8 +206,12 @@ export function OpenOrdersPanel({
                   onSort={handleSort}
                 />
               </div>
-              {displayOrders.map((order) => (
-                <MobileOrderRow key={order.id} order={order} />
+              {displayOrders.map((order, i) => (
+                <MobileOrderRow
+                  key={order.id}
+                  order={order}
+                  isLast={i === displayOrders.length - 1}
+                />
               ))}
             </div>
           </div>

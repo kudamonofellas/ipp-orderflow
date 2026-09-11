@@ -1,20 +1,25 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Button } from '../../components/Button/Button';
-import { Icon } from '../../components/Icon/Icon';
-import { SortableTh } from '../../components/SortableTh/SortableTh';
-import { Toggle } from '../../components/Toggle/Toggle';
-import { readProducts, updateProduct, createProduct, aggregateProducts } from '../../lib/directus';
-import { productsToCSV, parseProductCSV, downloadText } from '../../lib/csv';
-import { useAuth } from '../../hooks/useAuth';
-import { useLanguage } from '../../hooks/useLanguage';
-import { useDialog } from '../../hooks/useDialog';
-import type { ProductsCollection } from '../../types/directus';
-import styles from './Products.module.css';
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { Button } from "../../components/Button/Button";
+import { Icon } from "../../components/Icon/Icon";
+import { SortableTh } from "../../components/SortableTh/SortableTh";
+import { Toggle } from "../../components/Toggle/Toggle";
+import {
+  readProducts,
+  updateProduct,
+  createProduct,
+  aggregateProducts,
+} from "../../lib/directus";
+import { productsToCSV, parseProductCSV, downloadText } from "../../lib/csv";
+import { useAuth } from "../../hooks/useAuth";
+import { useLanguage } from "../../hooks/useLanguage";
+import { useDialog } from "../../hooks/useDialog";
+import type { ProductsCollection } from "../../types/directus";
+import styles from "./Products.module.css";
 
 const PAGE_SIZE = 25;
 
-type ActiveFilter = 'all' | 'active' | 'oos';
+type ActiveFilter = "all" | "active" | "oos";
 
 /** Products page: searchable, filterable list. Warehouse/Admin/Owner can toggle OOS. */
 export function Products() {
@@ -22,10 +27,10 @@ export function Products() {
   const { can } = useAuth();
   const { t } = useLanguage();
   const { alert } = useDialog();
-  const canManageProducts = can('manage_products');
-  const canToggleOOS = can('flag_out_of_stock');
-  const canView = can('browseProducts');
-  const canExport = can('exportCSV');
+  const canManageProducts = can("manage_products");
+  const canToggleOOS = can("flag_out_of_stock");
+  const canView = can("browseProducts");
+  const canExport = can("exportCSV");
   const [importing, setImporting] = useState(false);
   const [exporting, setExporting] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
@@ -35,26 +40,26 @@ export function Products() {
   // (App.tsx), but this survives even if that wrapper is ever dropped in a
   // refactor — same self-guard pattern as ProductEdit.tsx.
   useEffect(() => {
-    if (!canView) navigate('/', { replace: true });
+    if (!canView) navigate("/", { replace: true });
   }, [canView, navigate]);
 
   const [products, setProducts] = useState<ProductsCollection[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState("");
   // Sort lives in the URL (?sort=...), same as Orders.tsx — so it survives
   // Back navigation from a product's detail page.
   const [searchParams, setSearchParams] = useSearchParams();
-  const sortBy = searchParams.get('sort') || 'name';
+  const sortBy = searchParams.get("sort") || "name";
   function setSortBy(next: string) {
     setSearchParams((prev) => {
       const params = new URLSearchParams(prev);
-      if (next === 'name') params.delete('sort');
-      else params.set('sort', next);
+      if (next === "name") params.delete("sort");
+      else params.set("sort", next);
       return params;
     });
   }
-  const [activeFilter, setActiveFilter] = useState<ActiveFilter>('all');
+  const [activeFilter, setActiveFilter] = useState<ActiveFilter>("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
@@ -75,18 +80,19 @@ export function Products() {
       });
     }
 
-    if (activeFilter === 'active') {
+    if (activeFilter === "active") {
       parts.push({
-        _or: [
-          { oos: { _eq: false } },
-          { oos: { _null: true } },
-        ],
+        _or: [{ oos: { _eq: false } }, { oos: { _null: true } }],
       });
-    } else if (activeFilter === 'oos') {
+    } else if (activeFilter === "oos") {
       parts.push({ oos: { _eq: true } });
     }
 
-    return parts.length === 0 ? {} : parts.length === 1 ? parts[0] : { _and: parts };
+    return parts.length === 0
+      ? {}
+      : parts.length === 1
+        ? parts[0]
+        : { _and: parts };
   }, [search, activeFilter]);
 
   useEffect(() => {
@@ -102,10 +108,20 @@ export function Products() {
           limit: PAGE_SIZE,
           offset: (page - 1) * PAGE_SIZE,
           sort: [sortBy],
-          fields: ['id', 'name', 'accurate_name', 'category', 'grade', 'brand', 'form', 'pack', 'oos'],
+          fields: [
+            "id",
+            "name",
+            "accurate_name",
+            "category",
+            "grade",
+            "brand",
+            "form",
+            "pack",
+            "oos",
+          ],
         }),
         aggregateProducts({
-          aggregate: { count: '*' },
+          aggregate: { count: "*" },
           ...(Object.keys(filter).length ? { query: { filter } } : {}),
         }),
       ]);
@@ -117,7 +133,7 @@ export function Products() {
         if (countRes.error) {
           // Count failed independently of the data fetch — don't block the
           // list from rendering, but don't silently claim a total of 0 either.
-          console.warn('Failed to fetch product count:', countRes.error);
+          console.warn("Failed to fetch product count:", countRes.error);
           setTotal(dataRes.data?.length ?? 0);
         } else {
           const countValue = Number(countRes.data?.[0]?.count ?? 0);
@@ -140,23 +156,23 @@ export function Products() {
     const res = await readProducts({
       limit: -1,
       fields: [
-        'id',
-        'name',
-        'accurate_name',
-        'category',
-        'origin',
-        'grade',
-        'brand',
-        'form',
-        'pack',
-        'catch_weight',
-        'fixed_pack',
-        'ppn',
+        "id",
+        "name",
+        "accurate_name",
+        "category",
+        "origin",
+        "grade",
+        "brand",
+        "form",
+        "pack",
+        "catch_weight",
+        "fixed_pack",
+        "ppn",
       ],
     });
     setExporting(false);
     if (res.error || !res.data) {
-      alert(res.error ?? 'Unknown error', { title: t('Export failed') });
+      alert(res.error ?? "Unknown error", { title: t("Export failed") });
       return;
     }
     downloadText(
@@ -173,7 +189,7 @@ export function Products() {
       const text = await file.text();
       const existingRes = await readProducts({ limit: -1 });
       if (existingRes.error || !existingRes.data) {
-        alert(existingRes.error ?? 'Unknown error', {
+        alert(existingRes.error ?? "Unknown error", {
           title: t("Couldn't read the current product list"),
         });
         return;
@@ -191,15 +207,15 @@ export function Products() {
         else created++;
       }
       alert(
-        `Imported · ${rows.length} products (${created} new, ${updated} updated${failed > 0 ? `, ${failed} failed` : ''})`,
-        { title: t('Import complete') },
+        `Imported · ${rows.length} products (${created} new, ${updated} updated${failed > 0 ? `, ${failed} failed` : ""})`,
+        { title: t("Import complete") },
       );
       setRefreshNonce((n) => n + 1);
     } catch {
-      alert(t("Couldn't read that CSV file."), { title: t('Import failed') });
+      alert(t("Couldn't read that CSV file."), { title: t("Import failed") });
     } finally {
       setImporting(false);
-      e.target.value = '';
+      e.target.value = "";
     }
   }
 
@@ -234,7 +250,7 @@ export function Products() {
       setProducts((prev) =>
         prev.map((p) => (p.id === product.id ? { ...p, oos: product.oos } : p)),
       );
-      alert(res.error, { title: t('Stock status update failed') });
+      alert(res.error, { title: t("Stock status update failed") });
     }
     setTogglingId(null);
   };
@@ -245,203 +261,247 @@ export function Products() {
   const rangeEnd = Math.min(currentPage * PAGE_SIZE, total);
 
   const FILTERS: { key: ActiveFilter; label: string }[] = [
-    { key: 'all', label: t('All') },
-    { key: 'active', label: t('Active') },
-    { key: 'oos', label: t('Out of Stock') },
+    { key: "all", label: t("All") },
+    { key: "active", label: t("Active") },
+    { key: "oos", label: t("Out of Stock") },
   ];
 
   return (
     <main className={styles.main}>
       <div className={styles.sectionsContainer}>
-
-      <div className={styles.header}>
-        <h1 className={styles.title}>{t('Products')}</h1>
-        {!loading && (
-          <span className={styles.count}>{total.toLocaleString()}</span>
-        )}
-        <div className={styles.controls}>
-          <div className={styles.filterGroup}>
-            {FILTERS.map((f) => (
-              <button
-                key={f.key}
-                id={`products-filter-${f.key}`}
-                type="button"
-                className={`${styles.filterBtn} ${activeFilter === f.key ? styles.filterBtnActive : ''}`}
-                onClick={() => handleFilterChange(f.key)}
-              >
-                {f.label}
-              </button>
-            ))}
+        <div className={styles.header}>
+          <div className={styles.titleSection}>
+            <h2 className={styles.title}>{t("Products")}</h2>
+            {!loading && (
+              <span className={styles.count}>{total.toLocaleString()}</span>
+            )}
           </div>
-          <div className={styles.search}>
-            <Icon name="search" size={16} className={styles.searchIcon} />
-            <input
-              id="products-search"
-              type="search"
-              placeholder={t('Search products…')}
-              className={styles.searchInput}
-              value={search}
-              onChange={(e) => handleSearchChange(e.target.value)}
-            />
-          </div>
-          {canExport && (
-            <Button
-              type="button"
-              variant="secondary"
-              icon="download"
-              onClick={handleExport}
-              disabled={exporting}
-            >
-              {exporting ? t('Exporting…') : t('Export')}
-            </Button>
-          )}
-          {canManageProducts && (
-            <Button
-              type="button"
-              variant="secondary"
-              icon="upload"
-              onClick={() => importInputRef.current?.click()}
-              disabled={importing}
-            >
-              {importing ? t('Importing…') : t('Import')}
-            </Button>
-          )}
-          <input
-            ref={importInputRef}
-            type="file"
-            accept=".csv,text/csv"
-            style={{ display: 'none' }}
-            onChange={handleImportFile}
-          />
-          {canManageProducts && (
-            <Button
-              type="button"
-              variant="primary"
-              icon="add"
-              onClick={() => navigate('/products/new')}
-            >
-              {t('New Product')}
-            </Button>
-          )}
-        </div>
-      </div>
-
-      <div className={styles.tableWrapper}>
-        <div>
-          <table className={styles.table}>
-            <thead>
-              <tr>
-                <SortableTh label={t('Name')} sortKey="name" activeSort={sortBy} onSort={handleSort} className={styles.th} />
-                <SortableTh label={t('Category')} sortKey="category" activeSort={sortBy} onSort={handleSort} className={styles.th} />
-                <th className={styles.th}>{t('Grade')}</th>
-                <SortableTh label={t('Brand')} sortKey="brand" activeSort={sortBy} onSort={handleSort} className={styles.th} />
-                <th className={styles.th}>{t('Form / Pack')}</th>
-                {canToggleOOS && (
-                  <th className={styles.th}>{t('Active')}</th>
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr className={styles.stateRow}>
-                  <td colSpan={canToggleOOS ? 6 : 5}>{t('Loading products…')}</td>
-                </tr>
-              ) : error ? (
-                <tr className={styles.stateRow}>
-                  <td colSpan={canToggleOOS ? 6 : 5}>Error: {error}</td>
-                </tr>
-              ) : products.length === 0 ? (
-                <tr className={styles.stateRow}>
-                  <td colSpan={canToggleOOS ? 6 : 5}>{t('No products found')}</td>
-                </tr>
-              ) : (
-                products.map((p) => {
-                  const isActive = !p.oos;
-                  return (
-                    <tr
-                      key={p.id}
-                      className={`${styles.orderRow} ${styles.clickable} ${!isActive ? styles.inactive : ''}`}
-                      onClick={() => navigate(`/products/${p.id}`)}
-                      style={{ cursor: 'pointer' }}
-                    >
-                      <td className={styles.td}>
-                        <div className={styles.nameCell}>
-                          <span className={styles.name}>{p.name}</span>
-                          {p.accurate_name && p.accurate_name !== p.name && (
-                            <span className={styles.accurateName}>{p.accurate_name}</span>
-                          )}
-                        </div>
-                      </td>
-                      <td className={styles.td}>
-                        {p.category ? (
-                          <span className={styles.pill}>{p.category}</span>
-                        ) : (
-                          '—'
-                        )}
-                      </td>
-                      <td className={styles.td}>{p.grade ?? '—'}</td>
-                      <td className={styles.td}>{p.brand ?? '—'}</td>
-                      <td className={styles.td}>
-                        {[p.form, p.pack].filter(Boolean).join(' / ') || '—'}
-                      </td>
-                      {canToggleOOS && (
-                        <td className={styles.td}>
-                          <div
-                            className={styles.toggleCell}
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <span className={styles.toggleLabel}>
-                              {isActive ? t('Active') : t('OOS')}
-                            </span>
-                            <Toggle
-                              size="sm"
-                              checked={isActive}
-                              disabled={togglingId === p.id}
-                              label={isActive ? t('Mark out of stock') : t('Mark active')}
-                              onChange={() => handleToggleActive(p)}
-                            />
-                          </div>
-                        </td>
-                      )}
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-
-          <footer className={styles.pagination}>
-            <span className={styles.pageInfo}>
-              {t('Showing')} {rangeStart}–{rangeEnd} {t('of')} {total}
-            </span>
-            <div className={styles.pageControls}>
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                iconOnly
-                icon="chevronLeft"
-                onClick={() => setPage(currentPage - 1)}
-                disabled={currentPage <= 1}
-                aria-label={t('Previous page')}
-              />
-              <span className={styles.pageIndicator}>
-                {currentPage} / {totalPages}
-              </span>
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                iconOnly
-                icon="chevronRight"
-                onClick={() => setPage(currentPage + 1)}
-                disabled={currentPage >= totalPages}
-                aria-label={t('Next page')}
+          <div className={styles.controls}>
+            <div className={styles.filterGroup}>
+              {FILTERS.map((f) => (
+                <button
+                  key={f.key}
+                  id={`products-filter-${f.key}`}
+                  type="button"
+                  className={`${styles.filterBtn} ${activeFilter === f.key ? styles.filterBtnActive : ""}`}
+                  onClick={() => handleFilterChange(f.key)}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+            <div className={styles.search}>
+              <Icon name="search" size={16} className={styles.searchIcon} />
+              <input
+                id="products-search"
+                type="search"
+                placeholder={t("Search products…")}
+                className={styles.searchInput}
+                value={search}
+                onChange={(e) => handleSearchChange(e.target.value)}
               />
             </div>
-          </footer>
+            <div className={styles.exportImportRow}>
+              {canExport && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  icon="download"
+                  className={styles.halfButton}
+                  onClick={handleExport}
+                  disabled={exporting}
+                >
+                  {exporting ? t("Exporting…") : t("Export")}
+                </Button>
+              )}
+              {canManageProducts && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  icon="upload"
+                  className={styles.halfButton}
+                  onClick={() => importInputRef.current?.click()}
+                  disabled={importing}
+                >
+                  {importing ? t("Importing…") : t("Import")}
+                </Button>
+              )}
+              <input
+                ref={importInputRef}
+                type="file"
+                accept=".csv,text/csv"
+                style={{ display: "none" }}
+                onChange={handleImportFile}
+              />
+            </div>
+            {canManageProducts && (
+              <Button
+                type="button"
+                variant="primary"
+                icon="add"
+                className={styles.newProductButton}
+                onClick={() => navigate("/products/new")}
+              >
+                {t("New Product")}
+              </Button>
+            )}
+          </div>
         </div>
-      </div>
+
+        <div className={styles.tableWrapper}>
+          <div className={styles.tableScroll}>
+            <table className={styles.table}>
+              <thead>
+                <tr>
+                  <SortableTh
+                    label={t("Name")}
+                    sortKey="name"
+                    activeSort={sortBy}
+                    onSort={handleSort}
+                    className={`${styles.th} ${styles.colName}`}
+                  />
+                  <SortableTh
+                    label={t("Category")}
+                    sortKey="category"
+                    activeSort={sortBy}
+                    onSort={handleSort}
+                    className={`${styles.th} ${styles.colCategory}`}
+                  />
+                  <th className={`${styles.th} ${styles.colGrade}`}>
+                    {t("Grade")}
+                  </th>
+                  <SortableTh
+                    label={t("Brand")}
+                    sortKey="brand"
+                    activeSort={sortBy}
+                    onSort={handleSort}
+                    className={`${styles.th} ${styles.colBrand}`}
+                  />
+                  <th className={`${styles.th} ${styles.colFormPack}`}>
+                    {t("Form / Pack")}
+                  </th>
+                  {canToggleOOS && (
+                    <th className={`${styles.th} ${styles.colActive}`}>
+                      {t("Active")}
+                    </th>
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr className={styles.stateRow}>
+                    <td colSpan={canToggleOOS ? 6 : 5}>
+                      {t("Loading products…")}
+                    </td>
+                  </tr>
+                ) : error ? (
+                  <tr className={styles.stateRow}>
+                    <td colSpan={canToggleOOS ? 6 : 5}>Error: {error}</td>
+                  </tr>
+                ) : products.length === 0 ? (
+                  <tr className={styles.stateRow}>
+                    <td colSpan={canToggleOOS ? 6 : 5}>
+                      {t("No products found")}
+                    </td>
+                  </tr>
+                ) : (
+                  products.map((p) => {
+                    const isActive = !p.oos;
+                    return (
+                      <tr
+                        key={p.id}
+                        className={`${styles.orderRow} ${styles.clickable} ${!isActive ? styles.inactive : ""}`}
+                        onClick={() => navigate(`/products/${p.id}`)}
+                        style={{ cursor: "pointer" }}
+                      >
+                        <td className={`${styles.td} ${styles.colName}`}>
+                          <div className={styles.nameCell}>
+                            <span className={styles.name}>{p.name}</span>
+                            {p.accurate_name && p.accurate_name !== p.name && (
+                              <span className={styles.accurateName}>
+                                {p.accurate_name}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className={`${styles.td} ${styles.colCategory}`}>
+                          {p.category ? (
+                            <span className={styles.pill}>{p.category}</span>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                        <td className={`${styles.td} ${styles.colGrade}`}>
+                          {p.grade ?? "—"}
+                        </td>
+                        <td className={`${styles.td} ${styles.colBrand}`}>
+                          {p.brand ?? "—"}
+                        </td>
+                        <td className={`${styles.td} ${styles.colFormPack}`}>
+                          {[p.form, p.pack].filter(Boolean).join(" / ") || "—"}
+                        </td>
+                        {canToggleOOS && (
+                          <td className={`${styles.td} ${styles.colActive}`}>
+                            <div
+                              className={styles.toggleCell}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <span className={styles.toggleLabel}>
+                                {isActive ? t("Active") : t("OOS")}
+                              </span>
+                              <Toggle
+                                size="sm"
+                                checked={isActive}
+                                disabled={togglingId === p.id}
+                                label={
+                                  isActive
+                                    ? t("Mark out of stock")
+                                    : t("Mark active")
+                                }
+                                onChange={() => handleToggleActive(p)}
+                              />
+                            </div>
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+            </div>
+
+            <footer className={styles.pagination}>
+              <span className={styles.pageInfo}>
+                {t("Showing")} {rangeStart}–{rangeEnd} {t("of")} {total}
+              </span>
+              <div className={styles.pageControls}>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  iconOnly
+                  icon="chevronLeft"
+                  onClick={() => setPage(currentPage - 1)}
+                  disabled={currentPage <= 1}
+                  aria-label={t("Previous page")}
+                />
+                <span className={styles.pageIndicator}>
+                  {currentPage} / {totalPages}
+                </span>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  iconOnly
+                  icon="chevronRight"
+                  onClick={() => setPage(currentPage + 1)}
+                  disabled={currentPage >= totalPages}
+                  aria-label={t("Next page")}
+                />
+              </div>
+            </footer>
+        </div>
       </div>
     </main>
   );

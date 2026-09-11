@@ -46,7 +46,13 @@ const currency = new Intl.NumberFormat("id-ID", {
  * given `width: max-content` specifically so it (and therefore `.arrow`)
  * stays in view for the same reason.
  */
-export function MobileOrderRow({ order }: { order: OpenOrder }) {
+export function MobileOrderRow({
+  order,
+  isLast,
+}: {
+  order: OpenOrder;
+  isLast?: boolean;
+}) {
   const navigate = useNavigate();
   const location = useLocation();
   const [expanded, setExpanded] = useState(false);
@@ -83,7 +89,9 @@ export function MobileOrderRow({ order }: { order: OpenOrder }) {
         className={styles.rowGroup}
         style={{
           borderBottom:
-            expanded && hasItems ? "none" : "1px solid var(--border-subtle)",
+            isLast || (expanded && hasItems)
+              ? "none"
+              : "1px solid var(--border-subtle)",
         }}
       >
         <div

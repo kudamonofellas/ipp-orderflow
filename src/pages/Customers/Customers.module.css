@@ -9,13 +9,20 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-xl);
-  padding: 0 var(--space-xl);
+  padding: 0 var(--space-xl) var(--space-xl);
 }
 
 .header {
   display: flex;
   align-items: center;
-  gap: var(--space-lg);
+  gap: var(--space-md);
+  flex-wrap: wrap;
+}
+
+.titleSection {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-md);
   flex-wrap: wrap;
 }
 
@@ -40,6 +47,12 @@
   align-items: center;
   gap: var(--space-md);
   margin-left: auto;
+}
+
+.exportImportRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
 }
 
 /* Search */
@@ -222,23 +235,107 @@
   text-align: center;
 }
 
+/* Mobile: "Customers (N)" + "New Customer" share the first row (title
+ * group left, button right); search gets its own full-width row below
+ * that; Export/Import share a third full-width row, split evenly.
+ * `.controls` becomes `display: contents` so its three children (search,
+ * exportImportRow, newCustomerButton) become direct flex items of
+ * `.header` itself — that's what lets `order`/`flex-basis` place the
+ * button on row one (with the title) while search and the export/import
+ * pair each drop to their own row. */
 @media (max-width: 768px) {
   .sectionsContainer {
-    padding: 0 var(--space-md);
+    padding: 0 var(--space-md) var(--space-md);
   }
 
   .header {
-    flex-direction: column;
-    align-items: flex-start;
+    flex-wrap: wrap;
+    justify-content: space-between;
+  }
+
+  .title,
+  .count {
+    order: 1;
   }
 
   .controls {
-    margin-left: 0;
+    display: contents;
+  }
+
+  .newCustomerButton {
+    order: 2;
+  }
+
+  .search {
+    order: 3;
+    flex-basis: 100%;
     width: 100%;
+  }
+
+  .exportImportRow {
+    order: 4;
+    flex-basis: 100%;
+    width: 100%;
+  }
+
+  .halfButton {
+    flex: 1;
   }
 
   .searchInput {
     width: 100%;
     flex: 1;
+  }
+
+  /* Fixed-height scroll frame so the panel doesn't grow unbounded with a
+   * long list — `.tableWrapper` itself is left alone (not the scroll
+   * container) since `.pagination` is its sibling *inside* it; scrolling
+   * `.tableWrapper` would carry the footer away with the rows. This inner
+   * wrapper holds only the `<table>`, so pagination stays outside the
+   * scroll, always visible. Explicitly setting both axes avoids the
+   * browser silently forcing the other to `auto` behind our backs. */
+  .tableScroll {
+    max-height: 640px;
+    overflow-x: auto;
+    overflow-y: auto;
+  }
+
+  /* A real `<table>` naturally coordinates column widths across every row
+   * (unlike a div-based layout), so a fixed `min-width` per column here is
+   * enough on its own to force the table wider than the screen — no need
+   * for the `--col-*` custom-property/shared-width trick `MobileOrderRow`
+   * needs. Desktop is untouched: these only apply below the breakpoint. */
+  .colName {
+    min-width: 220px;
+  }
+
+  .colChannel {
+    min-width: 110px;
+  }
+
+  .colContact {
+    min-width: 180px;
+  }
+
+  .colArea {
+    min-width: 160px;
+  }
+
+  .colPayment {
+    min-width: 110px;
+  }
+
+  .colTerm {
+    min-width: 80px;
+  }
+
+  /* Sticky header — stays pinned to the top of `.tableWrapper`'s own
+   * vertical scroll as rows scroll underneath it. Needs an opaque
+   * background since scrolled row content passes directly behind it. */
+  .table th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--bg-surface);
   }
 }

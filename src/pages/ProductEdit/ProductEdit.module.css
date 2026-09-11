@@ -10,7 +10,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-xl);
-  padding: 0 var(--space-xl);
+  padding: 0 var(--space-xl) var(--space-xl);
 }
 
 .muted {
@@ -145,7 +145,7 @@
 
 @media (max-width: 768px) {
   .sectionsContainer {
-    padding: 0 var(--space-md);
+    padding: 0 var(--space-md) var(--space-md);
   }
 
   .row {

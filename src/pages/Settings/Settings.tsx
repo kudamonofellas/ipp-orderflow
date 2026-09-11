@@ -503,7 +503,7 @@ export function Settings() {
                 <table className={styles.permTable}>
                   <thead>
                     <tr>
-                      <th></th>
+                      <th className={styles.cornerHeader}></th>
                       {PERMISSION_GRID_ROLES.map((r) => (
                         <th key={r}>{t(r)}</th>
                       ))}
@@ -513,9 +513,10 @@ export function Settings() {
                     {PERMISSION_GRID.map((group) => (
                       <Fragment key={group.section}>
                         <tr className={styles.groupRow}>
-                          <td colSpan={PERMISSION_GRID_ROLES.length + 1}>
-                            {t(group.section)}
-                          </td>
+                          <td>{t(group.section)}</td>
+                          {PERMISSION_GRID_ROLES.map((r) => (
+                            <td key={r} />
+                          ))}
                         </tr>
                         {group.rows.map(({ cap, label }) => (
                           <tr key={cap}>

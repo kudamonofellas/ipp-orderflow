@@ -19,6 +19,18 @@
   box-shadow: var(--focus-ring);
 }
 
+/* The label text stops wrapping onto a second line once it no longer fits
+ * (e.g. a fixed-width button with a long/dynamic label) and truncates with
+ * an ellipsis instead — `min-width: 0` is required for a flex item to
+ * shrink below its content's natural (unwrapped) width at all, which is
+ * what lets `overflow`/`text-overflow` actually kick in here. */
+.label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
 /* ===== Content alignment — default (center) needs no class, since
    .button's own justify-content already centers everything. ===== */
 .alignLeft {

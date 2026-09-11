@@ -84,6 +84,7 @@
 
 .cellCustomer {
   flex-shrink: 0;
+  max-width: 180px;
   font: var(--text-body);
   color: var(--text-secondary);
   white-space: nowrap;

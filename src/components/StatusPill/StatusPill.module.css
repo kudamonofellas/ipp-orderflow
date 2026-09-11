@@ -3,13 +3,29 @@
   flex-direction: column;
   align-items: flex-start;
   gap: var(--space-xs);
+  /* Wherever `StatusPill` sits inside a flex/table cell (e.g. `OrderRow`'s
+   * `.statusCell`), a flex item's default `min-width: auto` refuses to
+   * shrink below its content's natural width — which would keep this box
+   * as wide as the unscrolled badge row and defeat `.subStatusWrap`'s
+   * `overflow-x: auto` below (nothing would ever actually overflow it).
+   * `min-width: 0` lets the surrounding cell's real width win instead. */
+  min-width: 0;
+  max-width: 100%;
 }
 
+/* When the badges (Replacement/pendingDocs/On hold, any combination) add up
+ * to more than the table column's width, scroll to see the rest instead of
+ * clipping them away entirely. Scrollbar hidden (still scrollable via
+ * trackpad/touch/drag) to match this app's other horizontal-scroll rows. */
 .subStatusWrap {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  flex-wrap: wrap;
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.subStatusWrap::-webkit-scrollbar {
+  display: none;
 }
 
 .statusPill {
@@ -20,8 +36,18 @@
 
 /* Neutral, not role-coloured — a replacement's stage/colour already comes
    from the main pill above; this only flags "this is a re-send." */
+.subStatusBadgesContainer {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: var(--space-xs);
+  width: max-content;
+}
+
 .subStatusBadge {
   display: inline-flex;
+  flex-shrink: 0;
   align-self: flex-end;
   align-items: center;
   gap: var(--space-xs);

@@ -73,13 +73,14 @@ export function Button({
       name={icon}
       size={ICON_SIZES[size]}
       className={`${styles.icon} ${iconClassName || ""}`}
+      style={{ flexShrink: 0 }}
     />
   ) : null;
 
   return (
     <button type={type} className={classes} style={style} {...rest}>
       {iconPosition === "left" && iconElement}
-      {!iconOnly && children}
+      {!iconOnly && <span className={styles.label}>{children}</span>}
       {iconPosition === "right" && iconElement}
     </button>
   );

@@ -92,6 +92,8 @@ export const ICONS = {
   copy: "hugeicons:copy-01",
   share: "hugeicons:share-01",
   wallet: "hugeicons:wallet-01",
+  arrowBigUpDash: "hugeicons:arrow-big-up-dash",
+  arrowBigDownDash: "hugeicons:arrow-big-down-dash",
 } as const;
 
 export type IconName = keyof typeof ICONS;

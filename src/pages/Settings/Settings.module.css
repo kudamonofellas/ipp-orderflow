@@ -10,7 +10,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-xl);
-  padding: 0 var(--space-xl);
+  padding: 0 var(--space-xl) var(--space-xl);
 }
 
 .title {
@@ -204,14 +204,16 @@
 
 .teamRowHeader {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: row;
   gap: var(--space-md);
-  padding: var(--space-md) var(--space-lg);
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-md) 0;
 }
 
 .teamInfo {
   display: flex;
+  flex: 1;
   align-items: baseline;
   gap: var(--space-sm);
   min-width: 0;
@@ -221,11 +223,17 @@
   font: var(--text-body);
   font-weight: 600;
   color: var(--text-primary);
+  min-width: 120px;
+  width: 20%;
 }
 
 .teamRole {
   font: var(--text-caption);
   color: var(--text-muted);
+  width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .teamActions {
@@ -246,7 +254,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);
-  padding: var(--space-lg) var(--space-md);
+  padding: var(--space-lg) v0;
 }
 
 .cardActions {
@@ -379,8 +387,14 @@
   overflow-x: auto;
 }
 
+/* `border-collapse: separate` (not `collapse`) — sticky positioning on
+ * table cells is unreliable across browsers when the table collapses
+ * borders; `.permLabel`/`.groupRow`/`.cornerHeader` below depend on it
+ * actually sticking. `border-spacing: 0` keeps the collapsed-looking gap
+ * this table already relied on. */
 .permTable {
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   width: 100%;
   min-width: 640px;
 }
@@ -427,7 +441,7 @@
 
 @media (max-width: 768px) {
   .sectionsContainer {
-    padding: 0 var(--space-md);
+    padding: 0 var(--space-md) var(--space-md);
   }
 
   .toleranceGrid,
@@ -438,5 +452,39 @@
 
   .toggleRow {
     flex-wrap: wrap;
+  }
+
+  /* Pin the row labels (and the section-group rows' own label cell) to the
+   * left edge of `.gridScroll` as the role columns scroll underneath —
+   * needs an opaque background since scrolled cell content passes directly
+   * behind them, and `.groupRow`'s `z-index` wins over `.permLabel` since
+   * it's the taller stack (a group heading sits above a column of labels).
+   * `.groupRow` used to render its label as a single `colSpan`-ed cell
+   * spanning the whole row, but `position: sticky` doesn't reliably stick
+   * on a cell that wide in Chromium — it's now a normal single-column cell
+   * (like `.permLabel`) followed by empty per-role cells, which sticks
+   * correctly. */
+  .permLabel {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    background: var(--bg-surface);
+  }
+
+  .groupRow td:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    background: var(--bg-surface);
+  }
+
+  /* The corner header cell (blank — it sits above the label column) needs
+   * the same treatment so the role column headers (Admin/Warehouse/…)
+   * scroll underneath it too, instead of only the body rows. */
+  .cornerHeader {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    background: var(--bg-surface);
   }
 }

@@ -4,6 +4,7 @@ import { Icon } from "../../components/Icon/Icon";
 import { Button } from "../../components/Button/Button";
 import { ChannelSelectModal } from "../../components/ChannelSelectModal/ChannelSelectModal";
 import { IntakeModal } from "../../components/IntakeModal/IntakeModal";
+import { MobileOrderRow } from "../../components/MobileOrderRow/MobileOrderRow";
 import { OrderRow } from "../../components/OrderRow/OrderRow";
 import { SortableTh } from "../../components/SortableTh/SortableTh";
 import { useCan } from "../../hooks/useAuth";
@@ -220,190 +221,273 @@ export function Orders() {
   return (
     <div className={styles.main}>
       <div className={styles.sectionsContainer}>
-      <div className={styles.header}>
-        <h1 className={styles.title}>{t("Orders")}</h1>
-        <div className={styles.controls}>
-          <div className={styles.dropdownWrapper} ref={stageDropdownRef}>
-            <Button
-              type="button"
-              variant="secondary"
-              icon="chevronDown"
-              iconPosition="right"
-              style={{
-                width: "240px",
-                justifyContent: "space-between",
-              }}
-              aria-expanded={stageOpen}
-              onClick={() => setStageOpen((o) => !o)}
-            >
-              {t(
-                STAGE_OPTIONS.find((o) => o.key === stage)?.label ||
-                  "All stages",
-              )}
-            </Button>
-            {stageOpen && (
-              <div
-                className={styles.dropdown}
-                role="dialog"
-                aria-label={t("Filter by stage")}
+        <div className={styles.header}>
+          <h2 className={styles.title}>{t("Orders")}</h2>
+          <div className={styles.controls}>
+            <div className={styles.dropdownWrapper} ref={stageDropdownRef}>
+              <Button
+                type="button"
+                variant="secondary"
+                icon="chevronDown"
+                iconPosition="right"
+                className={styles.stageButton}
+                aria-expanded={stageOpen}
+                onClick={() => setStageOpen((o) => !o)}
               >
-                {STAGE_OPTIONS.map((opt) => (
-                  <Button
-                    key={opt.key}
-                    type="button"
-                    variant="ghost"
-                    align="left"
-                    buttonStyle="fullWidth"
-                    className={[
-                      styles.dropdownItem,
-                      stage === opt.key ? styles.dropdownItemActive : "",
-                    ].join(" ")}
-                    onClick={() => {
-                      setStage(opt.key);
-                      setStageOpen(false);
-                      setPage(1);
-                    }}
-                  >
-                    {t(opt.label)}
-                  </Button>
-                ))}
-              </div>
+                {t(
+                  STAGE_OPTIONS.find((o) => o.key === stage)?.label ||
+                    "All stages",
+                )}
+              </Button>
+              {stageOpen && (
+                <div
+                  className={styles.dropdown}
+                  role="dialog"
+                  aria-label={t("Filter by stage")}
+                >
+                  {STAGE_OPTIONS.map((opt) => (
+                    <Button
+                      key={opt.key}
+                      type="button"
+                      variant="ghost"
+                      align="left"
+                      buttonStyle="fullWidth"
+                      className={[
+                        styles.dropdownItem,
+                        stage === opt.key ? styles.dropdownItemActive : "",
+                      ].join(" ")}
+                      onClick={() => {
+                        setStage(opt.key);
+                        setStageOpen(false);
+                        setPage(1);
+                      }}
+                    >
+                      {t(opt.label)}
+                    </Button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className={styles.search}>
+              <Icon name="search" size={18} className={styles.searchIcon} />
+              <input
+                type="search"
+                className={styles.searchInput}
+                placeholder={t("Search # or customer…")}
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
+                aria-label={t("Search orders")}
+              />
+            </div>
+
+            {canCreateOrders && (
+              <Button
+                variant="primary"
+                size="md"
+                className={styles.newOrderButton}
+                onClick={startNewOrder}
+                title={t("Create a new order")}
+                icon="add"
+              >
+                {t("New Order")}
+              </Button>
             )}
           </div>
+        </div>
 
-          <div className={styles.search}>
-            <Icon name="search" size={18} className={styles.searchIcon} />
-            <input
-              type="search"
-              className={styles.searchInput}
-              placeholder={t("Search # or customer…")}
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
-              }}
-              aria-label={t("Search orders")}
-            />
+        <div>
+          <div className={styles.headerWrap}>
+            <h3 className={styles.heading}>
+              {t(stageCopy.headline)}{" "}
+              <span className={styles.count}>{total}</span>
+            </h3>
           </div>
 
-          {canCreateOrders && (
-            <Button
-              variant="primary"
-              size="md"
-              onClick={startNewOrder}
-              title={t("Create a new order")}
-              icon="add"
-            >
-              {t("New Order")}
-            </Button>
-          )}
-        </div>
-      </div>
+          {loading ? (
+            <div className={styles.muted}>{t("Loading orders…")}</div>
+          ) : error ? (
+            <div className={styles.error}>{error}</div>
+          ) : orders.length === 0 ? (
+            <div className={styles.muted}>{t(stageCopy.empty)}</div>
+          ) : (
+            <>
+              <div
+                className={styles.desktopTableWrap}
+                style={{ overflowX: "auto" }}
+              >
+                <table className={styles.table}>
+                  <thead>
+                    <tr>
+                      <th
+                        className={styles.arrowHead}
+                        aria-label={t("Expand")}
+                      />
+                      <SortableTh
+                        label={t("Order ID")}
+                        sortKey="no"
+                        activeSort={activeSort}
+                        onSort={handleSort}
+                      />
+                      <SortableTh
+                        label={t("Stage")}
+                        sortKey="stage"
+                        activeSort={activeSort}
+                        onSort={handleSort}
+                      />
+                      <SortableTh
+                        label={t("Order Date")}
+                        sortKey="order_date"
+                        activeSort={activeSort}
+                        onSort={handleSort}
+                      />
+                      <SortableTh
+                        label={t("Delivery Date")}
+                        sortKey="delivery_date"
+                        activeSort={activeSort}
+                        onSort={handleSort}
+                      />
+                      <SortableTh
+                        label={t("Sales Rep")}
+                        sortKey="sales"
+                        activeSort={activeSort}
+                        onSort={handleSort}
+                      />
+                      <SortableTh
+                        label={t("Customer")}
+                        sortKey="customer_name"
+                        activeSort={activeSort}
+                        onSort={handleSort}
+                      />
+                      <SortableTh
+                        label={t("Items")}
+                        sortKey="items"
+                        activeSort={activeSort}
+                        onSort={handleSort}
+                      />
+                    </tr>
+                  </thead>
+                  {displayOrders.map((order: OpenOrder) => (
+                    <OrderRow key={order.id} order={order} />
+                  ))}
+                </table>
+              </div>
 
-      <div>
-        <div className={styles.headerWrap}>
-          <h3 className={styles.heading}>
-            {t(stageCopy.headline)}{" "}
-            <span className={styles.count}>{total}</span>
-          </h3>
-        </div>
-
-        {loading ? (
-          <div className={styles.muted}>{t("Loading orders…")}</div>
-        ) : error ? (
-          <div className={styles.error}>{error}</div>
-        ) : orders.length === 0 ? (
-          <div className={styles.muted}>{t(stageCopy.empty)}</div>
-        ) : (
-          <>
-            <div style={{ overflowX: "auto" }}>
-              <table className={styles.table}>
-                <thead>
-                  <tr>
-                    <th className={styles.arrowHead} aria-label={t("Expand")} />
+              <div className={styles.mobileWrap}>
+                {/* One shared 2D scroll container for the header + every row —
+                 * horizontal scroll moves them together like an ordinary table;
+                 * the header additionally stays pinned to the top (`position:
+                 * sticky`) through the list's own vertical scroll. Mirrors
+                 * `OpenOrdersPanel.tsx`'s mobile table exactly. */}
+                <div className={styles.mobileList}>
+                  <div className={styles.mobileHeaderRow}>
+                    <span
+                      className={styles.mobileArrowHead}
+                      aria-hidden="true"
+                    />
                     <SortableTh
+                      as="div"
+                      className={styles.colId}
                       label={t("Order ID")}
                       sortKey="no"
                       activeSort={activeSort}
                       onSort={handleSort}
                     />
                     <SortableTh
+                      as="div"
+                      className={styles.colStage}
                       label={t("Stage")}
                       sortKey="stage"
                       activeSort={activeSort}
                       onSort={handleSort}
                     />
                     <SortableTh
+                      as="div"
+                      className={styles.colDate}
                       label={t("Order Date")}
                       sortKey="order_date"
                       activeSort={activeSort}
                       onSort={handleSort}
                     />
                     <SortableTh
+                      as="div"
+                      className={styles.colDate}
                       label={t("Delivery Date")}
                       sortKey="delivery_date"
                       activeSort={activeSort}
                       onSort={handleSort}
                     />
                     <SortableTh
+                      as="div"
+                      className={styles.colSales}
                       label={t("Sales Rep")}
                       sortKey="sales"
                       activeSort={activeSort}
                       onSort={handleSort}
                     />
                     <SortableTh
+                      as="div"
+                      className={styles.colCustomer}
                       label={t("Customer")}
                       sortKey="customer_name"
                       activeSort={activeSort}
                       onSort={handleSort}
                     />
                     <SortableTh
+                      as="div"
+                      className={styles.colItems}
                       label={t("Items")}
                       sortKey="items"
                       activeSort={activeSort}
                       onSort={handleSort}
                     />
-                  </tr>
-                </thead>
-                {displayOrders.map((order: OpenOrder) => (
-                  <OrderRow key={order.id} order={order} />
-                ))}
-              </table>
-            </div>
-
-            <footer className={styles.pagination}>
-              <span className={styles.pageInfo}>
-                {t("Showing")} {rangeStart}–{rangeEnd} {t("of")} {total}
-              </span>
-              <div className={styles.pageControls}>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  icon="chevronLeft"
-                  iconOnly
-                  onClick={() => setPage?.(currentPage - 1)}
-                  disabled={currentPage <= 1}
-                  aria-label={t("Previous page")}
-                />
-                <span className={styles.pageIndicator}>
-                  {currentPage} / {totalPages}
-                </span>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  icon="chevronRight"
-                  iconOnly
-                  onClick={() => setPage?.(currentPage + 1)}
-                  disabled={currentPage >= totalPages}
-                  aria-label={t("Next page")}
-                />
+                  </div>
+                  {displayOrders.map((order: OpenOrder, i: number) => (
+                    <MobileOrderRow
+                      key={order.id}
+                      order={order}
+                      isLast={i === displayOrders.length - 1}
+                    />
+                  ))}
+                </div>
               </div>
-            </footer>
-          </>
-        )}
-      </div>
+
+              <footer className={styles.pagination}>
+                <span className={styles.pageInfo}>
+                  {t("Showing")} {rangeStart}–{rangeEnd} {t("of")} {total}
+                </span>
+                <div className={styles.pageControls}>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    icon="chevronLeft"
+                    iconOnly
+                    onClick={() => setPage?.(currentPage - 1)}
+                    disabled={currentPage <= 1}
+                    aria-label={t("Previous page")}
+                  />
+                  <span className={styles.pageIndicator}>
+                    {currentPage} / {totalPages}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    icon="chevronRight"
+                    iconOnly
+                    onClick={() => setPage?.(currentPage + 1)}
+                    disabled={currentPage >= totalPages}
+                    aria-label={t("Next page")}
+                  />
+                </div>
+              </footer>
+            </>
+          )}
+        </div>
       </div>
 
       <ChannelSelectModal

@@ -50,27 +50,29 @@ export function SubStatusBadges({
     <span
       className={[styles.subStatusWrap, className].filter(Boolean).join(" ")}
     >
-      {isReplacement && (
-        <span className={styles.subStatusBadge} title={t("Replacement")}>
-          <Icon name="reload" size={11} />
-          {t("Replacement")}
-        </span>
-      )}
-      {pendingDocs && (
-        <span
-          className={styles.subStatusBadge}
-          title={t("Signed DO/SI not returned yet")}
-        >
-          <Icon name="document" size={11} />
-          {t("Signed DO/SI not returned yet")}
-        </span>
-      )}
-      {isHold && (
-        <span className={styles.subStatusBadge} title={t("On hold")}>
-          <Icon name="pause" size={11} />
-          {t("On hold")}
-        </span>
-      )}
+      <div className={styles.subStatusBadgesContainer}>
+        {isReplacement && (
+          <span className={styles.subStatusBadge} title={t("Replacement")}>
+            <Icon name="reload" size={11} style={{ flexShrink: 0 }} />
+            {t("Replacement")}
+          </span>
+        )}
+        {pendingDocs && (
+          <span
+            className={styles.subStatusBadge}
+            title={t("Signed DO/SI not returned yet")}
+          >
+            <Icon name="document" size={11} style={{ flexShrink: 0 }} />
+            {t("Signed DO/SI not returned yet")}
+          </span>
+        )}
+        {isHold && (
+          <span className={styles.subStatusBadge} title={t("On hold")}>
+            <Icon name="pause" size={11} style={{ flexShrink: 0 }} />
+            {t("On hold")}
+          </span>
+        )}
+      </div>
     </span>
   );
 }
@@ -119,6 +121,7 @@ export function StatusPill({
           {t(displayLabel)}
         </span>
       </span>
+
       <SubStatusBadges
         isReplacement={isReplacement}
         pendingDocs={pendingDocs}

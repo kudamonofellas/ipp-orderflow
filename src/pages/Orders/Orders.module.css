@@ -9,7 +9,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-xl);
-  padding: 0 var(--space-xl);
+  padding: 0 var(--space-xl) var(--space-xl);
 }
 
 .headerWrap {
@@ -22,7 +22,7 @@
 .header {
   display: flex;
   align-items: center;
-  gap: var(--space-lg);
+  gap: var(--space-md);
   flex-wrap: wrap;
 }
 
@@ -79,6 +79,114 @@
   width: 40px;
 }
 
+/* One real `<table>` at desktop widths — hidden below the mobile breakpoint
+ * in favor of `.mobileWrap` below. Mirrors `OpenOrdersPanel.module.css`'s
+ * identical setup exactly (this page has no shared base stylesheet to pull
+ * it from instead, so it's duplicated rather than cross-imported). */
+.desktopTableWrap {
+  width: 100%;
+}
+
+/* ===== Mobile card list (full field set, expandable) =====
+ * Hidden on desktop; shown instead of the table below the mobile
+ * breakpoint. Row markup lives in the shared `MobileOrderRow` component
+ * (table-shaped `OrderRow` can't also render as a mobile card) — this file
+ * owns the shared scroll frame + header row. */
+.mobileWrap {
+  display: none;
+}
+
+/* The one scroll container for both axes: horizontal scroll carries the
+ * header and every row together (same as scrolling a normal table, not an
+ * independent scroller per row); vertical scroll caps the panel's height.
+ * Explicitly setting both axes avoids the browser silently forcing
+ * `overflow-x` to `auto` behind our backs, which would otherwise turn this
+ * into its own separate horizontal scroller and break the sync.
+ *
+ * The `--col-*` custom properties are the single source of truth for every
+ * column's width, shared by both the header row below and each
+ * `MobileOrderRow` (see that component's `.orderId`/`.cellStage`/etc.) — a
+ * div-based layout has no native column coordination the way a `<table>`
+ * does, so without a shared width per column, header and data drift out of
+ * alignment (each row/label otherwise sizing to its own content). */
+.mobileList {
+  /* Bounds the panel's height so it actually has something to scroll
+   * vertically — without this, the list just grows to fit every row and
+   * the whole page scrolls past it instead, leaving `.mobileHeaderRow`'s
+   * `position: sticky; top: 0` with no scroll boundary to stick against
+   * (nothing to be "stuck" relative to). */
+  max-height: 640px;
+  overflow-x: auto;
+  overflow-y: auto;
+  --col-id: 100px;
+  --col-stage: 160px;
+  --col-date: 160px;
+  --col-sales: 90px;
+  --col-customer: 140px;
+  --col-items: 90px;
+}
+
+/* `width: max-content` so this row's own box matches its (non-wrapping,
+ * overflowing) label content — same reason as `MobileOrderRow`'s `.row`:
+ * without it, `.mobileArrowHead`'s sticky containing block would stay
+ * capped at the viewport width and scroll out of view partway through a
+ * horizontal scroll, breaking its stickiness. */
+.mobileHeaderRow {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+  padding: 0 0 var(--space-sm);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  width: max-content;
+  min-width: 100%;
+}
+
+/* Pinned to the left too (on top of the row's own top-pin) so the header's
+ * corner cell stays put on both axes, matching `.arrow` in every row
+ * below it. */
+.mobileArrowHead {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  width: 32px;
+  flex-shrink: 0;
+  background: var(--bg-surface);
+}
+
+.colId {
+  width: var(--col-id);
+  flex-shrink: 0;
+}
+
+.colStage {
+  width: var(--col-stage);
+  flex-shrink: 0;
+}
+
+.colDate {
+  width: var(--col-date);
+  flex-shrink: 0;
+}
+
+.colSales {
+  width: var(--col-sales);
+  flex-shrink: 0;
+}
+
+.colCustomer {
+  width: var(--col-customer);
+  flex-shrink: 0;
+}
+
+.colItems {
+  width: var(--col-items);
+  flex-shrink: 0;
+}
+
 .controls {
   display: flex;
   align-items: center;
@@ -88,6 +196,11 @@
 
 .dropdownWrapper {
   position: relative;
+}
+
+.stageButton {
+  width: 240px;
+  justify-content: space-between;
 }
 
 .dropdown {
@@ -183,19 +296,69 @@
   text-align: center;
 }
 
+/* Mobile: "Orders" + "New Order" share the first row (title left, button
+ * right); search gets its own full-width row below that; the stage
+ * dropdown gets its own full-width row below *that*. `.controls` becomes
+ * `display: contents` so its three children (dropdownWrapper, search,
+ * newOrderButton) become direct flex items of `.header` itself — that's
+ * what lets `order`/`flex-basis` place the button on row one (with the
+ * title) while search and the dropdown each drop to their own row,
+ * instead of staying grouped together as `.controls`'s own single block. */
 @media (max-width: 768px) {
   .sectionsContainer {
-    padding: 0 var(--space-md);
+    padding: 0 var(--space-md) var(--space-md);
   }
 
   .header {
-    flex-direction: column;
-    align-items: flex-start;
+    flex-wrap: wrap;
+    justify-content: space-between;
+  }
+
+  .title {
+    order: 1;
   }
 
   .controls {
-    margin-left: 0;
+    display: contents;
+  }
+
+  .newOrderButton {
+    order: 2;
+  }
+
+  .search {
+    order: 3;
+    flex-basis: 100%;
     width: 100%;
+  }
+
+  .dropdownWrapper {
+    order: 4;
+    flex-basis: 100%;
+    width: 100%;
+  }
+
+  .stageButton {
+    width: 100%;
+  }
+
+  /* The popup list matches the (now full-width) button below it, instead
+   * of staying at its desktop `min-width: 240px` — which, once the trigger
+   * button spans the whole screen width, left it narrower than the button
+   * and right-anchored, so it no longer lined up under it. */
+  .dropdown {
+    left: 0;
+    right: 0;
+    width: auto;
+    min-width: 0;
+  }
+
+  .desktopTableWrap {
+    display: none;
+  }
+
+  .mobileWrap {
+    display: block;
   }
 
   .searchInput {
