@@ -141,37 +141,45 @@ export function ReturnLineBox({
 
   return (
     <div className={styles.returnLineBox}>
-      <div className={styles.rowStretch}>
-        <div className={styles.returnLineName}>{line.name}</div>
+      <div className={styles.returnLineName}>{line.name}</div>
 
-        {refusalPhotos.length > 0 && (
-          <div className={styles.thumbnailsContainer}>
-            {refusalPhotos.map((p, i) => (
-              <div
-                key={p.id}
-                className={styles.thumbnailItem}
-                onClick={() =>
-                  onOpenImage(
-                    refusalPhotos.map((p2) => ({
-                      url: p2.url,
-                      title: `${t("Refusal photo")} · ${line.name}`,
-                    })),
-                    i,
-                  )
-                }
-              >
-                <img src={p.url} alt="" className={styles.thumbnailImg} />
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
+      {refusalPhotos.length > 0 && (
+        <div
+          className={`${styles.thumbnailsContainer} ${styles.thumbnailsContainerLoose}`}
+        >
+          {refusalPhotos.map((p, i) => (
+            <div
+              key={p.id}
+              className={styles.thumbnailItem}
+              onClick={() =>
+                onOpenImage(
+                  refusalPhotos.map((p2) => ({
+                    url: p2.url,
+                    title: `${t("Refusal photo")} · ${line.name}`,
+                  })),
+                  i,
+                )
+              }
+            >
+              <img src={p.url} alt="" className={styles.thumbnailImg} />
+              {i === 0 && refusalPhotos.length > 1 && (
+                <div className={styles.thumbnailCountBadge}>
+                  <Icon name="touch" size={14} />
+                  {t("See all")}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
       {isConfirmed && (
         <>
           <div className={styles.undoRow}>
             <div className={styles.left}>
-              <Icon name="check" style={{ color: "var(--accent-primary)" }} />
+              <Icon
+                name="check"
+                style={{ color: "var(--accent-primary)", flexShrink: 0 }}
+              />
               {t("Received & verified at the warehouse")}
               {line.return_verified_at
                 ? ` · ${formatClock(line.return_verified_at)}`
@@ -276,6 +284,12 @@ export function ReturnLineBox({
                     }
                   >
                     <img src={p.url} alt="" className={styles.thumbnailImg} />
+                    {i === 0 && photos.length > 1 && (
+                      <div className={styles.thumbnailCountBadge}>
+                        <Icon name="touch" size={14} />
+                        {t("See all")}
+                      </div>
+                    )}
                     <div
                       className={styles.thumbnailHoverTrash}
                       title={t("Delete image")}

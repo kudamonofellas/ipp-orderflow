@@ -1,7 +1,9 @@
-﻿import { useEffect, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { Card } from "../../components/Card/Card";
+import { CameraButton } from "../../components/CameraButton/CameraButton";
 import { Icon } from "../../components/Icon/Icon";
+import type { IconName } from "../../components/Icon/icons";
 import { Button } from "../../components/Button/Button";
 import { Checkbox } from "../../components/Checkbox/Checkbox";
 import { Avatar } from "../../components/Avatar/Avatar";
@@ -52,7 +54,9 @@ import {
   createOrderLines,
   createLineCut,
   updateLineCut,
+  getFileMeta,
   type CreateOrderLineInput,
+  type DirectusFileMeta,
 } from "../../lib/directus";
 import type {
   OrdersCollection,
@@ -387,6 +391,25 @@ interface ImageModalEntry {
   galleryIndex?: number;
 }
 
+/** Picks a file-type icon for a document thumbnail that failed to render as
+ *  an `<img>` (a PDF/Word/Excel file never can). Falls back to a generic
+ *  file icon while metadata is still loading or when the type is anything
+ *  else. */
+function docTypeIcon(meta: DirectusFileMeta | null | undefined): IconName {
+  const type = meta?.type ?? "";
+  const name = meta?.filename_download ?? "";
+  if (type === "application/pdf" || /\.pdf$/i.test(name)) return "filePdf";
+  if (type.includes("word") || /\.docx?$/i.test(name)) return "fileWord";
+  if (
+    type.includes("sheet") ||
+    type.includes("excel") ||
+    /\.xlsx?$/i.test(name)
+  )
+    return "fileExcel";
+  if (type === "text/csv" || /\.csv$/i.test(name)) return "fileCsv";
+  return "fileDoc";
+}
+
 export function OrderDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -497,10 +520,15 @@ export function OrderDetail() {
    *  component (removed 2026-09-03): its per-instance `ResizeObserver` +
    *  `useLayoutEffect` measured real, avoidable overhead on orders with
    *  many lines/photos, most noticeable as visible lag right after an
-   *  upload. Every photo always renders and wraps onto a new line instead
-   *  of collapsing into an "N more" overlay. Clicking a thumbnail opens the
-   *  slideshow modal (`openImageGallery`) same as before; hovering shows a
-   *  trash icon (touch: always visible) that deletes in place via
+   *  upload. Every photo always renders in the DOM and wraps onto a new
+   *  line on desktop; below the mobile breakpoint, CSS alone (see
+   *  `.thumbnailCountBadge`/`.thumbnailItem:not(:first-child)`) hides every
+   *  thumbnail after the first and overlays a "+N" badge on it instead of
+   *  letting the row stack onto several lines — no measurement involved,
+   *  same non-collapsing DOM either way. Clicking the (visible) thumbnail
+   *  opens the slideshow modal (`openImageGallery`) starting at index 0, so
+   *  every photo is still reachable via the modal's prev/next; hovering
+   *  shows a trash icon (touch: always visible) that deletes in place via
    *  `deleteImageEntry`, restoring the per-thumbnail delete this file had
    *  before `Thumbnails` centralized it into the modal only. */
   function renderThumbnails(
@@ -517,6 +545,12 @@ export function OrderDetail() {
             onClick={() => openImageGallery(photos, i)}
           >
             <img src={p.url} alt="" className={styles.thumbnailImg} />
+            {i === 0 && photos.length > 1 && (
+              <div className={styles.thumbnailCountBadge}>
+                <Icon name="touch" size={14} />
+                {t("See all")}
+              </div>
+            )}
             {canDeleteImageEntry(p) && (
               <div
                 className={styles.thumbnailHoverTrash}
@@ -636,14 +670,6 @@ export function OrderDetail() {
   const [signedPhotos, setSignedPhotos] = useState<
     { fileId: string; url: string; attachmentId?: string }[]
   >([]);
-  // A real <button> nested inside a <label> breaks the browser's native
-  // label-click-to-input delegation (the button intercepts the click as its
-  // own interactive element) — trigger the hidden file inputs via ref instead.
-  const condFileInputRef = useRef<HTMLInputElement>(null);
-  const recvFileInputRef = useRef<HTMLInputElement>(null);
-  const signedFileInputRef = useRef<HTMLInputElement>(null);
-  const noteFileInputRef = useRef<HTMLInputElement>(null);
-  const signedDocFileInputRef = useRef<HTMLInputElement>(null);
   const [receiverName, setReceiverName] = useState("");
   /** COD payment outcome for this attempt — never gates delivery, only how
    *  it's recorded (see handleConfirmDelivery). Null until the courier
@@ -697,8 +723,85 @@ export function OrderDetail() {
   const [docNote, setDocNote] = useState("");
   const [docFileId, setDocFileId] = useState<string | null>(null);
   const [docFileName, setDocFileName] = useState<string | null>(null);
+  const [docUploading, setDocUploading] = useState(false);
   const [savingDoc, setSavingDoc] = useState(false);
   const docFileInputRef = useRef<HTMLInputElement>(null);
+  // Center the active step in `.stepperContainer`'s horizontal scroll
+  // instead of defaulting to scroll position 0 — otherwise a stage like
+  // "Packing" (off the right edge of the `min-width: 700px` track) gives no
+  // indication it's scrolled off-screen at all.
+  //
+  // A callback ref (not a plain `useRef` + `useLayoutEffect([order?.stage,
+  // order?.id])`) — that version was confirmed via debug logging to run
+  // with the active step's DOM node still null: `order.stage` can settle
+  // to its real value on the same render where `loading`/the early-return
+  // guards below are still active (this fetch resolves several other
+  // things — lines, history, attachments, etc. — alongside the order
+  // itself), so the effect's dependencies don't necessarily change again
+  // on the later render where the stepper JSX (and therefore the node)
+  // actually mounts — the effect fires once, uselessly, and never again.
+  // A callback ref sidesteps that entirely: React invokes it exactly when
+  // this specific DOM node mounts (with the node) or unmounts (with
+  // `null`), regardless of which render that happens to be — including
+  // when the *active* step moves from one column to another, since
+  // `isActive ? activeStepCallbackRef : undefined` then detaches from the
+  // old column and attaches to the new one.
+  //
+  // `scrollIntoView({ inline: "center" })` (not a manually computed
+  // `scrollLeft`) — it's the browser's own API for exactly this, and
+  // handles start/end clamping itself instead of trusting hand-rolled math.
+  // `block: "nearest"` keeps it from also trying to scroll the page
+  // vertically to reveal the element.
+  //
+  // Applied twice — once synchronously on mount, and again one frame later
+  // via `requestAnimationFrame` — because on an actual browser reload (not
+  // a client-side route change), Chromium separately restores this
+  // element's *previous* scroll offset on its own, and that restoration
+  // can land after the first call, silently overwriting it back to
+  // wherever it was before the reload. The rAF re-application re-asserts
+  // our computed position after that restoration has already happened.
+  const activeStepCallbackRef = useCallback((node: HTMLDivElement | null) => {
+    if (!node) return;
+    const center = () =>
+      node.scrollIntoView({
+        behavior: "auto",
+        block: "nearest",
+        inline: "center",
+      });
+    center();
+    requestAnimationFrame(center);
+  }, []);
+  /** File ids whose `<img>` thumbnail failed to load — a PDF/Word/Excel
+   *  file always will, since a browser can't render one as an image. Drives
+   *  the fallback file-type-icon tile in the Documents list. */
+  const [brokenDocImageIds, setBrokenDocImageIds] = useState<Set<string>>(
+    new Set(),
+  );
+  const [docFileMeta, setDocFileMeta] = useState<
+    Record<string, DirectusFileMeta | null>
+  >({});
+  const fetchedDocFileMetaIds = useRef<Set<string>>(new Set());
+
+  // Only fetch file metadata (MIME type + filename) once we know a
+  // thumbnail actually failed to render as an image — the common case
+  // (photos) never needs this extra request at all.
+  useEffect(() => {
+    const toFetch = Array.from(brokenDocImageIds).filter(
+      (fid) => !fetchedDocFileMetaIds.current.has(fid),
+    );
+    if (toFetch.length === 0) return;
+    toFetch.forEach((fid) => fetchedDocFileMetaIds.current.add(fid));
+    (async () => {
+      const results = await Promise.all(toFetch.map((fid) => getFileMeta(fid)));
+      setDocFileMeta((prev) => {
+        const next = { ...prev };
+        toFetch.forEach((fid, i) => {
+          next[fid] = results[i].data;
+        });
+        return next;
+      });
+    })();
+  }, [brokenDocImageIds]);
   /* ── Finalise stage's own "DO/SI printed" quick action — separate from
    *  the general Documents-card form above, matching the prototype's own
    *  `relDoc` (Dev-OrderDetail.jsx:101,784-798): a single optional number
@@ -1103,10 +1206,7 @@ export function OrderDetail() {
     return (
       <div className={styles.container}>
         <div className={styles.sectionsContainer}>
-          <div
-            className={styles.muted}
-            style={{ color: "var(--state-error)" }}
-          >
+          <div className={styles.muted} style={{ color: "var(--state-error)" }}>
             {error || t("Order not found.")}
           </div>
         </div>
@@ -1943,6 +2043,7 @@ export function OrderDetail() {
   async function handleDocFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    setDocUploading(true);
     const uploadRes = await uploadFile(file);
     if (!uploadRes.error && uploadRes.data) {
       setDocFileId(uploadRes.data.id);
@@ -1952,6 +2053,7 @@ export function OrderDetail() {
         title: t("Upload failed"),
       });
     }
+    setDocUploading(false);
     if (docFileInputRef.current) docFileInputRef.current.value = "";
   }
 
@@ -5225,572 +5327,587 @@ export function OrderDetail() {
   return (
     <div className={styles.container}>
       <div className={styles.sectionsContainer}>
-      {/* ── Main Content & Side Panel Grid ── */}
-      <div
-        className={[
-          styles.layoutGrid,
-          isPanelOpen ? styles.layoutGridWithPanel : styles.layoutGridFull,
-        ].join(" ")}
-      >
-        {/* ── Main Column ── */}
-        <div className={styles.mainColumn}>
-          {/* ── Top Header ── */}
-          <header className={styles.header}>
-            <div className={styles.topActionsRow}>
-              <Button
-                type="button"
-                variant="tertiary"
-                icon="chevronLeft"
-                onClick={() => navigate(backTo)}
-              >
-                {t("Back")}
-              </Button>
-              <div className={styles.actions}>
-                {/* Ported from the prototype's `can(role, 'createOrders')`
+        {/* ── Main Content & Side Panel Grid ── */}
+        <div
+          className={[
+            styles.layoutGrid,
+            isPanelOpen ? styles.layoutGridWithPanel : styles.layoutGridFull,
+          ].join(" ")}
+        >
+          {/* ── Main Column ── */}
+          <div className={styles.mainColumn}>
+            {/* ── Top Header ── */}
+            <header className={styles.header}>
+              <div className={styles.topActionsRow}>
+                <Button
+                  type="button"
+                  variant="tertiary"
+                  icon="chevronLeft"
+                  onClick={() => navigate(backTo)}
+                >
+                  {t("Back")}
+                </Button>
+                <div className={styles.actions}>
+                  {/* Ported from the prototype's `can(role, 'createOrders')`
                   (`Dev-OrderDetail.jsx:1278`) — was unconditionally visible
                   to every role. `createOrders` defaults to Admin only (+
                   Owner always), so in practice this is Admin/Owner, but
                   driven by the capability rather than a hardcoded role
                   check so an Owner Settings grant to another role also
                   enables it. */}
-                {auth.can("createOrders") && (
+                  {auth.can("createOrders") && (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      icon="whatsapp"
+                      onClick={copyWA}
+                    >
+                      {t("Copy WA")}
+                    </Button>
+                  )}
                   <Button
                     type="button"
                     variant="secondary"
-                    icon="whatsapp"
-                    onClick={copyWA}
+                    icon="printer"
+                    onClick={() => window.print()}
                   >
-                    {t("Copy WA")}
+                    {t("Print")}
                   </Button>
-                )}
-                <Button
-                  type="button"
-                  variant="secondary"
-                  icon="printer"
-                  onClick={() => window.print()}
-                >
-                  {t("Print")}
-                </Button>
-                {canEdit && (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    icon="edit"
-                    onClick={() => navigate(`/orders/${order.id}/edit`)}
-                  >
-                    {t("Edit")}
-                  </Button>
-                )}
+                  {canEdit && (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      icon="edit"
+                      onClick={() => navigate(`/orders/${order.id}/edit`)}
+                    >
+                      {t("Edit")}
+                    </Button>
+                  )}
+                </div>
               </div>
-            </div>
 
-            <div className={styles.titleRow}>
-              <h3 className={styles.title}>
-                {t("Order")} {order.no}
-              </h3>
-              <div className={styles.pillsContainer}>
-                {order.is_replacement && (
-                  <div className={`${styles.pill} ${styles.pillWarning}`}>
-                    <Icon name="reload" size={16} />
-                    Replacement
-                  </div>
-                )}
-                {isHold && (
-                  <div className={`${styles.pill} ${styles.pillWarning}`}>
-                    <Icon name="pause" size={16} />
-                    On Hold
-                  </div>
-                )}
-                {/* Same condition as the row-level `pendingDocs` badge
+              <div className={styles.titleRow}>
+                <h3 className={styles.title}>
+                  {t("Order")} {order.no}
+                </h3>
+                <div className={styles.pillsContainer}>
+                  {order.is_replacement && (
+                    <div className={`${styles.pill} ${styles.pillWarning}`}>
+                      <Icon name="reload" size={16} />
+                      Replacement
+                    </div>
+                  )}
+                  {isHold && (
+                    <div className={`${styles.pill} ${styles.pillWarning}`}>
+                      <Icon name="pause" size={16} />
+                      On Hold
+                    </div>
+                  )}
+                  {/* Same condition as the row-level `pendingDocs` badge
                     (`useOrders.ts`: `currentStage === "delivered" &&
                     row.docs_returned !== true`) — informational, not
                     gated on who can confirm it (that's `showDocsRow`,
                     a separate, capability-gated condition further down
                     driving the actual action row). */}
-                {isDelivered && !order.docs_returned && (
-                  <div className={`${styles.pill} ${styles.pillWarning}`}>
-                    <Icon name="document" size={16} />
-                    {t("Signed DO/SI not returned yet")}
+                  {isDelivered && !order.docs_returned && (
+                    <div className={`${styles.pill} ${styles.pillWarning}`}>
+                      <Icon name="document" size={16} />
+                      {t("Signed DO/SI not returned yet")}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </header>
+
+            {/* Stepper — once delivered, replace the 8-step track with one
+              prominent "done" banner instead of a stepper with nothing left
+              to step through. */}
+            {stage === "delivered" && order.closed_short ? (
+              <div className={styles.banner}>
+                <div className={styles.headerRow} style={{ paddingBottom: 0 }}>
+                  <div
+                    className={styles.stepLine}
+                    style={{ backgroundColor: "var(--state-warning)" }}
+                  />
+                  <div className={styles.warningHeader}>
+                    <Icon name="packageProcess" size={24} />
+                    <span className={styles.warningTitle}>
+                      {t("Closed — delivered short")}
+                    </span>
+                  </div>
+                  <div
+                    className={styles.stepLine}
+                    style={{ backgroundColor: "var(--state-warning)" }}
+                  />
+                </div>
+                <p>
+                  {backorderChild ? (
+                    <>
+                      {t("Remainder carried to backorder")}{" "}
+                      <Button
+                        type="button"
+                        variant="tertiary"
+                        className={styles.inlineButton}
+                        onClick={() =>
+                          navigate(`/orders/${backorderChild.id}`, {
+                            state: { from: location.pathname },
+                          })
+                        }
+                      >
+                        Order {backorderChild.no}
+                      </Button>
+                    </>
+                  ) : (
+                    `${t("Remainder dropped")}${order.short_reason ? ` — ${order.short_reason}` : ""}`
+                  )}
+                </p>
+              </div>
+            ) : stage === "delivered" ? (
+              <div className={styles.banner}>
+                <div className={styles.headerRow} style={{ paddingBottom: 0 }}>
+                  <div
+                    className={styles.stepLine}
+                    style={{ backgroundColor: "var(--accent-primary)" }}
+                  />
+                  <div className={styles.successHeader}>
+                    <Icon name="packageDelivered" size={24} />
+                    <span className={styles.successTitle}>
+                      {t("Delivered & Closed")}
+                    </span>
+                  </div>
+
+                  <div
+                    className={styles.stepLine}
+                    style={{ backgroundColor: "var(--accent-primary)" }}
+                  />
+                </div>
+              </div>
+            ) : isHold ? (
+              <div className={styles.banner}>
+                <div className={styles.headerRow} style={{ paddingBottom: 0 }}>
+                  <div
+                    className={styles.stepLine}
+                    style={{ backgroundColor: "var(--state-warning)" }}
+                  />
+                  <div className={styles.warningHeader}>
+                    <Icon name="pause" size={20} />
+                    <span className={styles.warningTitle}>{t("On hold")}</span>
+                  </div>
+                  <div
+                    className={styles.stepLine}
+                    style={{ backgroundColor: "var(--state-warning)" }}
+                  />
+                </div>
+
+                {canHold ? (
+                  <div className={styles.cardListColumn}>
+                    <p>
+                      {t(
+                        "This order is paused — the process cannot continue until it is resumed.",
+                      )}
+                    </p>
+                    <Button
+                      type="button"
+                      variant="primary"
+                      buttonStyle="fullWidth"
+                      size="lg"
+                      icon="play"
+                      tone="warning"
+                      onClick={handleToggleHold}
+                    >
+                      {t("Resume order")}
+                    </Button>
+                  </div>
+                ) : (
+                  <p>
+                    This order is paused — the process cannot continue until{" "}
+                    <strong>Admin</strong> or <strong>Owner</strong> resumes it.
+                  </p>
+                )}
+              </div>
+            ) : isOutstanding ? (
+              <div className={styles.banner}>
+                <div className={styles.headerRow} style={{ paddingBottom: 0 }}>
+                  <div
+                    className={styles.stepLine}
+                    style={{ backgroundColor: "var(--state-warning)" }}
+                  />
+                  <div className={styles.warningHeader}>
+                    <Icon name="packageProcess" size={20} />
+                    <span className={styles.warningTitle}>
+                      {t("Outstanding")}
+                    </span>
+                  </div>
+                  <div
+                    className={styles.stepLine}
+                    style={{ backgroundColor: "var(--state-warning)" }}
+                  />
+                </div>
+                <p>
+                  {t(
+                    "This order is partially fulfilled — a portion of the items has not yet been delivered to the customer.",
+                  )}
+                </p>
+              </div>
+            ) : isReturned ? (
+              <div className={styles.banner}>
+                <div className={styles.headerRow} style={{ paddingBottom: 0 }}>
+                  <div
+                    className={styles.stepLine}
+                    style={{ backgroundColor: "var(--state-error)" }}
+                  />
+                  <div className={styles.errorHeader}>
+                    <Icon name="packageReturned" size={20} />
+                    <span className={styles.errorTitle}>{t("Returned")}</span>
+                  </div>
+                  <div
+                    className={styles.stepLine}
+                    style={{ backgroundColor: "var(--state-error)" }}
+                  />
+                </div>
+                <p>
+                  {t(
+                    "This order was returned by the customer — see the Customer Return card below for details.",
+                  )}
+                </p>
+              </div>
+            ) : isAwaiting ? (
+              <div className={styles.banner}>
+                <div className={styles.headerRow} style={{ paddingBottom: 0 }}>
+                  <div className={styles.stepLine} />
+                  <div className={styles.mutedHeader}>
+                    <Icon name="hourglass" size={20} />
+                    <span className={styles.mutedTitle}>
+                      {t("Awaiting stock")}
+                    </span>
+                  </div>
+                  <div className={styles.stepLine} />
+                </div>
+                <p>
+                  {t("Waiting for stock to come in.")}
+                  {order.backorder_of && (
+                    <>
+                      {" "}
+                      {t("This order is a backorder of")}{" "}
+                      <Button
+                        type="button"
+                        variant="tertiary"
+                        className={styles.inlineButton}
+                        onClick={() =>
+                          navigate(`/orders/${order.backorder_of}`, {
+                            // This is a drill-down into a related order, not a
+                            // reorder-style "replace the origin" hop — Back on
+                            // the parent should return HERE, to this backorder
+                            // child, not skip past it to wherever this page
+                            // itself came from.
+                            state: { from: location.pathname },
+                          })
+                        }
+                      >
+                        {t("Order")} {backorderParentNo ?? "…"}
+                      </Button>
+                      .
+                    </>
+                  )}
+                  {order.remind_on && (
+                    <>
+                      {" "}
+                      {t("Reminder date")}:{" "}
+                      <strong>{formatDateShort(order.remind_on)}</strong>.
+                    </>
+                  )}
+                </p>
+              </div>
+            ) : isCancelled ? (
+              <div className={styles.banner}>
+                <div className={styles.headerRow} style={{ paddingBottom: 0 }}>
+                  <div className={styles.stepLine} />
+                  <div className={styles.mutedHeader}>
+                    <Icon name="cancelled" size={20} />
+                    <span className={styles.mutedTitle}>{t("Cancelled")}</span>
+                  </div>
+                  <div className={styles.stepLine} />
+                </div>
+              </div>
+            ) : (
+              <div
+                className={styles.stepperContainer}
+                style={
+                  { "--completed-pct": completedPct } as React.CSSProperties
+                }
+              >
+                <div className={styles.stepperTrack}>
+                  {PIPELINE_STAGES.map((s, idx) => {
+                    const isActive = stage === s.key;
+                    const isCompleted = currentStageIndex > idx;
+
+                    return (
+                      <div
+                        key={s.key}
+                        className={styles.stepColumn}
+                        ref={isActive ? activeStepCallbackRef : undefined}
+                      >
+                        <div className={styles.stepHeaderRow}>
+                          <div
+                            className={[
+                              styles.stepLine,
+                              idx === 0 ? styles.stepLineInvisible : "",
+                              currentStageIndex >= idx
+                                ? styles.stepLineCompleted
+                                : "",
+                            ].join(" ")}
+                          />
+                          <div
+                            className={[
+                              styles.stepDot,
+                              isActive ? styles.stepDotActive : "",
+                              isCompleted ? styles.stepDotCompleted : "",
+                            ].join(" ")}
+                          />
+                          <div
+                            className={[
+                              styles.stepLine,
+                              idx === PIPELINE_STAGES.length - 1
+                                ? styles.stepLineInvisible
+                                : "",
+                              currentStageIndex > idx
+                                ? styles.stepLineCompleted
+                                : "",
+                            ].join(" ")}
+                          />
+                        </div>
+                        <span
+                          className={[
+                            styles.stepLabel,
+                            isActive ? styles.stepLabelActive : "",
+                            isCompleted ? styles.stepLabelCompleted : "",
+                          ].join(" ")}
+                        >
+                          {t(s.label)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {showActorNotice && (
+              <div className={styles.actorNotice}>
+                <span>
+                  This order is currently with <strong>{stageActor}</strong>.
+                  You can view it, but the action is theirs.
+                </span>
+              </div>
+            )}
+
+            {/* Customer Info Card */}
+            <Card className={styles.customerCard}>
+              <div
+                className={[
+                  styles.profileRow,
+                  customerId ? styles.profileRowClickable : "",
+                ].join(" ")}
+                onClick={() => {
+                  if (customerId)
+                    navigate(`/customers/${customerId}`, {
+                      state: { from: location.pathname },
+                    });
+                }}
+                title={customerId ? t("View customer details") : undefined}
+              >
+                <Avatar
+                  initials={getInitials(order.customer_name) || "??"}
+                  label={order.customer_name || ""}
+                  size="lg"
+                ></Avatar>
+                <div className={styles.customerInfo}>
+                  <h3>{order.customer_name || "—"}</h3>
+                  <p>
+                    {matchedCustomer?.channel?.toUpperCase() ||
+                      t("Horeca · B2B")}
+                  </p>
+                </div>
+              </div>
+              <div className={styles.detailsGrid}>
+                <div className={styles.detailItem}>
+                  <span className={styles.detailLabel}>
+                    {t("Delivery Date")}
+                  </span>
+                  <span className={styles.detailValue}>
+                    {formatDate(order.deliver_at)}
+                  </span>
+                </div>
+                <div className={styles.detailItem}>
+                  <span className={styles.detailLabel}>{t("Order Date")}</span>
+                  <span className={styles.detailValue}>
+                    {order.order_date
+                      ? new Date(order.order_date).toLocaleDateString("en-US", {
+                          year: "numeric",
+                          month: "long",
+                          day: "numeric",
+                        })
+                      : "—"}
+                  </span>
+                </div>
+                {canSeeCustomerContact && (
+                  <div className={styles.detailItem}>
+                    <span className={styles.detailLabel}>{t("Sales Rep")}</span>
+                    <span className={styles.detailValue}>
+                      {order.sales ?? order.sales_rep ?? "—"}
+                    </span>
+                  </div>
+                )}
+                {canSeeCustomerContact && (
+                  <div className={styles.detailItem}>
+                    <span className={styles.detailLabel}>{t("Contact")}</span>
+                    <span className={styles.detailValue}>
+                      {order.customer_contact ||
+                        matchedCustomer?.contact ||
+                        "—"}
+                    </span>
                   </div>
                 )}
               </div>
-            </div>
-          </header>
+            </Card>
 
-          {/* Stepper — once delivered, replace the 8-step track with one
-              prominent "done" banner instead of a stepper with nothing left
-              to step through. */}
-          {stage === "delivered" && order.closed_short ? (
-            <div className={styles.banner}>
-              <div className={styles.headerRow} style={{ paddingBottom: 0 }}>
-                <div
-                  className={styles.stepLine}
-                  style={{ backgroundColor: "var(--state-warning)" }}
-                />
-                <div className={styles.warningHeader}>
-                  <Icon name="packageProcess" size={24} />
-                  <span className={styles.warningTitle}>
-                    {t("Closed — delivered short")}
-                  </span>
-                </div>
-                <div
-                  className={styles.stepLine}
-                  style={{ backgroundColor: "var(--state-warning)" }}
-                />
-              </div>
-              <p>
-                {backorderChild ? (
-                  <>
-                    {t("Remainder carried to backorder")}{" "}
-                    <Button
-                      type="button"
-                      variant="tertiary"
-                      className={styles.inlineButton}
-                      onClick={() =>
-                        navigate(`/orders/${backorderChild.id}`, {
-                          state: { from: location.pathname },
-                        })
-                      }
-                    >
-                      Order {backorderChild.no}
-                    </Button>
-                  </>
-                ) : (
-                  `${t("Remainder dropped")}${order.short_reason ? ` — ${order.short_reason}` : ""}`
-                )}
-              </p>
-            </div>
-          ) : stage === "delivered" ? (
-            <div className={styles.banner}>
-              <div className={styles.headerRow} style={{ paddingBottom: 0 }}>
-                <div
-                  className={styles.stepLine}
-                  style={{ backgroundColor: "var(--accent-primary)" }}
-                />
-                <div className={styles.successHeader}>
-                  <Icon name="packageDelivered" size={24} />
-                  <span className={styles.successTitle}>
-                    {t("Delivered & Closed")}
-                  </span>
-                </div>
-
-                <div
-                  className={styles.stepLine}
-                  style={{ backgroundColor: "var(--accent-primary)" }}
-                />
-              </div>
-            </div>
-          ) : isHold ? (
-            <div className={styles.banner}>
-              <div className={styles.headerRow} style={{ paddingBottom: 0 }}>
-                <div
-                  className={styles.stepLine}
-                  style={{ backgroundColor: "var(--state-warning)" }}
-                />
-                <div className={styles.warningHeader}>
-                  <Icon name="pause" size={20} />
-                  <span className={styles.warningTitle}>{t("On hold")}</span>
-                </div>
-                <div
-                  className={styles.stepLine}
-                  style={{ backgroundColor: "var(--state-warning)" }}
-                />
+            {/* Items Card */}
+            <Card>
+              <div className={styles.headerRowLeft}>
+                <h3 className={styles.sectionTitle}>{t("Items")}</h3>
+                <span className={styles.count}>{lines.length}</span>
               </div>
 
-              {canHold ? (
-                <div className={styles.cardListColumn}>
-                  <p>
-                    {t(
-                      "This order is paused — the process cannot continue until it is resumed.",
-                    )}
-                  </p>
-                  <Button
-                    type="button"
-                    variant="primary"
-                    buttonStyle="fullWidth"
-                    size="lg"
-                    icon="play"
-                    tone="warning"
-                    onClick={handleToggleHold}
-                  >
-                    {t("Resume order")}
-                  </Button>
-                </div>
-              ) : (
-                <p>
-                  This order is paused — the process cannot continue until{" "}
-                  <strong>Admin</strong> or <strong>Owner</strong> resumes it.
-                </p>
-              )}
-            </div>
-          ) : isOutstanding ? (
-            <div className={styles.banner}>
-              <div className={styles.headerRow} style={{ paddingBottom: 0 }}>
-                <div
-                  className={styles.stepLine}
-                  style={{ backgroundColor: "var(--state-warning)" }}
-                />
-                <div className={styles.warningHeader}>
-                  <Icon name="packageProcess" size={20} />
-                  <span className={styles.warningTitle}>
-                    {t("Outstanding")}
-                  </span>
-                </div>
-                <div
-                  className={styles.stepLine}
-                  style={{ backgroundColor: "var(--state-warning)" }}
-                />
-              </div>
-              <p>
-                {t(
-                  "This order is partially fulfilled — a portion of the items has not yet been delivered to the customer.",
-                )}
-              </p>
-            </div>
-          ) : isReturned ? (
-            <div className={styles.banner}>
-              <div className={styles.headerRow} style={{ paddingBottom: 0 }}>
-                <div
-                  className={styles.stepLine}
-                  style={{ backgroundColor: "var(--state-error)" }}
-                />
-                <div className={styles.errorHeader}>
-                  <Icon name="packageReturned" size={20} />
-                  <span className={styles.errorTitle}>{t("Returned")}</span>
-                </div>
-                <div
-                  className={styles.stepLine}
-                  style={{ backgroundColor: "var(--state-error)" }}
-                />
-              </div>
-              <p>
-                {t(
-                  "This order was returned by the customer — see the Customer Return card below for details.",
-                )}
-              </p>
-            </div>
-          ) : isAwaiting ? (
-            <div className={styles.banner}>
-              <div className={styles.headerRow} style={{ paddingBottom: 0 }}>
-                <div className={styles.stepLine} />
-                <div className={styles.mutedHeader}>
-                  <Icon name="hourglass" size={20} />
-                  <span className={styles.mutedTitle}>
-                    {t("Awaiting stock")}
-                  </span>
-                </div>
-                <div className={styles.stepLine} />
-              </div>
-              <p>
-                {t("Waiting for stock to come in.")}
-                {order.backorder_of && (
-                  <>
-                    {" "}
-                    {t("This order is a backorder of")}{" "}
-                    <Button
-                      type="button"
-                      variant="tertiary"
-                      className={styles.inlineButton}
-                      onClick={() =>
-                        navigate(`/orders/${order.backorder_of}`, {
-                          // This is a drill-down into a related order, not a
-                          // reorder-style "replace the origin" hop — Back on
-                          // the parent should return HERE, to this backorder
-                          // child, not skip past it to wherever this page
-                          // itself came from.
-                          state: { from: location.pathname },
-                        })
-                      }
-                    >
-                      {t("Order")} {backorderParentNo ?? "…"}
-                    </Button>
-                    .
-                  </>
-                )}
-                {order.remind_on && (
-                  <>
-                    {" "}
-                    {t("Reminder date")}:{" "}
-                    <strong>{formatDateShort(order.remind_on)}</strong>.
-                  </>
-                )}
-              </p>
-            </div>
-          ) : isCancelled ? (
-            <div className={styles.banner}>
-              <div className={styles.headerRow} style={{ paddingBottom: 0 }}>
-                <div className={styles.stepLine} />
-                <div className={styles.mutedHeader}>
-                  <Icon name="cancelled" size={20} />
-                  <span className={styles.mutedTitle}>{t("Cancelled")}</span>
-                </div>
-                <div className={styles.stepLine} />
-              </div>
-            </div>
-          ) : (
-            <div
-              className={styles.stepperContainer}
-              style={{ "--completed-pct": completedPct } as React.CSSProperties}
-            >
-              <div className={styles.stepperTrack}>
-                {PIPELINE_STAGES.map((s, idx) => {
-                  const isActive = stage === s.key;
-                  const isCompleted = currentStageIndex > idx;
+              {/* View Mode Items List */}
+              <div className={styles.itemsList}>
+                {lines.map((line) => {
+                  const qty =
+                    typeof line.qty === "string"
+                      ? parseFloat(line.qty) || 0
+                      : (line.qty ?? 0);
+                  const price =
+                    typeof line.price === "string"
+                      ? parseFloat(line.price) || 0
+                      : (line.price ?? 0);
+                  const hasPrice = lineHasPrice(line);
+                  const isWeighedItem = isWeighedUnit(line.unit);
+
+                  const weighingLines = line.id
+                    ? (weighingsMap[line.id] ?? [])
+                    : [];
+                  const totalMeasuredWeight = weighingLines.reduce(
+                    (acc, w) => acc + (parseFloat(w.weight) || 0),
+                    0,
+                  );
+                  // Gentle "does this look right?" hint, never a block — ported
+                  // from the prototype's belowHint/aboveHint (Dev-OrderDetail.jsx:1350-1351).
+                  // The Settings-configurable tol_below_pct/tol_above_pct (both
+                  // default 10%, matching the prototype's DEFAULT_SETTINGS) were
+                  // already wired up end-to-end on the Settings page and live
+                  // schema — only this consuming check was missing.
+                  const tolBelowPct = opsSettings?.tol_below_pct ?? 10;
+                  const tolAbovePct = opsSettings?.tol_above_pct ?? 10;
+                  const belowWeighHint =
+                    isWeightOnlyUnit(line.unit) &&
+                    totalMeasuredWeight > 0 &&
+                    qty > 0 &&
+                    totalMeasuredWeight < qty * (1 - tolBelowPct / 100);
+                  const aboveWeighHint =
+                    isWeightOnlyUnit(line.unit) &&
+                    totalMeasuredWeight > 0 &&
+                    qty > 0 &&
+                    totalMeasuredWeight > qty * (1 + tolAbovePct / 100);
+                  const itemPhotos = line.id
+                    ? (itemPhotosMap[line.id] ?? [])
+                    : [];
+                  const sendingQty = line.id
+                    ? (sendingQtyMap[line.id] ?? qty)
+                    : qty;
+                  // Ported from the prototype's line-detail gate
+                  // (`Dev-OrderDetail.jsx:1425`, `l.weight || (priceOk &&
+                  // l.price) || ...`) — only render the summary row when it
+                  // actually has something to show. Gated on the real
+                  // measured-weight VALUE (not just "is this a weighed-unit
+                  // line"), matching the prototype's own `l.weight` check —
+                  // previously any weighed-unit line (loaf/kg/gram) forced the
+                  // row to show even with nothing weighed yet and no price,
+                  // rendering a bare "Total:" with nothing after it (at intake
+                  // the number is always hidden; past intake, an un-weighed
+                  // line still had `totalMeasuredWeight === 0`).
+                  const showsWeightTotal =
+                    isWeighedItem &&
+                    stage !== "intake" &&
+                    totalMeasuredWeight > 0;
+                  const showLineDetail =
+                    showsWeightTotal ||
+                    (isWeightOnlyUnit(line.unit) && !!line.short) ||
+                    (canSeePrices && hasPrice);
+                  // "N of M delivered · X left" / "N/M delivered" pill — every
+                  // stage on and after `delivered` (delivered, outstanding,
+                  // returned, cancelled), since all of those have a real
+                  // `delivered` value once confirm-delivery has run and stay
+                  // meaningful for the rest of the order's life.
+                  const deliveredNum = Number(line.delivered) || 0;
+                  const left = lineLeft(line);
+                  const showDeliveredPill =
+                    (isDelivered ||
+                      isOutstanding ||
+                      isReturned ||
+                      isCancelled) &&
+                    deliveredNum > 0;
+                  // "N of M sent (X to follow)" / "N/M sent" pill — the
+                  // post-Cold-Storage counterpart of the sending input's own
+                  // "to follow" hint, for the stages between Cold Storage and
+                  // delivery confirmation (production/packing/finalise/
+                  // dispatch) where `order_lines.sent` still holds the real
+                  // value. Once delivery is confirmed, `sent` is cleared into
+                  // `delivered` (see `handleConfirmDelivery`) and
+                  // `showDeliveredPill` takes over instead — the two pills
+                  // never overlap. Warning-toned while something's still held
+                  // back; accent-toned once the full ordered qty has shipped.
+                  const showSendingPill =
+                    stage !== "cold" &&
+                    !isDelivered &&
+                    !isOutstanding &&
+                    !isReturned &&
+                    !isCancelled &&
+                    !isAwaiting &&
+                    !isWeightOnlyUnit(line.unit) &&
+                    qty >= 1;
 
                   return (
-                    <div key={s.key} className={styles.stepColumn}>
-                      <div className={styles.stepHeaderRow}>
-                        <div
-                          className={[
-                            styles.stepLine,
-                            idx === 0 ? styles.stepLineInvisible : "",
-                            currentStageIndex >= idx
-                              ? styles.stepLineCompleted
-                              : "",
-                          ].join(" ")}
-                        />
-                        <div
-                          className={[
-                            styles.stepDot,
-                            isActive ? styles.stepDotActive : "",
-                            isCompleted ? styles.stepDotCompleted : "",
-                          ].join(" ")}
-                        />
-                        <div
-                          className={[
-                            styles.stepLine,
-                            idx === PIPELINE_STAGES.length - 1
-                              ? styles.stepLineInvisible
-                              : "",
-                            currentStageIndex > idx
-                              ? styles.stepLineCompleted
-                              : "",
-                          ].join(" ")}
-                        />
-                      </div>
-                      <span
-                        className={[
-                          styles.stepLabel,
-                          isActive ? styles.stepLabelActive : "",
-                          isCompleted ? styles.stepLabelCompleted : "",
-                        ].join(" ")}
-                      >
-                        {t(s.label)}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {showActorNotice && (
-            <div className={styles.actorNotice}>
-              <span>
-                This order is currently with <strong>{stageActor}</strong>. You
-                can view it, but the action is theirs.
-              </span>
-            </div>
-          )}
-
-          {/* Customer Info Card */}
-          <Card className={styles.customerCard}>
-            <div
-              className={[
-                styles.profileRow,
-                customerId ? styles.profileRowClickable : "",
-              ].join(" ")}
-              onClick={() => {
-                if (customerId)
-                  navigate(`/customers/${customerId}`, {
-                    state: { from: location.pathname },
-                  });
-              }}
-              title={customerId ? t("View customer details") : undefined}
-            >
-              <Avatar
-                initials={getInitials(order.customer_name) || "??"}
-                label={order.customer_name || ""}
-                size="lg"
-              ></Avatar>
-              <div className={styles.customerInfo}>
-                <h3>{order.customer_name || "—"}</h3>
-                <p>
-                  {matchedCustomer?.channel?.toUpperCase() || t("Horeca · B2B")}
-                </p>
-              </div>
-            </div>
-            <div className={styles.detailsGrid}>
-              <div className={styles.detailItem}>
-                <span className={styles.detailLabel}>{t("Delivery Date")}</span>
-                <span className={styles.detailValue}>
-                  {formatDate(order.deliver_at)}
-                </span>
-              </div>
-              <div className={styles.detailItem}>
-                <span className={styles.detailLabel}>{t("Order Date")}</span>
-                <span className={styles.detailValue}>
-                  {order.order_date
-                    ? new Date(order.order_date).toLocaleDateString("en-US", {
-                        year: "numeric",
-                        month: "long",
-                        day: "numeric",
-                      })
-                    : "—"}
-                </span>
-              </div>
-              {canSeeCustomerContact && (
-                <div className={styles.detailItem}>
-                  <span className={styles.detailLabel}>{t("Sales Rep")}</span>
-                  <span className={styles.detailValue}>
-                    {order.sales ?? order.sales_rep ?? "—"}
-                  </span>
-                </div>
-              )}
-              {canSeeCustomerContact && (
-                <div className={styles.detailItem}>
-                  <span className={styles.detailLabel}>{t("Contact")}</span>
-                  <span className={styles.detailValue}>
-                    {order.customer_contact || matchedCustomer?.contact || "—"}
-                  </span>
-                </div>
-              )}
-            </div>
-          </Card>
-
-          {/* Items Card */}
-          <Card>
-            <div className={styles.headerRowLeft}>
-              <h3 className={styles.sectionTitle}>{t("Items")}</h3>
-              <span className={styles.count}>{lines.length}</span>
-            </div>
-
-            {/* View Mode Items List */}
-            <div className={styles.itemsList}>
-              {lines.map((line) => {
-                const qty =
-                  typeof line.qty === "string"
-                    ? parseFloat(line.qty) || 0
-                    : (line.qty ?? 0);
-                const price =
-                  typeof line.price === "string"
-                    ? parseFloat(line.price) || 0
-                    : (line.price ?? 0);
-                const hasPrice = lineHasPrice(line);
-                const isWeighedItem = isWeighedUnit(line.unit);
-
-                const weighingLines = line.id
-                  ? (weighingsMap[line.id] ?? [])
-                  : [];
-                const totalMeasuredWeight = weighingLines.reduce(
-                  (acc, w) => acc + (parseFloat(w.weight) || 0),
-                  0,
-                );
-                // Gentle "does this look right?" hint, never a block — ported
-                // from the prototype's belowHint/aboveHint (Dev-OrderDetail.jsx:1350-1351).
-                // The Settings-configurable tol_below_pct/tol_above_pct (both
-                // default 10%, matching the prototype's DEFAULT_SETTINGS) were
-                // already wired up end-to-end on the Settings page and live
-                // schema — only this consuming check was missing.
-                const tolBelowPct = opsSettings?.tol_below_pct ?? 10;
-                const tolAbovePct = opsSettings?.tol_above_pct ?? 10;
-                const belowWeighHint =
-                  isWeightOnlyUnit(line.unit) &&
-                  totalMeasuredWeight > 0 &&
-                  qty > 0 &&
-                  totalMeasuredWeight < qty * (1 - tolBelowPct / 100);
-                const aboveWeighHint =
-                  isWeightOnlyUnit(line.unit) &&
-                  totalMeasuredWeight > 0 &&
-                  qty > 0 &&
-                  totalMeasuredWeight > qty * (1 + tolAbovePct / 100);
-                const itemPhotos = line.id
-                  ? (itemPhotosMap[line.id] ?? [])
-                  : [];
-                const sendingQty = line.id
-                  ? (sendingQtyMap[line.id] ?? qty)
-                  : qty;
-                // Ported from the prototype's line-detail gate
-                // (`Dev-OrderDetail.jsx:1425`, `l.weight || (priceOk &&
-                // l.price) || ...`) — only render the summary row when it
-                // actually has something to show. Gated on the real
-                // measured-weight VALUE (not just "is this a weighed-unit
-                // line"), matching the prototype's own `l.weight` check —
-                // previously any weighed-unit line (loaf/kg/gram) forced the
-                // row to show even with nothing weighed yet and no price,
-                // rendering a bare "Total:" with nothing after it (at intake
-                // the number is always hidden; past intake, an un-weighed
-                // line still had `totalMeasuredWeight === 0`).
-                const showsWeightTotal =
-                  isWeighedItem &&
-                  stage !== "intake" &&
-                  totalMeasuredWeight > 0;
-                const showLineDetail =
-                  showsWeightTotal ||
-                  (isWeightOnlyUnit(line.unit) && !!line.short) ||
-                  (canSeePrices && hasPrice);
-                // "N of M delivered · X left" / "N/M delivered" pill — every
-                // stage on and after `delivered` (delivered, outstanding,
-                // returned, cancelled), since all of those have a real
-                // `delivered` value once confirm-delivery has run and stay
-                // meaningful for the rest of the order's life.
-                const deliveredNum = Number(line.delivered) || 0;
-                const left = lineLeft(line);
-                const showDeliveredPill =
-                  (isDelivered || isOutstanding || isReturned || isCancelled) &&
-                  deliveredNum > 0;
-                // "N of M sent (X to follow)" / "N/M sent" pill — the
-                // post-Cold-Storage counterpart of the sending input's own
-                // "to follow" hint, for the stages between Cold Storage and
-                // delivery confirmation (production/packing/finalise/
-                // dispatch) where `order_lines.sent` still holds the real
-                // value. Once delivery is confirmed, `sent` is cleared into
-                // `delivered` (see `handleConfirmDelivery`) and
-                // `showDeliveredPill` takes over instead — the two pills
-                // never overlap. Warning-toned while something's still held
-                // back; accent-toned once the full ordered qty has shipped.
-                const showSendingPill =
-                  stage !== "cold" &&
-                  !isDelivered &&
-                  !isOutstanding &&
-                  !isReturned &&
-                  !isCancelled &&
-                  !isAwaiting &&
-                  !isWeightOnlyUnit(line.unit) &&
-                  qty >= 1;
-
-                return (
-                  <div key={line.id} className={styles.itemRow}>
-                    <div className={styles.itemHeader}>
-                      <div className={styles.itemInfo}>
-                        <span className={styles.itemQty}>{qty}</span>
-                        <span className={styles.unitTag}>{line.unit}</span>
-                        <span className={styles.itemName}>{line.name}</span>
-                      </div>
-                      {showDeliveredPill && (
-                        <span
-                          className={`${styles.pill} ${deliveredNum < qty ? styles.pillWarning : styles.pillSuccess}`}
-                        >
-                          {left > 0
-                            ? `${deliveredNum} ${t("of")} ${qty} ${t("delivered")} ${t("(")} ${left} ${t("left")} ${t(")")}`
-                            : `${deliveredNum}/${qty} ${t("delivered")}`}
-                        </span>
-                      )}
-                      {showSendingPill && (
-                        <div className={styles.inputBadge}>
-                          {t("sending")}
-                          <span className={styles.sendingValue}>
-                            {sendingQty}
-                          </span>
-                          {t("of")} {qty}
-                          {sendingQty < qty && (
-                            <span className={styles.toFollowHint}>
-                              {"("} {qty - sendingQty} {t("to follow")} {")"}
-                            </span>
-                          )}
+                    <div key={line.id} className={styles.itemRow}>
+                      <div className={styles.itemHeader}>
+                        <div className={styles.itemInfo}>
+                          <span className={styles.itemQty}>{qty}</span>
+                          <span className={styles.unitTag}>{line.unit}</span>
+                          <span className={styles.itemName}>{line.name}</span>
                         </div>
-                      )}
-                      {/* Cold Storage only, and never on kg/gram — matches
+                        {showDeliveredPill && (
+                          <span
+                            className={`${styles.pill} ${deliveredNum < qty ? styles.pillWarning : styles.pillSuccess}`}
+                          >
+                            {left > 0
+                              ? `${deliveredNum} ${t("of")} ${qty} ${t("delivered")} ${t("(")} ${left} ${t("left")} ${t(")")}`
+                              : `${deliveredNum}/${qty} ${t("delivered")}`}
+                          </span>
+                        )}
+                        {showSendingPill && (
+                          <div className={styles.inputBadge}>
+                            {t("sending")}
+                            <span className={styles.sendingValue}>
+                              {sendingQty}
+                            </span>
+                            <span>{t("of")}</span>
+                            <span>{qty} </span>
+                            {sendingQty < qty && (
+                              <span className={styles.toFollowHint}>
+                                {"("} {qty - sendingQty} {t("to follow")} {")"}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                        {/* Cold Storage only, and never on kg/gram — matches
                           the prototype's exact gate (`Dev-OrderDetail.jsx
                           :1364`: `weighing && counted && remaining(l) >= 1`,
                           where `weighing = stage==='cold'` and `counted =
@@ -5801,252 +5918,217 @@ export function OrderDetail() {
                           stage past cold too (a deliberate port-specific
                           extension for "X to follow" visibility) — reverted
                           to the prototype's own scope per direct request. */}
-                      {stage === "cold" &&
-                        !isWeightOnlyUnit(line.unit) &&
-                        qty >= 1 && (
-                          <div className={styles.inputBadge}>
-                            {t("sending")}
-                            {canWeighHere ? (
+                        {stage === "cold" &&
+                          !isWeightOnlyUnit(line.unit) &&
+                          qty >= 1 && (
+                            <div className={styles.inputBadge}>
+                              {t("sending")}
+                              {canWeighHere ? (
+                                <input
+                                  type="number"
+                                  className={styles.numberInput}
+                                  value={sendingQty}
+                                  min={0}
+                                  max={qty}
+                                  onChange={(e) => {
+                                    // Capped at the ordered qty — sending can
+                                    // never exceed what was actually ordered.
+                                    const val = Math.min(
+                                      qty,
+                                      Math.max(
+                                        0,
+                                        parseInt(e.target.value) || 0,
+                                      ),
+                                    );
+                                    if (line.id)
+                                      setSendingQtyMap((prev) => ({
+                                        ...prev,
+                                        [line.id!]: val,
+                                      }));
+                                  }}
+                                  onBlur={() =>
+                                    line.id && handleSendingBlur(line.id)
+                                  }
+                                />
+                              ) : (
+                                // Only the role that owns Cold Storage picking
+                                // decides what's actually being sent — everyone
+                                // else (Finance, etc.) sees the saved figure but
+                                // can't edit it.
+                                <span className={styles.sendingValue}>
+                                  {sendingQty}
+                                </span>
+                              )}
+                              <span>{t("of")}</span>
+                              <span>{qty} </span>
+                              {sendingQty < qty && (
+                                <span className={styles.toFollowHint}>
+                                  {"("} {qty - sendingQty} {t("to follow")}{" "}
+                                  {")"}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                      </div>
+
+                      {/* Weighing Lines for Loaf/kg items — cold storage's job only */}
+                      {isWeighedItem && canWeighHere && (
+                        <div className={styles.weighingSection}>
+                          {weighingLines.map((w) => (
+                            <div key={w.id} className={styles.weighingRow}>
                               <input
-                                type="number"
-                                className={styles.numberInput}
-                                value={sendingQty}
-                                min={0}
-                                max={qty}
-                                onChange={(e) => {
-                                  // Capped at the ordered qty — sending can
-                                  // never exceed what was actually ordered.
-                                  const val = Math.min(
-                                    qty,
-                                    Math.max(0, parseInt(e.target.value) || 0),
-                                  );
-                                  if (line.id)
-                                    setSendingQtyMap((prev) => ({
-                                      ...prev,
-                                      [line.id!]: val,
-                                    }));
-                                }}
-                                onBlur={() =>
-                                  line.id && handleSendingBlur(line.id)
+                                type="text"
+                                className={styles.weighingInput}
+                                placeholder="0.00"
+                                value={w.weight}
+                                onChange={(e) =>
+                                  handleUpdateWeighingWeight(
+                                    line.id,
+                                    w.id,
+                                    e.target.value,
+                                  )
                                 }
+                                onBlur={() => handleWeighingBlur(line.id, w.id)}
                               />
-                            ) : (
-                              // Only the role that owns Cold Storage picking
-                              // decides what's actually being sent — everyone
-                              // else (Finance, etc.) sees the saved figure but
-                              // can't edit it.
-                              <span className={styles.sendingValue}>
-                                {sendingQty}
-                              </span>
-                            )}
-                            {t("of")} {qty}
-                            {sendingQty < qty && (
-                              <span className={styles.toFollowHint}>
-                                {"("} {qty - sendingQty} {t("to follow")} {")"}
-                              </span>
-                            )}
-                          </div>
-                        )}
-                    </div>
+                              <span className={styles.unitText}>kg</span>
 
-                    {/* Weighing Lines for Loaf/kg items — cold storage's job only */}
-                    {isWeighedItem && canWeighHere && (
-                      <div className={styles.weighingSection}>
-                        {weighingLines.map((w) => (
-                          <div key={w.id} className={styles.weighingRow}>
-                            <input
-                              type="text"
-                              className={styles.weighingInput}
-                              placeholder="0.00"
-                              value={w.weight}
-                              onChange={(e) =>
-                                handleUpdateWeighingWeight(
-                                  line.id,
-                                  w.id,
-                                  e.target.value,
-                                )
-                              }
-                              onBlur={() => handleWeighingBlur(line.id, w.id)}
-                            />
-                            <span className={styles.unitText}>kg</span>
-
-                            <label
-                              style={{
-                                display: "inline-flex",
-                                cursor: "pointer",
-                              }}
-                            >
-                              <Button
-                                type="button"
+                              <CameraButton
                                 variant="secondary"
                                 size="sm"
-                                icon="camera"
                                 iconOnly
                                 title={t("Add weighing photo")}
-                                onClick={(e) => {
-                                  const inputElem = (
-                                    e.currentTarget as HTMLElement
-                                  ).nextElementSibling as HTMLInputElement;
-                                  inputElem?.click();
-                                }}
-                              />
-                              <input
-                                type="file"
-                                accept="image/*"
-                                style={{ display: "none" }}
                                 onChange={(e) =>
                                   handleUploadWeighingPhoto(line.id, w.id, e)
                                 }
                               />
-                            </label>
 
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              size="sm"
-                              icon="trash"
-                              iconOnly
-                              title={t("Remove weighing")}
-                              onClick={() =>
-                                handleRemoveWeighing(line.id, w.id)
-                              }
-                            />
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                size="sm"
+                                icon="trash"
+                                iconOnly
+                                title={t("Remove weighing")}
+                                onClick={() =>
+                                  handleRemoveWeighing(line.id, w.id)
+                                }
+                              />
 
-                            {renderThumbnails(
-                              w.photos.map((p) => ({
-                                url: p.url,
-                                title: `${t("Weighing photo —")} ${line.name}`,
-                                weighingLineId: line.id,
-                                weighingId: w.id,
-                                weighingPhotoId: p.id,
-                              })),
-                              { marginLeft: 28 },
-                            )}
-                          </div>
-                        ))}
-
-                        <Button
-                          type="button"
-                          variant="tertiary"
-                          size="sm"
-                          icon="add"
-                          style={{ alignSelf: "flex-start" }}
-                          onClick={() => handleAddWeighing(line.id)}
-                        >
-                          {t("Add weighing")}
-                        </Button>
-
-                        {/* Ported from the prototype's `shortFlag` toggle
-                            (Dev-OrderDetail.jsx:1419-1422) — kg/gram only,
-                            never Loaf (matches `held()`'s own scope). */}
-                        {isWeightOnlyUnit(line.unit) && (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="md"
-                            icon="cancelled"
-                            isActive={!!line.short}
-                            style={{
-                              alignSelf: "flex-start",
-                            }}
-                            onClick={() =>
-                              line.id &&
-                              handleToggleShort(line.id, !!line.short)
-                            }
-                          >
-                            {t("Short — ran out of stock")}
-                          </Button>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Delivered is a closed record — final weights + photos
-                        as plain text/images, no inputs/camera/add-weighing.
-                        A weight correction after delivery goes through
-                        Reopen, not an inline edit on the closed order. */}
-                    {isWeighedItem &&
-                      stage === "delivered" &&
-                      weighingLines.length > 0 && (
-                        <div className={styles.weighingSectionReadOnly}>
-                          {weighingLines.map((w) => (
-                            <div
-                              key={w.id}
-                              className={styles.weighingRowReadOnly}
-                            >
-                              <span className={styles.weighingValueReadOnly}>
-                                {w.weight || "0.00"} kg
-                              </span>
                               {renderThumbnails(
                                 w.photos.map((p) => ({
                                   url: p.url,
                                   title: `${t("Weighing photo —")} ${line.name}`,
+                                  weighingLineId: line.id,
+                                  weighingId: w.id,
+                                  weighingPhotoId: p.id,
                                 })),
-                                { marginLeft: "0.5rem" },
+                                { marginLeft: 28 },
                               )}
+                            </div>
+                          ))}
+
+                          <Button
+                            type="button"
+                            variant="tertiary"
+                            size="sm"
+                            icon="add"
+                            style={{ alignSelf: "flex-start" }}
+                            onClick={() => handleAddWeighing(line.id)}
+                          >
+                            {t("Add weighing")}
+                          </Button>
+
+                          {/* Ported from the prototype's `shortFlag` toggle
+                            (Dev-OrderDetail.jsx:1419-1422) — kg/gram only,
+                            never Loaf (matches `held()`'s own scope). */}
+                          {isWeightOnlyUnit(line.unit) && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="md"
+                              icon="cancelled"
+                              isActive={!!line.short}
+                              style={{
+                                alignSelf: "flex-start",
+                              }}
+                              onClick={() =>
+                                line.id &&
+                                handleToggleShort(line.id, !!line.short)
+                              }
+                            >
+                              {t("Short — ran out of stock")}
+                            </Button>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Delivered is a closed record — final weights + photos
+                        as plain text/images, no inputs/camera/add-weighing.
+                        A weight correction after delivery goes through
+                        Reopen, not an inline edit on the closed order. */}
+                      {isWeighedItem &&
+                        stage === "delivered" &&
+                        weighingLines.length > 0 && (
+                          <div className={styles.weighingSectionReadOnly}>
+                            {weighingLines.map((w) => (
+                              <div
+                                key={w.id}
+                                className={styles.weighingRowReadOnly}
+                              >
+                                <span className={styles.weighingValueReadOnly}>
+                                  {w.weight || "0.00"} kg
+                                </span>
+                                {renderThumbnails(
+                                  w.photos.map((p) => ({
+                                    url: p.url,
+                                    title: `${t("Weighing photo —")} ${line.name}`,
+                                  })),
+                                  { marginLeft: "0.5rem" },
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                      {/* Cutting instruction — shown for every line, weighed or not */}
+                      {(lineCutsByLine[line.id] ?? []).length > 0 && (
+                        <div className={styles.cuttingInstructions}>
+                          {(lineCutsByLine[line.id] ?? []).map((c) => (
+                            <div
+                              key={c.id}
+                              className={`${styles.pill} ${styles.pillAccent}`}
+                            >
+                              <Icon name="knife" size={14} />
+                              <span>{c.text}</span>
                             </div>
                           ))}
                         </div>
                       )}
 
-                    {/* Cutting instruction — shown for every line, weighed or not */}
-                    {(lineCutsByLine[line.id] ?? []).length > 0 && (
-                      <div className={styles.cuttingInstructions}>
-                        {(lineCutsByLine[line.id] ?? []).map((c) => (
-                          <div
-                            key={c.id}
-                            className={`${styles.pill} ${styles.pillAccent}`}
-                          >
-                            <Icon name="knife" size={14} />
-                            <span>{c.text}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {canWeighHere && (
-                      <div className={styles.linePhotos}>
-                        <label
-                          style={{
-                            display: "inline-flex",
-                            cursor: "pointer",
-                            marginLeft: 28,
-                          }}
-                        >
-                          <Button
-                            type="button"
+                      {canWeighHere && (
+                        <div className={styles.linePhotos}>
+                          <CameraButton
                             variant="tertiary"
                             size="md"
-                            icon="camera"
                             title={t("Upload item photo")}
-                            onClick={(e) => {
-                              const inputElem = (e.currentTarget as HTMLElement)
-                                .nextElementSibling as HTMLInputElement;
-                              inputElem?.click();
-                            }}
-                          >
-                            Add photo
-                          </Button>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            style={{ display: "none" }}
                             onChange={(e) => handleUploadItemPhoto(line.id, e)}
-                          />
-                        </label>
-                        {stage === "cold" &&
-                          requirePhoto &&
-                          itemPhotos.length === 0 && (
-                            <span
-                              className={styles.infoHint}
-                              style={{
-                                color: "var(--state-warning)",
-                                marginLeft: "0.5rem",
-                              }}
-                            >
-                              {t("Needs photo")}
-                            </span>
-                          )}
-                        {/* Delete (via the modal's trash button) only
+                          >
+                            {t("Add photo")}
+                          </CameraButton>
+                          {stage === "cold" &&
+                            requirePhoto &&
+                            itemPhotos.length === 0 && (
+                              <span
+                                className={styles.infoHint}
+                                style={{
+                                  color: "var(--state-warning)",
+                                  marginLeft: "0.5rem",
+                                }}
+                              >
+                                {t("Needs photo")}
+                              </span>
+                            )}
+                          {/* Delete (via the modal's trash button) only
                             available during the same window as the upload
                             button itself (`canWeighHere` — Cold Storage,
                             weighing role) — previously gated on `stage !==
@@ -6054,113 +6136,113 @@ export function OrderDetail() {
                             at every stage up to delivery (production,
                             packing, finalise, dispatch, outstanding), not
                             just at Cold Storage. Reported directly. */}
-                        {renderThumbnails(
-                          itemPhotos.map((img) =>
-                            canWeighHere
-                              ? {
-                                  url: img.url,
-                                  title: `${t("Attachment for")} ${line.name}`,
-                                  photoId: img.id,
-                                  lineId: line.id,
-                                }
-                              : {
-                                  url: img.url,
-                                  title: `${t("Attachment for")} ${line.name}`,
-                                },
-                          ),
-                          { marginLeft: 28 },
-                        )}
-                      </div>
-                    )}
+                          {renderThumbnails(
+                            itemPhotos.map((img) =>
+                              canWeighHere
+                                ? {
+                                    url: img.url,
+                                    title: `${t("Attachment for")} ${line.name}`,
+                                    photoId: img.id,
+                                    lineId: line.id,
+                                  }
+                                : {
+                                    url: img.url,
+                                    title: `${t("Attachment for")} ${line.name}`,
+                                  },
+                            ),
+                            { marginLeft: 28 },
+                          )}
+                        </div>
+                      )}
 
-                    {/* Item Summary line — only when there's something to show */}
-                    {showLineDetail && (
-                      <div className={styles.itemTotalRow}>
-                        {isWeighedItem ? (
-                          <span
-                            className={styles.totalWeight}
-                            style={
-                              belowWeighHint || aboveWeighHint
-                                ? { color: "var(--state-warning)" }
-                                : undefined
-                            }
-                          >
-                            {t("Total:")}
-                            {stage !== "intake" &&
-                              totalMeasuredWeight > 0 &&
-                              ` ${totalMeasuredWeight.toFixed(2)} kg`}
-                            {stage !== "intake" && belowWeighHint && (
-                              <span className={styles.weighHint}>
-                                {" "}
-                                · {t("below order")} {qty} kg?
-                              </span>
-                            )}
-                            {stage !== "intake" && aboveWeighHint && (
-                              <span className={styles.weighHint}>
-                                {" "}
-                                · {t("over order")} {qty} kg?
-                              </span>
-                            )}
-                          </span>
-                        ) : (
-                          <span className={styles.totalWeight}>
-                            {t("Total:")}
-                          </span>
-                        )}
-                        {/* Persistent, every role/stage — matches the
+                      {/* Item Summary line — only when there's something to show */}
+                      {showLineDetail && (
+                        <div className={styles.itemTotalRow}>
+                          {isWeighedItem ? (
+                            <span
+                              className={styles.totalWeight}
+                              style={
+                                belowWeighHint || aboveWeighHint
+                                  ? { color: "var(--state-warning)" }
+                                  : undefined
+                              }
+                            >
+                              {t("Total:")}
+                              {stage !== "intake" &&
+                                totalMeasuredWeight > 0 &&
+                                ` ${totalMeasuredWeight.toFixed(2)} kg`}
+                              {stage !== "intake" && belowWeighHint && (
+                                <span className={styles.weighHint}>
+                                  {" "}
+                                  · {t("below order")} {qty} kg?
+                                </span>
+                              )}
+                              {stage !== "intake" && aboveWeighHint && (
+                                <span className={styles.weighHint}>
+                                  {" "}
+                                  · {t("over order")} {qty} kg?
+                                </span>
+                              )}
+                            </span>
+                          ) : (
+                            <span className={styles.totalWeight}>
+                              {t("Total:")}
+                            </span>
+                          )}
+                          {/* Persistent, every role/stage — matches the
                             prototype's own always-shown `l.short` chip
                             (Dev-OrderDetail.jsx:1435), not just at Cold Storage. */}
-                        {isWeightOnlyUnit(line.unit) && line.short && (
-                          <span className={styles.toFollowHint}>
-                            {t("Short — ran out of stock")}
-                          </span>
-                        )}
-                        {canSeePrices && hasPrice && (
-                          <div className={styles.priceCalc}>
-                            <span>{currency.format(price)}</span>
-                            <span>x {qty}</span>
-                            <span className={styles.lineTotalPrice}>
-                              {currency.format(price * qty)}
+                          {isWeightOnlyUnit(line.unit) && line.short && (
+                            <span className={styles.toFollowHint}>
+                              {t("Short — ran out of stock")}
                             </span>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-
-            {order.notes && (
-              <div
-                className={styles.noteItem}
-                style={{ gridColumn: "1 / -1", marginTop: "var(--space-md)" }}
-              >
-                <span className={styles.detailLabel}>{t("Order Note")}</span>
-                <span>{order.notes}</span>
+                          )}
+                          {canSeePrices && hasPrice && (
+                            <div className={styles.priceCalc}>
+                              <span>{currency.format(price)}</span>
+                              <span>x {qty}</span>
+                              <span className={styles.lineTotalPrice}>
+                                {currency.format(price * qty)}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
-            )}
 
-            {canSeePrices &&
-              (orderIsPriced ? (
-                <div className={styles.totalRow}>
-                  <span className={styles.muted}>
-                    {t("Order value · from PO")}
-                  </span>
-                  <span className={styles.totalValue}>
-                    {currency.format(orderTotal)}
-                  </span>
+              {order.notes && (
+                <div
+                  className={styles.noteItem}
+                  style={{ gridColumn: "1 / -1", marginTop: "var(--space-md)" }}
+                >
+                  <span className={styles.detailLabel}>{t("Order Note")}</span>
+                  <span>{order.notes}</span>
                 </div>
-              ) : (
-                <div className={styles.totalRow}>
-                  <span className={styles.muted}>
-                    {t("No price on the order — invoiced in Accurate.")}
-                  </span>
-                </div>
-              ))}
-          </Card>
+              )}
 
-          {/* Delivery Proof card — moved out of the "Delivered & Closed"
+              {canSeePrices &&
+                (orderIsPriced ? (
+                  <div className={styles.totalRow}>
+                    <span className={styles.muted}>
+                      {t("Order value · from PO")}
+                    </span>
+                    <span className={styles.totalValue}>
+                      {currency.format(orderTotal)}
+                    </span>
+                  </div>
+                ) : (
+                  <div className={styles.totalRow}>
+                    <span className={styles.muted}>
+                      {t("No price on the order — invoiced in Accurate.")}
+                    </span>
+                  </div>
+                ))}
+            </Card>
+
+            {/* Delivery Proof card — moved out of the "Delivered & Closed"
               success banner (which now only holds the headerRow/stepLines
               title) so this data has its own default-styled Card, placed
               right after Items. No left/right column split for the
@@ -6168,135 +6250,94 @@ export function OrderDetail() {
               row (icon + main/secondary text + trailing button), same
               shape as the Follow-ups pending card's rows below, chosen
               because both show the same kind of data. */}
-          {stage === "delivered" &&
-            (() => {
-              const deliveryDocPhotos: ImageModalEntry[] = activeProof
-                ? (
-                    [
-                      { key: "cond", label: t("Condition photo") },
-                      {
-                        key: "recv",
-                        label:
-                          handoffMode === "pickup"
-                            ? t("Photo of who collected")
-                            : t("Receiver photo"),
-                      },
-                      { key: "signed", label: t("Signed doc") },
-                    ] as const
-                  ).flatMap(({ key, label }) =>
-                    attachments
-                      .filter(
-                        (a) =>
-                          a.proof_id === activeProof.id && a.doc_type === key,
-                      )
-                      .map((a) => ({
-                        url: getAssetUrl(a.document_file ?? ""),
-                        title: label,
-                      })),
-                  )
-                : [];
+            {stage === "delivered" &&
+              (() => {
+                const deliveryDocPhotos: ImageModalEntry[] = activeProof
+                  ? (
+                      [
+                        { key: "cond", label: t("Condition photo") },
+                        {
+                          key: "recv",
+                          label:
+                            handoffMode === "pickup"
+                              ? t("Photo of who collected")
+                              : t("Receiver photo"),
+                        },
+                        { key: "signed", label: t("Signed doc") },
+                      ] as const
+                    ).flatMap(({ key, label }) =>
+                      attachments
+                        .filter(
+                          (a) =>
+                            a.proof_id === activeProof.id && a.doc_type === key,
+                        )
+                        .map((a) => ({
+                          url: getAssetUrl(a.document_file ?? ""),
+                          title: label,
+                        })),
+                    )
+                  : [];
 
-              const hasLocationData = !!(
-                order.pickup_geo ||
-                (order.third_party && order.delivered_at) ||
-                (order.pickup && order.delivered_at) ||
-                (order.taken_by && order.deliver_geo)
-              );
+                const hasLocationData = !!(
+                  order.pickup_geo ||
+                  (order.third_party && order.delivered_at) ||
+                  (order.pickup && order.delivered_at) ||
+                  (order.taken_by && order.deliver_geo)
+                );
 
-              if (deliveryDocPhotos.length === 0 && !hasLocationData) {
-                return null;
-              }
+                if (deliveryDocPhotos.length === 0 && !hasLocationData) {
+                  return null;
+                }
 
-              return (
-                <Card>
-                  <div className={styles.headerRow}>
-                    <h3 className={styles.sectionTitle}>
-                      {t("Delivery proof")}
-                    </h3>
-                  </div>
-
-                  {deliveryDocPhotos.length > 0 && (
-                    <div className={styles.followUpRow}>
-                      <Icon
-                        name="image"
-                        size={24}
-                        className={styles.successIcon}
-                      />
-                      <div className={styles.followUpMain}>
-                        <span className={styles.fieldLabel}>
-                          {t("Delivery documentation")}
-                        </span>
-                      </div>
-                      {renderThumbnails(deliveryDocPhotos)}
+                return (
+                  <Card>
+                    <div className={styles.headerRow}>
+                      <h3 className={styles.sectionTitle}>
+                        {t("Delivery proof")}
+                      </h3>
                     </div>
-                  )}
 
-                  {hasLocationData &&
-                    (() => {
-                      // Hoisted so it can render either as its own row
-                      // (own-courier with no captured pickup stamp) or
-                      // alongside the pickup row (own-courier with both
-                      // legs captured) without duplicating the JSX.
-                      const deliveredRow = order.taken_by &&
-                        order.deliver_geo && (
-                          <div className={styles.followUpRow}>
-                            <Icon
-                              name="delivered"
-                              size={24}
-                              className={styles.successIcon}
-                            />
-                            <div className={styles.followUpMain}>
-                              <span className={styles.fieldLabel}>
-                                {dropDistanceM !== null
-                                  ? `${t("Dropped at delivery address")} · ~${dropDistanceM}m`
-                                  : t("Delivery location captured")}{" "}
-                                at {formatClock(order.deliver_geo.at)}
-                              </span>
-                              {activeProof?.name && (
-                                <span className={styles.secondary}>
-                                  {t("Received by")}{" "}
-                                  <strong>{activeProof.name}</strong>
-                                </span>
-                              )}
-                            </div>
-                            <Button
-                              type="button"
-                              variant="tertiary"
-                              className={styles.inlineButton}
-                              onClick={() =>
-                                window.open(
-                                  `https://www.google.com/maps/search/?api=1&query=${order.deliver_geo!.lat},${order.deliver_geo!.lng}`,
-                                  "_blank",
-                                  "noopener",
-                                )
-                              }
-                            >
-                              {t("Map")}
-                              <Icon name="arrowUpRight" size={16} />
-                            </Button>
-                          </div>
-                        );
+                    {deliveryDocPhotos.length > 0 && (
+                      <div className={styles.followUpRow}>
+                        <Icon
+                          name="image"
+                          size={24}
+                          className={styles.successIcon}
+                        />
+                        <div className={styles.followUpMain}>
+                          <span className={styles.fieldLabel}>
+                            {t("Delivery documentation")}
+                          </span>
+                        </div>
+                        {renderThumbnails(deliveryDocPhotos)}
+                      </div>
+                    )}
 
-                      return (
-                        <>
-                          {order.pickup_geo ? (
+                    {hasLocationData &&
+                      (() => {
+                        // Hoisted so it can render either as its own row
+                        // (own-courier with no captured pickup stamp) or
+                        // alongside the pickup row (own-courier with both
+                        // legs captured) without duplicating the JSX.
+                        const deliveredRow = order.taken_by &&
+                          order.deliver_geo && (
                             <div className={styles.followUpRow}>
                               <Icon
-                                name="pickup"
+                                name="delivered"
                                 size={24}
                                 className={styles.successIcon}
                               />
                               <div className={styles.followUpMain}>
                                 <span className={styles.fieldLabel}>
-                                  {t("Picked up at")}{" "}
-                                  {formatClock(order.pickup_geo.at)}
+                                  {dropDistanceM !== null
+                                    ? `${t("Dropped at delivery address")} · ~${dropDistanceM}m`
+                                    : t("Delivery location captured")}{" "}
+                                  at {formatClock(order.deliver_geo.at)}
                                 </span>
-                                {order.taken_by && (
+                                {activeProof?.name && (
                                   <span className={styles.secondary}>
-                                    {t("by")}{" "}
-                                    <strong>
-                                      {displayName(order.taken_by)}
-                                    </strong>
+                                    {t("Received by")}{" "}
+                                    <strong>{activeProof.name}</strong>
                                   </span>
                                 )}
                               </div>
@@ -6306,7 +6347,7 @@ export function OrderDetail() {
                                 className={styles.inlineButton}
                                 onClick={() =>
                                   window.open(
-                                    `https://www.google.com/maps/search/?api=1&query=${order.pickup_geo!.lat},${order.pickup_geo!.lng}`,
+                                    `https://www.google.com/maps/search/?api=1&query=${order.deliver_geo!.lat},${order.deliver_geo!.lng}`,
                                     "_blank",
                                     "noopener",
                                   )
@@ -6316,293 +6357,419 @@ export function OrderDetail() {
                                 <Icon name="arrowUpRight" size={16} />
                               </Button>
                             </div>
-                          ) : order.third_party ? (
-                            // 3rd-party has no GPS at all (the service — not
-                            // this app — drives the last leg). Service name
-                            // + handed-at time, plus the same tracking
-                            // element (Paxel deep link, or a copyable ref)
-                            // the hand-off/proof cards use, in place of a
-                            // Map button there's no GPS to back.
-                            order.delivered_at && (
+                          );
+
+                        return (
+                          <>
+                            {order.pickup_geo ? (
                               <div className={styles.followUpRow}>
                                 <Icon
-                                  name="scooter"
+                                  name="pickup"
                                   size={24}
                                   className={styles.successIcon}
                                 />
                                 <div className={styles.followUpMain}>
                                   <span className={styles.fieldLabel}>
-                                    {t("Handed to")}{" "}
-                                    {parsedThirdPartyService ||
-                                      order.courier_service ||
-                                      t("Online courier")}{" "}
-                                    at {formatClock(order.delivered_at)}
+                                    {t("Picked up at")}{" "}
+                                    {formatClock(order.pickup_geo.at)}
+                                  </span>
+                                  {order.taken_by && (
+                                    <span className={styles.secondary}>
+                                      {t("by")}{" "}
+                                      <strong>
+                                        {displayName(order.taken_by)}
+                                      </strong>
+                                    </span>
+                                  )}
+                                </div>
+                                <Button
+                                  type="button"
+                                  variant="tertiary"
+                                  className={styles.inlineButton}
+                                  onClick={() =>
+                                    window.open(
+                                      `https://www.google.com/maps/search/?api=1&query=${order.pickup_geo!.lat},${order.pickup_geo!.lng}`,
+                                      "_blank",
+                                      "noopener",
+                                    )
+                                  }
+                                >
+                                  {t("Map")}
+                                  <Icon name="arrowUpRight" size={16} />
+                                </Button>
+                              </div>
+                            ) : order.third_party ? (
+                              // 3rd-party has no GPS at all (the service — not
+                              // this app — drives the last leg). Service name
+                              // + handed-at time, plus the same tracking
+                              // element (Paxel deep link, or a copyable ref)
+                              // the hand-off/proof cards use, in place of a
+                              // Map button there's no GPS to back.
+                              order.delivered_at && (
+                                <div className={styles.followUpRow}>
+                                  <Icon
+                                    name="scooter"
+                                    size={24}
+                                    className={styles.successIcon}
+                                  />
+                                  <div className={styles.followUpMain}>
+                                    <span className={styles.fieldLabel}>
+                                      {t("Handed to")}{" "}
+                                      {parsedThirdPartyService ||
+                                        order.courier_service ||
+                                        t("Online courier")}{" "}
+                                      at {formatClock(order.delivered_at)}
+                                    </span>
+                                    {activeProof?.name && (
+                                      <span className={styles.secondary}>
+                                        {t("Driver's name")}{" "}
+                                        <strong>{activeProof.name}</strong>
+                                      </span>
+                                    )}
+                                  </div>
+                                  {parsedThirdPartyRef &&
+                                    (parsedThirdPartyService.toLowerCase() ===
+                                    "paxel" ? (
+                                      <Button
+                                        type="button"
+                                        variant="tertiary"
+                                        className={styles.inlineButton}
+                                        onClick={() =>
+                                          window.open(
+                                            `https://paxel.co.id/tracking/${encodeURIComponent(parsedThirdPartyRef)}`,
+                                            "_blank",
+                                            "noopener",
+                                          )
+                                        }
+                                      >
+                                        {t("Track")}
+                                        <Icon name="arrowUpRight" size={16} />
+                                      </Button>
+                                    ) : (
+                                      <Button
+                                        type="button"
+                                        variant="tertiary"
+                                        className={styles.inlineButton}
+                                        onClick={handleCopyTrackingRef}
+                                      >
+                                        {copiedTrackingRef
+                                          ? t("Copied")
+                                          : `${t("Ref:")} ${parsedThirdPartyRef}`}
+                                        <Icon
+                                          name={
+                                            copiedTrackingRef ? "check" : "copy"
+                                          }
+                                          size={16}
+                                        />
+                                      </Button>
+                                    ))}
+                                </div>
+                              )
+                            ) : order.pickup && order.delivered_at ? (
+                              // Customer pickup — collected in person at the
+                              // warehouse, no GPS either. `delivered_at`
+                              // doubles as the "picked up at" moment;
+                              // `activeProof.name` is the "Photo of who
+                              // collected" name captured at proof.
+                              <div className={styles.followUpRow}>
+                                <Icon
+                                  name="pickup"
+                                  size={24}
+                                  className={styles.followUpIcon}
+                                />
+                                <div className={styles.followUpMain}>
+                                  <span className={styles.fieldLabel}>
+                                    {t("Picked up at")}{" "}
+                                    {formatClock(order.delivered_at)}
                                   </span>
                                   {activeProof?.name && (
                                     <span className={styles.secondary}>
-                                      {t("Driver's name")}{" "}
+                                      {t("Collected by")}{" "}
                                       <strong>{activeProof.name}</strong>
                                     </span>
                                   )}
                                 </div>
-                                {parsedThirdPartyRef &&
-                                  (parsedThirdPartyService.toLowerCase() ===
-                                  "paxel" ? (
-                                    <Button
-                                      type="button"
-                                      variant="tertiary"
-                                      className={styles.inlineButton}
-                                      onClick={() =>
-                                        window.open(
-                                          `https://paxel.co.id/tracking/${encodeURIComponent(parsedThirdPartyRef)}`,
-                                          "_blank",
-                                          "noopener",
-                                        )
-                                      }
-                                    >
-                                      {t("Track")}
-                                      <Icon name="arrowUpRight" size={16} />
-                                    </Button>
-                                  ) : (
-                                    <Button
-                                      type="button"
-                                      variant="tertiary"
-                                      className={styles.inlineButton}
-                                      onClick={handleCopyTrackingRef}
-                                    >
-                                      {copiedTrackingRef
-                                        ? t("Copied")
-                                        : `${t("Ref:")} ${parsedThirdPartyRef}`}
-                                      <Icon
-                                        name={
-                                          copiedTrackingRef ? "check" : "copy"
-                                        }
-                                        size={16}
-                                      />
-                                    </Button>
-                                  ))}
                               </div>
-                            )
-                          ) : order.pickup && order.delivered_at ? (
-                            // Customer pickup — collected in person at the
-                            // warehouse, no GPS either. `delivered_at`
-                            // doubles as the "picked up at" moment;
-                            // `activeProof.name` is the "Photo of who
-                            // collected" name captured at proof.
-                            <div className={styles.followUpRow}>
-                              <Icon
-                                name="pickup"
-                                size={24}
-                                className={styles.followUpIcon}
-                              />
-                              <div className={styles.followUpMain}>
-                                <span className={styles.fieldLabel}>
-                                  {t("Picked up at")}{" "}
-                                  {formatClock(order.delivered_at)}
-                                </span>
-                                {activeProof?.name && (
-                                  <span className={styles.secondary}>
-                                    {t("Collected by")}{" "}
-                                    <strong>{activeProof.name}</strong>
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          ) : (
-                            // Own-courier with no captured pickup stamp
-                            // (best-effort GPS capture can simply fail) —
-                            // falls back to showing its delivered info
-                            // alone, same as the other single-event modes
-                            // above.
-                            deliveredRow
-                          )}
+                            ) : (
+                              // Own-courier with no captured pickup stamp
+                              // (best-effort GPS capture can simply fail) —
+                              // falls back to showing its delivered info
+                              // alone, same as the other single-event modes
+                              // above.
+                              deliveredRow
+                            )}
 
-                          {/* Only rendered again here when there's a real
+                            {/* Only rendered again here when there's a real
                             `pickup_geo` row above to pair it with —
                             otherwise `deliveredRow` already rendered in
                             the fallback branch above. */}
-                          {order.pickup_geo && deliveredRow}
-                        </>
-                      );
-                    })()}
-                </Card>
-              );
-            })()}
+                            {order.pickup_geo && deliveredRow}
+                          </>
+                        );
+                      })()}
+                  </Card>
+                );
+              })()}
 
-          {/* Part-delivered decision card — separate from the "Outstanding"
+            {/* Part-delivered decision card — separate from the "Outstanding"
               status card up in the stepper section (which stays a plain
               status banner for every outstanding order); this one renders
               only once there are real owed items, right below the items
               list so the owed-lines box sits next to what it's describing. */}
-          {isOutstanding && owedLines.length > 0 && (
-            <Card className={styles.warningCard}>
-              <div className={styles.headerRow}>
-                <h3 className={styles.sectionTitle}>
-                  {t("Part delivered — the rest is still owed")}
-                </h3>
-              </div>
-              <div className={styles.cardContent}>
-                {canDecideOutstanding ? (
-                  showBackorderView ? (
-                    <>
-                      <div className={styles.cardListColumn}>
-                        <div className={styles.rowStretch}>
-                          <div className={styles.row}>
-                            <Icon
-                              name="bell"
-                              size={16}
-                              style={{ color: "var(--state-warning)" }}
-                            />
-                            <span
-                              className={styles.fieldLabel}
-                              style={{ color: "var(--state-warning)" }}
-                            >
-                              {t("Send later — remind me")}
-                            </span>
-                          </div>
-                          <Button
-                            type="button"
-                            variant="tertiary"
-                            className={styles.inlineButton}
-                            icon="chevronLeft"
-                            onClick={() => setShowBackorderView(false)}
-                          >
-                            {t("Back")}
-                          </Button>
-                        </div>
-
-                        <p className={styles.secondary}>
-                          {t(
-                            "Close today's delivery; keep the rest as a backorder that reappears on a date.",
-                          )}
-                        </p>
-                      </div>
-                      <span className={styles.row}>
-                        <p className={styles.fieldLabel}>
-                          {t("Reminder date")}
-                        </p>
-                        <input
-                          type="date"
-                          className={styles.editInput}
-                          style={{ width: "auto", maxWidth: 168 }}
-                          value={backorderRemindOn}
-                          onChange={(e) => setBackorderRemindOn(e.target.value)}
-                        />
-                      </span>
-                      <div className={styles.cardActions}>
-                        <Button
-                          type="button"
-                          variant="primary"
-                          buttonStyle="fullWidth"
-                          icon="packageAdd"
-                          tone="warning"
-                          disabled={creatingBackorder}
-                          onClick={handleCreateBackorder}
-                        >
-                          {creatingBackorder
-                            ? t("Saving…")
-                            : `${t("Create backorder")} #${order.no}-B →`}
-                        </Button>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <div className={styles.cardListColumn}>
-                        <p className={styles.secondary}>
-                          {partDeliveredSubtitle}
-                        </p>
-                        <div className={styles.owedLinesBox}>
-                          {owedLines.map((l) => (
-                            <div key={l.id} className={styles.owedLineItem}>
-                              <p className={styles.fieldLabel}>{l.name}</p>
-                              <span className={styles.owedPill}>
-                                <Icon name="packageProcess" size={20} />
-                                {isWeightOnlyUnit(l.unit) ? (
-                                  <span>{t("Short — ran out of stock")}</span>
-                                ) : (
-                                  <>
-                                    <span className={styles.detailValue}>
-                                      {lineLeft(l)} {l.unit}
-                                    </span>
-                                    <span className={styles.owedPillLabel}>
-                                      {t("still owed")}
-                                    </span>
-                                  </>
-                                )}
+            {isOutstanding && owedLines.length > 0 && (
+              <Card className={styles.warningCard}>
+                <div className={styles.headerRow}>
+                  <h3 className={styles.sectionTitle}>
+                    {t("Part delivered — the rest is still owed")}
+                  </h3>
+                </div>
+                <div className={styles.cardContent}>
+                  {canDecideOutstanding ? (
+                    showBackorderView ? (
+                      <>
+                        <div className={styles.cardListColumn}>
+                          <div className={styles.rowStretch}>
+                            <div className={styles.row}>
+                              <Icon
+                                name="bell"
+                                size={16}
+                                style={{ color: "var(--state-warning)" }}
+                              />
+                              <span
+                                className={styles.fieldLabel}
+                                style={{ color: "var(--state-warning)" }}
+                              >
+                                {t("Send later — remind me")}
                               </span>
                             </div>
-                          ))}
+                            <Button
+                              type="button"
+                              variant="tertiary"
+                              className={styles.inlineButton}
+                              icon="chevronLeft"
+                              onClick={() => setShowBackorderView(false)}
+                            >
+                              {t("Back")}
+                            </Button>
+                          </div>
+
+                          <p className={styles.secondary}>
+                            {t(
+                              "Close today's delivery; keep the rest as a backorder that reappears on a date.",
+                            )}
+                          </p>
                         </div>
-                      </div>
-                      <div className={styles.cardActions}>
-                        <div className={styles.cardListColumn}>
+                        <span className={styles.row}>
+                          <p className={styles.fieldLabel}>
+                            {t("Reminder date")}
+                          </p>
+                          <input
+                            type="date"
+                            className={styles.editInput}
+                            style={{ width: "auto", maxWidth: 168 }}
+                            value={backorderRemindOn}
+                            onChange={(e) =>
+                              setBackorderRemindOn(e.target.value)
+                            }
+                          />
+                        </span>
+                        <div className={styles.cardActions}>
                           <Button
                             type="button"
                             variant="primary"
                             buttonStyle="fullWidth"
-                            icon="packageMoving"
+                            icon="packageAdd"
                             tone="warning"
-                            disabled={sendingRest}
-                            onClick={handleSendRest}
+                            disabled={creatingBackorder}
+                            onClick={handleCreateBackorder}
                           >
-                            {sendingRest
+                            {creatingBackorder
                               ? t("Saving…")
-                              : t("Send the rest now")}
+                              : `${t("Create backorder")} #${order.no}-B →`}
                           </Button>
-                          <p
-                            className={styles.infoHint}
-                            style={{ color: "var(--text-muted)" }}
-                          >
-                            {t(
-                              "Stock is ready — run a second delivery for what is left.",
-                            )}
-                          </p>
                         </div>
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          buttonStyle="fullWidth"
-                          icon="bell"
-                          tone="warning"
-                          onClick={() => setShowBackorderView(true)}
-                        >
-                          {t("Send later — remind me")}
-                        </Button>
+                      </>
+                    ) : (
+                      <>
                         <div className={styles.cardListColumn}>
+                          <p className={styles.secondary}>
+                            {partDeliveredSubtitle}
+                          </p>
+                          <div className={styles.owedLinesBox}>
+                            {owedLines.map((l) => (
+                              <div key={l.id} className={styles.owedLineItem}>
+                                <p className={styles.fieldLabel}>{l.name}</p>
+                                <span className={styles.owedPill}>
+                                  <Icon name="packageProcess" size={20} />
+                                  {isWeightOnlyUnit(l.unit) ? (
+                                    <span>{t("Short — ran out of stock")}</span>
+                                  ) : (
+                                    <>
+                                      <span className={styles.detailValue}>
+                                        {lineLeft(l)} {l.unit}
+                                      </span>
+                                      <span className={styles.owedPillLabel}>
+                                        {t("still owed")}
+                                      </span>
+                                    </>
+                                  )}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                        <div className={styles.cardActions}>
+                          <div className={styles.cardListColumn}>
+                            <Button
+                              type="button"
+                              variant="primary"
+                              buttonStyle="fullWidth"
+                              icon="packageMoving"
+                              tone="warning"
+                              disabled={sendingRest}
+                              onClick={handleSendRest}
+                            >
+                              {sendingRest
+                                ? t("Saving…")
+                                : t("Send the rest now")}
+                            </Button>
+                            <p
+                              className={styles.infoHint}
+                              style={{ color: "var(--text-muted)" }}
+                            >
+                              {t(
+                                "Stock is ready — run a second delivery for what is left.",
+                              )}
+                            </p>
+                          </div>
                           <Button
                             type="button"
                             variant="secondary"
                             buttonStyle="fullWidth"
-                            icon="packageDelivered"
-                            tone="error"
-                            disabled={closingShort}
-                            onClick={handleCloseShort}
+                            icon="bell"
+                            tone="warning"
+                            onClick={() => setShowBackorderView(true)}
                           >
-                            {closingShort
-                              ? t("Saving…")
-                              : t("Finish — don't send the rest")}
+                            {t("Send later — remind me")}
                           </Button>
-                          <p
-                            className={styles.infoHint}
-                            style={{ color: "var(--text-muted)" }}
-                          >
-                            {t(
-                              "Mark the order done as delivered. The remainder is dropped (no longer needed / written off) — nothing follows later.",
-                            )}
-                          </p>
+                          <div className={styles.cardListColumn}>
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              buttonStyle="fullWidth"
+                              icon="packageDelivered"
+                              tone="error"
+                              disabled={closingShort}
+                              onClick={handleCloseShort}
+                            >
+                              {closingShort
+                                ? t("Saving…")
+                                : t("Finish — don't send the rest")}
+                            </Button>
+                            <p
+                              className={styles.infoHint}
+                              style={{ color: "var(--text-muted)" }}
+                            >
+                              {t(
+                                "Mark the order done as delivered. The remainder is dropped (no longer needed / written off) — nothing follows later.",
+                              )}
+                            </p>
+                          </div>
                         </div>
+                      </>
+                    )
+                  ) : (
+                    <div className={styles.cardListColumn}>
+                      <p className={styles.secondary}>
+                        {partDeliveredSubtitle}
+                      </p>
+                      <div className={styles.owedLinesBox}>
+                        {owedLines.map((l) => (
+                          <div key={l.id} className={styles.owedLineItem}>
+                            <p className={styles.fieldLabel}>{l.name}</p>
+                            <span className={styles.owedPill}>
+                              <Icon name="box" size={16} />
+                              {isWeightOnlyUnit(l.unit) ? (
+                                <span>{t("Short — ran out of stock")}</span>
+                              ) : (
+                                <>
+                                  <strong>
+                                    {lineLeft(l)} {l.unit}
+                                  </strong>
+                                  <span className={styles.muted}>
+                                    {t("still owed")}
+                                  </span>
+                                </>
+                              )}
+                            </span>
+                          </div>
+                        ))}
                       </div>
-                    </>
-                  )
-                ) : (
+                    </div>
+                  )}
+                </div>
+              </Card>
+            )}
+
+            {/* "Awaiting stock — backorder" card — the awaiting-stage
+              counterpart of the Part-delivered card, reusing the same
+              owedLinesBox/owedLineItem shape for the still-owed line(s) (a
+              backorder order's own lines ARE what's owed, no partial
+              filtering needed). Ported from the prototype's own
+              `case 'awaiting'` (Dev-OrderDetail.jsx:1053-1065). */}
+            {isAwaiting && (
+              <Card>
+                <div className={styles.headerRow}>
+                  <h3 className={styles.sectionTitle}>
+                    {t("Awaiting stock — backorder")}
+                  </h3>
+                </div>
+                <div className={styles.cardContent}>
                   <div className={styles.cardListColumn}>
-                    <p className={styles.secondary}>{partDeliveredSubtitle}</p>
+                    <div className={styles.rowStretch}>
+                      {order.backorder_of && (
+                        <span>
+                          {t("Backorder of")}{" "}
+                          <Button
+                            type="button"
+                            variant="tertiary"
+                            className={styles.inlineButton}
+                            onClick={() =>
+                              navigate(`/orders/${order.backorder_of}`, {
+                                state: { from: location.pathname },
+                              })
+                            }
+                          >
+                            {t("Order")} {backorderParentNo ?? "…"}
+                          </Button>
+                        </span>
+                      )}
+                      {order.remind_on &&
+                        (() => {
+                          const due = new Date(order.remind_on!) <= new Date();
+                          return (
+                            <span
+                              className={styles.row}
+                              style={{
+                                color: due
+                                  ? "var(--state-warning)"
+                                  : "var(--text-muted)",
+                              }}
+                            >
+                              <Icon name="bell" size={14} />
+                              {t("Reminder date")}:{" "}
+                              {formatDateShort(order.remind_on)}
+                            </span>
+                          );
+                        })()}
+                    </div>
+
                     <div className={styles.owedLinesBox}>
                       {owedLines.map((l) => (
                         <div key={l.id} className={styles.owedLineItem}>
                           <p className={styles.fieldLabel}>{l.name}</p>
                           <span className={styles.owedPill}>
-                            <Icon name="box" size={16} />
+                            <Icon name="packageProcess" size={16} />
                             {isWeightOnlyUnit(l.unit) ? (
                               <span>{t("Short — ran out of stock")}</span>
                             ) : (
@@ -6619,159 +6786,83 @@ export function OrderDetail() {
                         </div>
                       ))}
                     </div>
+                    <p className={styles.infoHint}>
+                      {t("Waiting for stock to come in.")}
+                    </p>
                   </div>
-                )}
-              </div>
-            </Card>
-          )}
+                  {canDecideOutstanding && (
+                    <div className={styles.cardActions}>
+                      <Button
+                        type="button"
+                        variant="primary"
+                        buttonStyle="fullWidth"
+                        icon="arrowRight"
+                        disabled={activatingBackorder}
+                        onClick={handleActivateBackorder}
+                      >
+                        {activatingBackorder
+                          ? t("Saving…")
+                          : t("Activate — stock arrived")}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        buttonStyle="fullWidth"
+                        icon="close"
+                        disabled={closingAwaiting}
+                        onClick={handleCloseAwaiting}
+                      >
+                        {closingAwaiting
+                          ? t("Saving…")
+                          : t("Close — stock did not arrive")}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </Card>
+            )}
 
-          {/* "Awaiting stock — backorder" card — the awaiting-stage
-              counterpart of the Part-delivered card, reusing the same
-              owedLinesBox/owedLineItem shape for the still-owed line(s) (a
-              backorder order's own lines ARE what's owed, no partial
-              filtering needed). Ported from the prototype's own
-              `case 'awaiting'` (Dev-OrderDetail.jsx:1053-1065). */}
-          {isAwaiting && (
-            <Card>
-              <div className={styles.headerRow}>
-                <h3 className={styles.sectionTitle}>
-                  {t("Awaiting stock — backorder")}
-                </h3>
-              </div>
-              <div className={styles.cardContent}>
-                <div className={styles.cardListColumn}>
-                  <div className={styles.rowStretch}>
-                    {order.backorder_of && (
-                      <span>
-                        {t("Backorder of")}{" "}
-                        <Button
-                          type="button"
-                          variant="tertiary"
-                          className={styles.inlineButton}
-                          onClick={() =>
-                            navigate(`/orders/${order.backorder_of}`, {
-                              state: { from: location.pathname },
-                            })
-                          }
-                        >
-                          {t("Order")} {backorderParentNo ?? "…"}
-                        </Button>
-                      </span>
-                    )}
-                    {order.remind_on &&
-                      (() => {
-                        const due = new Date(order.remind_on!) <= new Date();
-                        return (
-                          <span
-                            className={styles.row}
-                            style={{
-                              color: due
-                                ? "var(--state-warning)"
-                                : "var(--text-muted)",
-                            }}
-                          >
-                            <Icon name="bell" size={14} />
-                            {t("Reminder date")}:{" "}
-                            {formatDateShort(order.remind_on)}
-                          </span>
-                        );
-                      })()}
+            {/* "Isn't weighed yet" safety net — a kg/gram/loaf line added (or
+              unit-changed) after Cold Storage, still in the warehouse.
+              Ported from the prototype's own banner (`Dev-OrderDetail.jsx:1314-1321`). */}
+            {needsWeighing && (
+              <Card className={styles.warningCard}>
+                <div className={styles.headerRow}>
+                  <div
+                    className={styles.sectionTitle}
+                    style={{ color: "var(--state-warning)" }}
+                  >
+                    {t("Reweigh")}
                   </div>
+                </div>
 
-                  <div className={styles.owedLinesBox}>
-                    {owedLines.map((l) => (
-                      <div key={l.id} className={styles.owedLineItem}>
-                        <p className={styles.fieldLabel}>{l.name}</p>
-                        <span className={styles.owedPill}>
-                          <Icon name="packageProcess" size={16} />
-                          {isWeightOnlyUnit(l.unit) ? (
-                            <span>{t("Short — ran out of stock")}</span>
-                          ) : (
-                            <>
-                              <strong>
-                                {lineLeft(l)} {l.unit}
-                              </strong>
-                              <span className={styles.muted}>
-                                {t("still owed")}
-                              </span>
-                            </>
-                          )}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                  <p className={styles.infoHint}>
-                    {t("Waiting for stock to come in.")}
+                <div className={styles.cardContent}>
+                  <p>
+                    <strong>
+                      {unweighedAdded.map((l) => l.name).join(", ")}
+                    </strong>{" "}
+                    {t("haven't weighed yet (added after Cold Storage).")}
                   </p>
                 </div>
-                {canDecideOutstanding && (
+                {canWeighFix && (
                   <div className={styles.cardActions}>
                     <Button
                       type="button"
-                      variant="primary"
-                      buttonStyle="fullWidth"
-                      icon="arrowRight"
-                      disabled={activatingBackorder}
-                      onClick={handleActivateBackorder}
-                    >
-                      {activatingBackorder
-                        ? t("Saving…")
-                        : t("Activate — stock arrived")}
-                    </Button>
-                    <Button
-                      type="button"
                       variant="secondary"
+                      icon="weight"
                       buttonStyle="fullWidth"
-                      icon="close"
-                      disabled={closingAwaiting}
-                      onClick={handleCloseAwaiting}
+                      onClick={handleSendToColdToWeigh}
+                      disabled={advancing}
+                      tone="warning"
                     >
-                      {closingAwaiting
-                        ? t("Saving…")
-                        : t("Close — stock did not arrive")}
+                      {t("Send to Cold Storage to weigh")}
                     </Button>
                   </div>
                 )}
-              </div>
-            </Card>
-          )}
+              </Card>
+            )}
 
-          {/* "Isn't weighed yet" safety net — a kg/gram/loaf line added (or
-              unit-changed) after Cold Storage, still in the warehouse.
-              Ported from the prototype's own banner (`Dev-OrderDetail.jsx:1314-1321`). */}
-          {needsWeighing && (
-            <Card className={styles.warningCard}>
-              <div className={styles.row}>
-                <Icon
-                  name="weight"
-                  size={20}
-                  style={{ color: "var(--state-warning)", flexShrink: 0 }}
-                />
-                <p className={styles.warningHeader}>
-                  <strong>
-                    {unweighedAdded.map((l) => l.name).join(", ")}
-                  </strong>{" "}
-                  — {t("isn't weighed yet (added after Cold Storage).")}
-                </p>
-              </div>
-              {canWeighFix && (
-                <div className={styles.cardActions}>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    icon="arrowRight"
-                    onClick={handleSendToColdToWeigh}
-                    disabled={advancing}
-                    tone="warning"
-                  >
-                    {t("Send to Cold Storage to weigh")}
-                  </Button>
-                </div>
-              )}
-            </Card>
-          )}
-
-          {/* Reweigh-detour reprint notice — a corrected weight invalidates
+            {/* Reweigh-detour reprint notice — a corrected weight invalidates
               whatever DO/SI was already printed once the order made it back
               to its origin (`needs_doc_reprint`, set by `handleAdvance`'s
               reweigh-return branch above). Ported from the prototype's own
@@ -6779,125 +6870,125 @@ export function OrderDetail() {
               718). Informational for every role that can view the order;
               only clearing it is Admin/Owner-only, same capability as
               Finalise's own advance action. */}
-          {order.needs_doc_reprint &&
-            (stage === "finalise" || stage === "dispatch") && (
-              <Card className={styles.warningCard}>
-                <div className={styles.row}>
-                  <Icon
-                    name="printer"
-                    size={20}
-                    style={{ color: "var(--state-warning)", flexShrink: 0 }}
-                  />
-                  <p className={styles.warningHeader}>
-                    {t("DO/SI needs reprint — weight changed")}
-                  </p>
-                </div>
-                {auth.can("advanceStage") && (
-                  <div className={styles.cardActions}>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      icon="check"
-                      onClick={handleClearReprint}
-                      tone="warning"
-                    >
-                      {t("Reprinted — done")}
-                    </Button>
+            {order.needs_doc_reprint &&
+              (stage === "finalise" || stage === "dispatch") && (
+                <Card className={styles.warningCard}>
+                  <div className={styles.row}>
+                    <Icon
+                      name="printer"
+                      size={20}
+                      style={{ color: "var(--state-warning)", flexShrink: 0 }}
+                    />
+                    <p className={styles.warningHeader}>
+                      {t("DO/SI needs reprint — weight changed")}
+                    </p>
                   </div>
-                )}
-              </Card>
-            )}
+                  {auth.can("advanceStage") && (
+                    <div className={styles.cardActions}>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        icon="check"
+                        onClick={handleClearReprint}
+                        tone="warning"
+                      >
+                        {t("Reprinted — done")}
+                      </Button>
+                    </div>
+                  )}
+                </Card>
+              )}
 
-          {/* Stage Action Controls */}
-          {/* Mirrors every top-level gate inside the block below — the div
-           *  itself has no visible content of its own, so it must only
-           *  render when at least one child actually would. Keep this in
-           *  sync if a new top-level card/row is added or removed below. */}
-          {(() => {
-            const showAdvanceButton =
-              !!flow?.next &&
-              canAdvance &&
-              stage !== "dispatch" &&
-              stage !== "production" &&
-              stage !== "packing" &&
-              stage !== "cold" &&
-              stage !== "finalise";
-            const showStageActions =
-              showAdvanceButton ||
-              (stage === "cold" && canWeighHere) ||
-              (stage === "production" && canCutHere) ||
-              (stage === "packing" && canAdvance) ||
-              (stage === "finalise" && canAdvance) ||
-              (stage === "dispatch" && canAdvance) ||
-              showCodRow ||
-              showCodDone ||
-              showDocsRow ||
-              showDocsDone ||
-              showTermsRow ||
-              showTermsDone ||
-              showFinanceGateForm ||
-              showFinanceUndoRow ||
-              (canUndo && !!order.undo_snapshot) ||
-              (canTrackCourier &&
-                handoffMode === "delivery" &&
-                !!order.taken_by) ||
-              showRefuseForm;
-            return !isCancelled && !isHold && showStageActions;
-          })() && (
-            <div className={styles.stageActions}>
-              {flow?.next &&
+            {/* Stage Action Controls */}
+            {/* Mirrors every top-level gate inside the block below — the div
+             *  itself has no visible content of its own, so it must only
+             *  render when at least one child actually would. Keep this in
+             *  sync if a new top-level card/row is added or removed below. */}
+            {(() => {
+              const showAdvanceButton =
+                !!flow?.next &&
                 canAdvance &&
                 stage !== "dispatch" &&
                 stage !== "production" &&
                 stage !== "packing" &&
                 stage !== "cold" &&
-                stage !== "finalise" && (
-                  <Button
-                    type="button"
-                    variant="primary"
-                    buttonStyle="fullWidth"
-                    size="lg"
-                    onClick={handleAdvance}
-                    disabled={advancing}
-                  >
-                    {advancing ? t("Saving…") : t(flow.advanceLabel)}
-                  </Button>
-                )}
-
-              {showFinanceUndoRow && (
-                <Card className={styles.warningCard}>
-                  <div className={styles.headerRow}>
-                    <div
-                      className={styles.sectionTitle}
-                      style={{ color: "var(--state-warning)" }}
-                    >
-                      {t("Payment cleared by Finance")}
-                    </div>
-                  </div>
-                  <p>
-                    {t("Payment cleared by Finance")} —{" "}
-                    {stage === "cold"
-                      ? t("cleared while still at Cold Storage.")
-                      : t("the order has moved on past the gate.")}{" "}
-                    {t("Cleared by mistake?")}
-                  </p>
-                  <div className={styles.cardActions}>
+                stage !== "finalise";
+              const showStageActions =
+                showAdvanceButton ||
+                (stage === "cold" && canWeighHere) ||
+                (stage === "production" && canCutHere) ||
+                (stage === "packing" && canAdvance) ||
+                (stage === "finalise" && canAdvance) ||
+                (stage === "dispatch" && canAdvance) ||
+                showCodRow ||
+                showCodDone ||
+                showDocsRow ||
+                showDocsDone ||
+                showTermsRow ||
+                showTermsDone ||
+                showFinanceGateForm ||
+                showFinanceUndoRow ||
+                (canUndo && !!order.undo_snapshot) ||
+                (canTrackCourier &&
+                  handoffMode === "delivery" &&
+                  !!order.taken_by) ||
+                showRefuseForm;
+              return !isCancelled && !isHold && showStageActions;
+            })() && (
+              <div className={styles.stageActions}>
+                {flow?.next &&
+                  canAdvance &&
+                  stage !== "dispatch" &&
+                  stage !== "production" &&
+                  stage !== "packing" &&
+                  stage !== "cold" &&
+                  stage !== "finalise" && (
                     <Button
                       type="button"
-                      variant="secondary"
-                      onClick={handleUndoFinanceClear}
-                      disabled={approvingFinance}
+                      variant="primary"
                       buttonStyle="fullWidth"
-                      icon="undo"
-                      tone="warning"
+                      size="lg"
+                      onClick={handleAdvance}
+                      disabled={advancing}
                     >
-                      {t("Undo payment clearance")}
+                      {advancing ? t("Saving…") : t(flow.advanceLabel)}
                     </Button>
-                  </div>
-                </Card>
-              )}
+                  )}
 
-              {/* Cold Storage — "Pull & weigh" card, replacing the generic
+                {showFinanceUndoRow && (
+                  <Card className={styles.warningCard}>
+                    <div className={styles.headerRow}>
+                      <div
+                        className={styles.sectionTitle}
+                        style={{ color: "var(--state-warning)" }}
+                      >
+                        {t("Payment cleared by Finance")}
+                      </div>
+                    </div>
+                    <p>
+                      {t("Payment cleared by Finance")} —{" "}
+                      {stage === "cold"
+                        ? t("cleared while still at Cold Storage.")
+                        : t("the order has moved on past the gate.")}{" "}
+                      {t("Cleared by mistake?")}
+                    </p>
+                    <div className={styles.cardActions}>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={handleUndoFinanceClear}
+                        disabled={approvingFinance}
+                        buttonStyle="fullWidth"
+                        icon="undo"
+                        tone="warning"
+                      >
+                        {t("Undo payment clearance")}
+                      </Button>
+                    </div>
+                  </Card>
+                )}
+
+                {/* Cold Storage — "Pull & weigh" card, replacing the generic
                   advance button for this stage. Ported from the prototype's
                   own cold-stage card (Dev-OrderDetail.jsx:685-723), including
                   its Finance-parallel-queue status line and explainer copy —
@@ -6906,222 +6997,152 @@ export function OrderDetail() {
                   to match the prototype's own gate exactly — a Finance user
                   granted `helpOtherStages` should never see this card, only
                   their own Finance-gate form. */}
-              {stage === "cold" && canWeighHere && (
-                <Card>
-                  <div className={styles.headerRowLeft}>
-                    <h3 className={styles.sectionTitle}>{t("Pull & weigh")}</h3>
-                  </div>
-                  <div className={styles.cardContent}>
-                    <div
-                      className={styles.financeClearRow}
-                      style={
-                        financeCleared
-                          ? {
-                              border: "1px solid var(--accent-primary)",
-                              backgroundColor: "var(--bg-surface-hover-dark)",
-                            }
-                          : {
-                              border: "1px solid var(--border-default)",
-                              backgroundColor: "none",
-                            }
-                      }
-                    >
-                      <Icon
-                        name={financeCleared ? "check" : "hourglass"}
-                        style={
-                          financeCleared
-                            ? { color: "var(--accent-primary)" }
-                            : { color: "var(--text-muted)" }
-                        }
-                      />
-                      <p
-                        style={
-                          financeCleared
-                            ? { color: "var(--accent-primary)" }
-                            : { color: "var(--text-muted)" }
-                        }
-                      >
-                        {financeCleared
-                          ? t("Payment already cleared by Finance")
-                          : t("Finance is clearing payment in parallel")}
-                      </p>
+                {stage === "cold" && canWeighHere && (
+                  <Card>
+                    <div className={styles.headerRowLeft}>
+                      <h3 className={styles.sectionTitle}>
+                        {t("Pull & weigh")}
+                      </h3>
                     </div>
-                    <p className={styles.secondary}>
-                      {t(
-                        'Weigh each item above and snap the scale — tap "+ Add weighing" to log several scale loads that total up (e.g. 80 kg as 4 × 20 kg). Short on an item? In the "Sending" box set how many you\'re sending now — the rest is kept as a later delivery. A kg item that ran out gets a "short" flag.',
-                      )}
-                    </p>
-                    {lines.filter((l) => isWeighedUnit(l.unit)).length === 0 &&
-                      lines
-                        .filter((l) => !isWeighedUnit(l.unit))
-                        .every(
-                          (l) =>
-                            (typeof l.qty === "string"
-                              ? parseFloat(l.qty) || 0
-                              : (l.qty ?? 0)) <= 1,
-                        ) && (
-                        <p className={styles.secondary}>
-                          {t("Nothing to weigh — fixed packs only.")}
+                    <div className={styles.cardContent}>
+                      <div className={styles.financeClearRow}>
+                        <Icon
+                          name={financeCleared ? "check" : "hourglass"}
+                          style={
+                            financeCleared
+                              ? { color: "var(--accent-primary)" }
+                              : { color: "var(--text-muted)" }
+                          }
+                        />
+                        <p
+                          style={
+                            financeCleared
+                              ? { color: "var(--accent-primary)" }
+                              : { color: "var(--text-muted)" }
+                          }
+                        >
+                          {financeCleared
+                            ? t("Payment already cleared by Finance")
+                            : t("Finance is clearing payment in parallel")}
                         </p>
-                      )}
-                  </div>
-                  <div className={styles.cardActions}>
-                    <Button
-                      type="button"
-                      variant="primary"
-                      buttonStyle="fullWidth"
-                      onClick={handleAdvance}
-                      disabled={advancing || !coldWeighingReady}
-                    >
-                      {advancing
-                        ? t("Saving…")
-                        : financeCleared
-                          ? t(flow?.advanceLabel ?? "")
-                          : t("Release to Finance")}
-                    </Button>
-                  </div>
-                </Card>
-              )}
-
-              {/* Production — Start Cutting + per-cut tick-off, replacing
-                  the generic advance button for this stage. Ported from
-                  the prototype's Production card (Dev-OrderDetail.jsx:744-766). */}
-              {stage === "production" && canCutHere && (
-                <Card>
-                  <div className={styles.headerRowLeft}>
-                    <h3 className={styles.sectionTitle}>{t("Production")}</h3>
-                  </div>
-                  <div className={styles.cardContent}>
-                    {cutTasks.length > 0 && (
-                      <div className={styles.cuttingRow}>
-                        {order.cutting_started ? (
-                          <p className={styles.cuttingHint}>
-                            <Icon name="progress" size={14} />{" "}
-                            {t("Cutting in progress")}
-                            {order.cutting_started_at
-                              ? ` at ${new Date(order.cutting_started_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`
-                              : ""}
-                            {order.cutting_started_by
-                              ? ` by ${displayName(order.cutting_started_by)}`
-                              : ""}
-                          </p>
-                        ) : (
-                          <>
-                            <Button
-                              type="button"
-                              variant="primary"
-                              icon="knife"
-                              buttonStyle="fullWidth"
-                              size="md"
-                              onClick={handleStartCutting}
-                            >
-                              {t("Start cutting")}
-                            </Button>
-                            <p className={styles.muted}>
-                              {t(
-                                "Marks the order as being cut — locks these items from edits.",
-                              )}
-                            </p>
-                          </>
-                        )}
                       </div>
-                    )}
-                    {(cutTasks.length === 0 || order.cutting_started) && (
-                      <div className={styles.cuttingRow}>
-                        {cutTasks.length > 0 && (
-                          <div className={styles.headerRowLeft}>
-                            <h3 className={styles.sectionTitle}>
-                              {t("Cut · tick each cutting")}
-                            </h3>
-                          </div>
-                        )}
-                        {cutTasks.length === 0 ? (
-                          <p className={styles.muted}>
-                            {t("No cutting needed.")}
-                          </p>
-                        ) : (
-                          cutTasks.map((t) => {
-                            const done = isCutDone(t.cut);
-                            const cutLabel = `${t.lineName} — ${t.cut.text}`;
-                            return (
-                              <div className={styles.cardListColumn}>
-                                <label
-                                  key={t.cut.id}
-                                  className={`${styles.cutTaskRow} ${done ? styles.cutTaskRowDone : ""}`}
-                                >
-                                  <Icon name="loaf" />
-                                  <span style={{ flex: 1 }}>{cutLabel}</span>
-                                  <Checkbox
-                                    size="md"
-                                    checked={done}
-                                    onChange={() => handleToggleCut(t.cut)}
-                                    label={cutLabel}
-                                  />
-                                </label>
-                              </div>
-                            );
-                          })
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  <div className={styles.cardActions}>
-                    <Button
-                      type="button"
-                      variant="primary"
-                      buttonStyle="fullWidth"
-                      onClick={handleCuttingDoneAdvance}
-                      disabled={advancing || !allCutsDone}
-                    >
-                      {advancing
-                        ? t("Saving…")
-                        : t("Cutting done → to packing")}
-                    </Button>
-                  </div>
-                </Card>
-              )}
-
-              {/* Packing — collect the cut pieces from Production and pack
-                  them with the rest of the order, replacing the generic
-                  advance button for this stage. Ported from the prototype's
-                  "Pack the order" card (Dev-OrderDetail.jsx:769-782). */}
-              {stage === "packing" && canAdvance && (
-                <Card>
-                  <div className={styles.headerRow}>
-                    <h3 className={styles.sectionTitle}>
-                      {t("Pack the order")}
-                    </h3>
-                  </div>
-                  <div className={styles.cardContent}>
-                    <div className={styles.cardListColumn}>
                       <p className={styles.secondary}>
                         {t(
-                          "Cutting is done. Collect the cut pieces from production and pack them together with the rest of the order, then mark it packed.",
+                          'Weigh each item above and snap the scale — tap "+ Add weighing" to log several scale loads that total up (e.g. 80 kg as 4 × 20 kg). Short on an item? In the "Sending" box set how many you\'re sending now — the rest is kept as a later delivery. A kg item that ran out gets a "short" flag.',
                         )}
                       </p>
-                      {cutItems.length > 0 && (
-                        <div className={styles.packRow}>
-                          <Icon
-                            name="check"
-                            style={{ color: "var(--accent-primary" }}
-                          />
-                          <p className={styles.body}>
-                            <strong>{cutItems.length}</strong>{" "}
-                            {t("cut item(s)")}:{" "}
-                            {cutItems.map((l) => l.name).join(", ")}
+                      {lines.filter((l) => isWeighedUnit(l.unit)).length ===
+                        0 &&
+                        lines
+                          .filter((l) => !isWeighedUnit(l.unit))
+                          .every(
+                            (l) =>
+                              (typeof l.qty === "string"
+                                ? parseFloat(l.qty) || 0
+                                : (l.qty ?? 0)) <= 1,
+                          ) && (
+                          <p className={styles.secondary}>
+                            {t("Nothing to weigh — fixed packs only.")}
                           </p>
+                        )}
+                    </div>
+                    <div className={styles.cardActions}>
+                      <Button
+                        type="button"
+                        variant="primary"
+                        buttonStyle="fullWidth"
+                        onClick={handleAdvance}
+                        disabled={advancing || !coldWeighingReady}
+                      >
+                        {advancing
+                          ? t("Saving…")
+                          : financeCleared
+                            ? t(flow?.advanceLabel ?? "")
+                            : t("Release to Finance")}
+                      </Button>
+                    </div>
+                  </Card>
+                )}
+
+                {/* Production — Start Cutting + per-cut tick-off, replacing
+                  the generic advance button for this stage. Ported from
+                  the prototype's Production card (Dev-OrderDetail.jsx:744-766). */}
+                {stage === "production" && canCutHere && (
+                  <Card>
+                    <div className={styles.headerRowLeft}>
+                      <h3 className={styles.sectionTitle}>{t("Production")}</h3>
+                    </div>
+                    <div className={styles.cardContent}>
+                      {cutTasks.length > 0 && (
+                        <div className={styles.cuttingRow}>
+                          {order.cutting_started ? (
+                            <p className={styles.cuttingHint}>
+                              <Icon name="progress" size={14} />{" "}
+                              {t("Cutting in progress")}
+                              {order.cutting_started_at
+                                ? ` at ${new Date(order.cutting_started_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`
+                                : ""}
+                              {order.cutting_started_by
+                                ? ` by ${displayName(order.cutting_started_by)}`
+                                : ""}
+                            </p>
+                          ) : (
+                            <>
+                              <Button
+                                type="button"
+                                variant="primary"
+                                icon="knife"
+                                buttonStyle="fullWidth"
+                                size="md"
+                                onClick={handleStartCutting}
+                              >
+                                {t("Start cutting")}
+                              </Button>
+                              <p className={styles.muted}>
+                                {t(
+                                  "Marks the order as being cut — locks these items from edits.",
+                                )}
+                              </p>
+                            </>
+                          )}
                         </div>
                       )}
-                      {otherItems.length > 0 && (
-                        <div className={styles.packRow}>
-                          <Icon
-                            name="check"
-                            style={{ color: "var(--accent-primary" }}
-                          />
-                          <p className={styles.body}>
-                            <b>{otherItems.length}</b> {t("other item(s)")}:{" "}
-                            {otherItems.map((l) => l.name).join(", ")}
-                          </p>
+                      {(cutTasks.length === 0 || order.cutting_started) && (
+                        <div className={styles.cuttingRow}>
+                          {cutTasks.length > 0 && (
+                            <div className={styles.headerRowLeft}>
+                              <h3 className={styles.sectionTitle}>
+                                {t("Cut · tick each cutting")}
+                              </h3>
+                            </div>
+                          )}
+                          {cutTasks.length === 0 ? (
+                            <p className={styles.muted}>
+                              {t("No cutting needed.")}
+                            </p>
+                          ) : (
+                            cutTasks.map((t) => {
+                              const done = isCutDone(t.cut);
+                              const cutLabel = `${t.lineName} — ${t.cut.text}`;
+                              return (
+                                <div className={styles.cardListColumn}>
+                                  <label
+                                    key={t.cut.id}
+                                    className={`${styles.cutTaskRow} ${done ? styles.cutTaskRowDone : ""}`}
+                                  >
+                                    <Icon name="loaf" />
+                                    <span style={{ flex: 1 }}>{cutLabel}</span>
+                                    <Checkbox
+                                      size="md"
+                                      checked={done}
+                                      onChange={() => handleToggleCut(t.cut)}
+                                      label={cutLabel}
+                                    />
+                                  </label>
+                                </div>
+                              );
+                            })
+                          )}
                         </div>
                       )}
                     </div>
@@ -7130,18 +7151,78 @@ export function OrderDetail() {
                         type="button"
                         variant="primary"
                         buttonStyle="fullWidth"
-                        icon="check"
-                        onClick={handlePackAdvance}
-                        disabled={advancing}
+                        onClick={handleCuttingDoneAdvance}
+                        disabled={advancing || !allCutsDone}
                       >
-                        {advancing ? t("Saving…") : t("Packed & ready")}
+                        {advancing
+                          ? t("Saving…")
+                          : t("Cutting done → to packing")}
                       </Button>
                     </div>
-                  </div>
-                </Card>
-              )}
+                  </Card>
+                )}
 
-              {/* Finalise — "Print DO/SI", replacing the generic advance
+                {/* Packing — collect the cut pieces from Production and pack
+                  them with the rest of the order, replacing the generic
+                  advance button for this stage. Ported from the prototype's
+                  "Pack the order" card (Dev-OrderDetail.jsx:769-782). */}
+                {stage === "packing" && canAdvance && (
+                  <Card>
+                    <div className={styles.headerRow}>
+                      <h3 className={styles.sectionTitle}>
+                        {t("Pack the order")}
+                      </h3>
+                    </div>
+                    <div className={styles.cardContent}>
+                      <div className={styles.cardListColumn}>
+                        <p className={styles.secondary}>
+                          {t(
+                            "Cutting is done. Collect the cut pieces from production and pack them together with the rest of the order, then mark it packed.",
+                          )}
+                        </p>
+                        {cutItems.length > 0 && (
+                          <div className={styles.packRow}>
+                            <Icon
+                              name="check"
+                              style={{ color: "var(--accent-primary" }}
+                            />
+                            <p className={styles.body}>
+                              <strong>{cutItems.length}</strong>{" "}
+                              {t("cut item(s)")}:{" "}
+                              {cutItems.map((l) => l.name).join(", ")}
+                            </p>
+                          </div>
+                        )}
+                        {otherItems.length > 0 && (
+                          <div className={styles.packRow}>
+                            <Icon
+                              name="check"
+                              style={{ color: "var(--accent-primary" }}
+                            />
+                            <p className={styles.body}>
+                              <b>{otherItems.length}</b> {t("other item(s)")}:{" "}
+                              {otherItems.map((l) => l.name).join(", ")}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                      <div className={styles.cardActions}>
+                        <Button
+                          type="button"
+                          variant="primary"
+                          buttonStyle="fullWidth"
+                          icon="check"
+                          onClick={handlePackAdvance}
+                          disabled={advancing}
+                        >
+                          {advancing ? t("Saving…") : t("Packed & ready")}
+                        </Button>
+                      </div>
+                    </div>
+                  </Card>
+                )}
+
+                {/* Finalise — "Print DO/SI", replacing the generic advance
                   button for this stage. Ported from the prototype's own
                   `finalise` card (Dev-OrderDetail.jsx:784-798): one optional
                   number field, one button that both logs the document (if a
@@ -7149,155 +7230,155 @@ export function OrderDetail() {
                   directly with a screenshot of the prototype's Admin view —
                   content ported, not layout (this port's own Card style,
                   not the prototype's raw `<input>`/`<button>`). */}
-              {stage === "finalise" && canAdvance && (
-                <Card>
-                  <div className={styles.cardContent}>
-                    <input
-                      type="text"
-                      className={styles.editInput}
-                      placeholder={t("DO / SI number (optional)")}
-                      value={finaliseDocNumber}
-                      onChange={(e) => setFinaliseDocNumber(e.target.value)}
-                      disabled={advancing}
-                    />
+                {stage === "finalise" && canAdvance && (
+                  <Card>
+                    <div className={styles.cardContent}>
+                      <input
+                        type="text"
+                        className={styles.editInput}
+                        placeholder={t("DO / SI number (optional)")}
+                        value={finaliseDocNumber}
+                        onChange={(e) => setFinaliseDocNumber(e.target.value)}
+                        disabled={advancing}
+                      />
+                      <div className={styles.cardActions}>
+                        <Button
+                          type="button"
+                          variant="primary"
+                          size="md"
+                          buttonStyle="fullWidth"
+                          icon="tick"
+                          onClick={handleFinaliseAdvance}
+                          disabled={advancing}
+                        >
+                          {advancing
+                            ? t("Saving…")
+                            : t(
+                                "Delivery Order (Surat Jalan) or Sales Invoice (Faktur Penjualan) Printed",
+                              )}
+                        </Button>
+                      </div>
+                    </div>
+                  </Card>
+                )}
+
+                {/* Hand-off mode chooser — dispatch stage, no mode picked yet */}
+                {stage === "dispatch" && canAdvance && !handoffMode && (
+                  <Card>
+                    <div className={styles.headerRow}>
+                      <h3 className={styles.sectionTitle}>{t("Delivery")}</h3>
+                      {failedAttempts.length > 0 && (
+                        <div className={styles.warningHeader}>
+                          <Icon name="alert" size={16} />
+                          <span>
+                            {t("Attempt")} {failedAttempts.length + 1}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    {failedAttempts.length > 0 && (
+                      <span className={styles.secondary}>
+                        {t("Last attempt failed")}:{" "}
+                        {failedAttempts[failedAttempts.length - 1].reason}
+                        {" · "}
+                        {formatTakenAt(
+                          failedAttempts[failedAttempts.length - 1].at,
+                        )}
+                      </span>
+                    )}
                     <div className={styles.cardActions}>
                       <Button
                         type="button"
                         variant="primary"
+                        icon="delivered"
                         size="md"
                         buttonStyle="fullWidth"
-                        icon="tick"
-                        onClick={handleFinaliseAdvance}
-                        disabled={advancing}
-                      >
-                        {advancing
-                          ? t("Saving…")
-                          : t(
-                              "Delivery Order (Surat Jalan) or Sales Invoice (Faktur Penjualan) Printed",
-                            )}
-                      </Button>
-                    </div>
-                  </div>
-                </Card>
-              )}
-
-              {/* Hand-off mode chooser — dispatch stage, no mode picked yet */}
-              {stage === "dispatch" && canAdvance && !handoffMode && (
-                <Card>
-                  <div className={styles.headerRow}>
-                    <h3 className={styles.sectionTitle}>{t("Delivery")}</h3>
-                    {failedAttempts.length > 0 && (
-                      <div className={styles.warningHeader}>
-                        <Icon name="alert" size={16} />
-                        <span>
-                          {t("Attempt")} {failedAttempts.length + 1}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                  {failedAttempts.length > 0 && (
-                    <span className={styles.secondary}>
-                      {t("Last attempt failed")}:{" "}
-                      {failedAttempts[failedAttempts.length - 1].reason}
-                      {" · "}
-                      {formatTakenAt(
-                        failedAttempts[failedAttempts.length - 1].at,
-                      )}
-                    </span>
-                  )}
-                  <div className={styles.cardActions}>
-                    <Button
-                      type="button"
-                      variant="primary"
-                      icon="delivered"
-                      size="md"
-                      buttonStyle="fullWidth"
-                      onClick={handleChooseOwnCourier}
-                      disabled={choosingMode}
-                    >
-                      {t("Take this delivery")}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      buttonStyle="fullWidth"
-                      icon="pickup"
-                      size="md"
-                      onClick={handleChoosePickup}
-                      disabled={choosingMode}
-                    >
-                      {t("Customer is picking up")}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      buttonStyle="fullWidth"
-                      icon="scooter"
-                      size="md"
-                      isActive={showThirdPartyForm}
-                      onClick={() => setShowThirdPartyForm((v) => !v)}
-                      disabled={choosingMode}
-                    >
-                      {t("Send by online courier (Gojek / Grab …)")}
-                    </Button>
-                  </div>
-                  {showThirdPartyForm && (
-                    <div className={styles.thirdPartyForm}>
-                      <select
-                        className={styles.editInput}
-                        aria-label={t("Courier service")}
-                        value={thirdPartyService}
-                        onChange={(e) => setThirdPartyService(e.target.value)}
-                      >
-                        {THIRD_PARTY_SERVICES.map((svc) => (
-                          <option key={svc} value={svc}>
-                            {svc === "Other" ? t("Other") : svc}
-                          </option>
-                        ))}
-                      </select>
-                      <input
-                        type="text"
-                        className={styles.editInput}
-                        placeholder={t("Tracking / order ref (optional)")}
-                        value={thirdPartyRef}
-                        onChange={(e) => setThirdPartyRef(e.target.value)}
-                        style={{ flex: 1, minWidth: 160 }}
-                      />
-                      <Button
-                        type="button"
-                        variant="primary"
-                        onClick={handleConfirmThirdParty}
+                        onClick={handleChooseOwnCourier}
                         disabled={choosingMode}
                       >
-                        {choosingMode ? t("Saving…") : t("Confirm")}
+                        {t("Take this delivery")}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        buttonStyle="fullWidth"
+                        icon="pickup"
+                        size="md"
+                        onClick={handleChoosePickup}
+                        disabled={choosingMode}
+                      >
+                        {t("Customer is picking up")}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        buttonStyle="fullWidth"
+                        icon="scooter"
+                        size="md"
+                        isActive={showThirdPartyForm}
+                        onClick={() => setShowThirdPartyForm((v) => !v)}
+                        disabled={choosingMode}
+                      >
+                        {t("Send by online courier (Gojek / Grab …)")}
                       </Button>
                     </div>
-                  )}
-                </Card>
-              )}
-
-              {/* Deliver-to address + Navigate + Collect COD chip */}
-              {stage === "dispatch" &&
-                canAdvance &&
-                (handoffMode === "delivery" || handoffMode === "third") &&
-                (canSeeCustomerContact || isStageActor) &&
-                order.customer_address && (
-                  <Card className={styles.warningCard}>
-                    <div className={styles.headerRow}>
-                      <div className={styles.row}>
-                        <Icon
-                          name="delivered"
-                          size={20}
-                          style={{ color: "var(--state-warning)" }}
-                        />
-                        <h3
-                          className={styles.sectionTitle}
-                          style={{ color: "var(--state-warning)" }}
+                    {showThirdPartyForm && (
+                      <div className={styles.thirdPartyForm}>
+                        <select
+                          className={styles.editInput}
+                          aria-label={t("Courier service")}
+                          value={thirdPartyService}
+                          onChange={(e) => setThirdPartyService(e.target.value)}
                         >
-                          {handoffMode === "third"
-                            ? t("Handover destination")
-                            : t("Deliver to")}
-                          {/* Reworked per follow-up: inline with the title
+                          {THIRD_PARTY_SERVICES.map((svc) => (
+                            <option key={svc} value={svc}>
+                              {svc === "Other" ? t("Other") : svc}
+                            </option>
+                          ))}
+                        </select>
+                        <input
+                          type="text"
+                          className={styles.editInput}
+                          placeholder={t("Tracking / order ref (optional)")}
+                          value={thirdPartyRef}
+                          onChange={(e) => setThirdPartyRef(e.target.value)}
+                          style={{ flex: 1, minWidth: 160 }}
+                        />
+                        <Button
+                          type="button"
+                          variant="primary"
+                          onClick={handleConfirmThirdParty}
+                          disabled={choosingMode}
+                        >
+                          {choosingMode ? t("Saving…") : t("Confirm")}
+                        </Button>
+                      </div>
+                    )}
+                  </Card>
+                )}
+
+                {/* Deliver-to address + Navigate + Collect COD chip */}
+                {stage === "dispatch" &&
+                  canAdvance &&
+                  (handoffMode === "delivery" || handoffMode === "third") &&
+                  (canSeeCustomerContact || isStageActor) &&
+                  order.customer_address && (
+                    <Card className={styles.warningCard}>
+                      <div className={styles.headerRow}>
+                        <div className={styles.row}>
+                          <Icon
+                            name="delivered"
+                            size={20}
+                            style={{ color: "var(--state-warning)" }}
+                          />
+                          <h3
+                            className={styles.sectionTitle}
+                            style={{ color: "var(--state-warning)" }}
+                          >
+                            {handoffMode === "third"
+                              ? t("Handover destination")
+                              : t("Deliver to")}
+                            {/* Reworked per follow-up: inline with the title
                               instead of its own banner line, since the
                               chooser's separate banner (and the reason/
                               timestamp it carries) disappears the moment a
@@ -7306,393 +7387,173 @@ export function OrderDetail() {
                               banner uses ("Attempt {N}"), rather than a new
                               English-only ordinal ("2nd attempt") that
                               wouldn't translate the same way. */}
-                        </h3>
-                      </div>
-                      {failedAttempts.length > 0 && (
-                        <span className={styles.warningHeader}>
-                          <Icon name="alert" size={16} />
-                          {t("Attempt")} {failedAttempts.length + 1}
-                        </span>
-                      )}
-
-                      {handoffMode === "delivery" &&
-                        codApplies &&
-                        codAmount > 0 && (
-                          <span className={styles.codOwedChip}>
-                            {t("Collect COD")} {currency.format(codAmount)}
+                          </h3>
+                        </div>
+                        {failedAttempts.length > 0 && (
+                          <span className={styles.warningHeader}>
+                            <Icon name="alert" size={16} />
+                            {t("Attempt")} {failedAttempts.length + 1}
                           </span>
                         )}
-                    </div>
-                    <div>
-                      <div className={styles.detailValue}>
-                        {order.customer_address}
-                      </div>
-                    </div>
 
-                    {handoffMode === "delivery" && (
-                      <div className={styles.cardActions}>
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          size="md"
-                          icon="navigation"
-                          buttonStyle="fullWidth"
-                          tone="warning"
-                          onClick={() =>
-                            window.open(
-                              `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.customer_address ?? "")}`,
-                              "_blank",
-                              "noopener",
-                            )
-                          }
-                        >
-                          {t("Navigate")}
-                        </Button>
+                        {handoffMode === "delivery" &&
+                          codApplies &&
+                          codAmount > 0 && (
+                            <span className={styles.codOwedChip}>
+                              {t("Collect COD")} {currency.format(codAmount)}
+                            </span>
+                          )}
                       </div>
-                    )}
-                  </Card>
-                )}
+                      <div>
+                        <div className={styles.detailValue}>
+                          {order.customer_address}
+                        </div>
+                      </div>
 
-              {/* Proof capture — mode chosen, relabeled per mode */}
-              {stage === "dispatch" && canAdvance && handoffMode && (
-                <Card>
-                  <div className={styles.headerRow}>
-                    <span className={styles.sectionTitle}>
-                      {handoffMode === "pickup"
-                        ? t("Proof of pickup")
-                        : handoffMode === "third"
-                          ? t("Handover proof")
-                          : t("Proof of delivery")}
-                    </span>
-                    {/* Ported from the prototype's own gate
+                      {handoffMode === "delivery" && (
+                        <div className={styles.cardActions}>
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="md"
+                            icon="navigation"
+                            buttonStyle="fullWidth"
+                            tone="warning"
+                            onClick={() =>
+                              window.open(
+                                `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.customer_address ?? "")}`,
+                                "_blank",
+                                "noopener",
+                              )
+                            }
+                          >
+                            {t("Navigate")}
+                          </Button>
+                        </div>
+                      )}
+                    </Card>
+                  )}
+
+                {/* Proof capture — mode chosen, relabeled per mode */}
+                {stage === "dispatch" && canAdvance && handoffMode && (
+                  <Card>
+                    <div className={styles.headerRow}>
+                      <span className={styles.sectionTitle}>
+                        {handoffMode === "pickup"
+                          ? t("Proof of pickup")
+                          : handoffMode === "third"
+                            ? t("Handover proof")
+                            : t("Proof of delivery")}
+                      </span>
+                      {/* Ported from the prototype's own gate
                         (`Dev-OrderDetail.jsx:883`) — unconditional for
                         whoever can act on this dispatch, never gated on
                         whether a photo happens to be staged yet. Previously
                         required `condPhotos.length > 0` here, which hid the
                         button on a freshly-opened proof capture with
                         nothing uploaded yet — reported directly. */}
-                    <Button
-                      type="button"
-                      variant="tertiary"
-                      className={styles.inlineButton}
-                      size="md"
-                      icon="undo"
-                      onClick={handleChangeMethod}
-                      disabled={submittingProof || choosingMode}
-                    >
-                      {t("Change method")}
-                    </Button>
-                  </div>
-                  {handoffMode === "delivery" && (
-                    <div
-                      className={styles.secondary}
-                      style={{ marginBottom: "var(--space-sm)" }}
-                    >
-                      {t("Taken by")}{" "}
-                      <strong>{displayName(order.taken_by)}</strong> {t("on")}{" "}
-                      {formatTakenAt(
-                        [...history]
-                          .reverse()
-                          .find((h) => h.what === "Handover: own courier")?.at,
-                      )}
+                      <Button
+                        type="button"
+                        variant="tertiary"
+                        className={styles.inlineButton}
+                        size="md"
+                        icon="undo"
+                        onClick={handleChangeMethod}
+                        disabled={submittingProof || choosingMode}
+                      >
+                        {t("Change method")}
+                      </Button>
                     </div>
-                  )}
-                  {handoffMode === "third" && (
-                    <div
-                      className={styles.headerRow}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "var(--space-sm)",
-                        flexWrap: "wrap",
-                      }}
-                    >
-                      <span>
-                        {t("Handed to")}{" "}
-                        <strong>
-                          {parsedThirdPartyService ||
-                            order.courier_service ||
-                            t("Online courier")}
-                          {parsedThirdPartyRef
-                            ? ` · ${parsedThirdPartyRef}`
-                            : ""}
-                        </strong>
-                      </span>
-                      {parsedThirdPartyRef && (
-                        <>
-                          {parsedThirdPartyService.toLowerCase() === "paxel" ? (
-                            <Button
-                              type="button"
-                              variant="tertiary"
-                              className={styles.inlineButton}
-                              onClick={() =>
-                                window.open(
-                                  `https://paxel.co.id/tracking/${encodeURIComponent(parsedThirdPartyRef)}`,
-                                  "_blank",
-                                  "noopener",
-                                )
-                              }
-                            >
-                              {t("Track")}
-                            </Button>
-                          ) : (
-                            <span
-                              style={{
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: 6,
-                              }}
-                            >
-                              <span>
-                                {t("Ref:")}{" "}
-                                <strong>{parsedThirdPartyRef}</strong>
-                              </span>
+                    {handoffMode === "delivery" && (
+                      <div
+                        className={styles.secondary}
+                        style={{ marginBottom: "var(--space-sm)" }}
+                      >
+                        {t("Taken by")}{" "}
+                        <strong>{displayName(order.taken_by)}</strong> {t("on")}{" "}
+                        {formatTakenAt(
+                          [...history]
+                            .reverse()
+                            .find((h) => h.what === "Handover: own courier")
+                            ?.at,
+                        )}
+                      </div>
+                    )}
+                    {handoffMode === "third" && (
+                      <div
+                        className={styles.headerRow}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "var(--space-sm)",
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        <span>
+                          {t("Handed to")}{" "}
+                          <strong>
+                            {parsedThirdPartyService ||
+                              order.courier_service ||
+                              t("Online courier")}
+                            {parsedThirdPartyRef
+                              ? ` · ${parsedThirdPartyRef}`
+                              : ""}
+                          </strong>
+                        </span>
+                        {parsedThirdPartyRef && (
+                          <>
+                            {parsedThirdPartyService.toLowerCase() ===
+                            "paxel" ? (
                               <Button
                                 type="button"
                                 variant="tertiary"
-                                size="md"
-                                icon={copiedTrackingRef ? "check" : "copy"}
-                                onClick={handleCopyTrackingRef}
                                 className={styles.inlineButton}
+                                onClick={() =>
+                                  window.open(
+                                    `https://paxel.co.id/tracking/${encodeURIComponent(parsedThirdPartyRef)}`,
+                                    "_blank",
+                                    "noopener",
+                                  )
+                                }
                               >
-                                {copiedTrackingRef
-                                  ? t("Copied")
-                                  : t("Copy ref")}
+                                {t("Track")}
                               </Button>
-                            </span>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  )}
-                  <div className={styles.cardContent}>
-                    <div
-                      className={styles.proofFieldRow}
-                      style={{
-                        borderColor:
-                          condPhotos.length > 0
-                            ? "var(--accent-primary)"
-                            : "var(--border-subtle)",
-                      }}
-                    >
-                      <div className={styles.proofFieldMain}>
-                        <div className={styles.left}>
-                          <Icon
-                            name="check"
-                            size={18}
-                            className={
-                              condPhotos.length > 0
-                                ? styles.proofCheckFilled
-                                : styles.proofCheckEmpty
-                            }
-                          />
-                          <span className={styles.fieldLabel}>
-                            {handoffMode === "pickup" || handoffMode === "third"
-                              ? t("Item condition photo (pickup)")
-                              : t("Item condition photo")}
-                          </span>
-                        </div>
-                        {renderThumbnails(
-                          condPhotos.map((p, i) => ({
-                            url: p.url,
-                            title:
-                              handoffMode === "pickup" ||
-                              handoffMode === "third"
-                                ? t("Item condition photo (pickup)")
-                                : t("Item condition photo"),
-                            stagedProofSlot: "cond" as const,
-                            stagedProofIndex: i,
-                          })),
+                            ) : (
+                              <span
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: 6,
+                                }}
+                              >
+                                <span>
+                                  {t("Ref:")}{" "}
+                                  <strong>{parsedThirdPartyRef}</strong>
+                                </span>
+                                <Button
+                                  type="button"
+                                  variant="tertiary"
+                                  size="md"
+                                  icon={copiedTrackingRef ? "check" : "copy"}
+                                  onClick={handleCopyTrackingRef}
+                                  className={styles.inlineButton}
+                                >
+                                  {copiedTrackingRef
+                                    ? t("Copied")
+                                    : t("Copy ref")}
+                                </Button>
+                              </span>
+                            )}
+                          </>
                         )}
-                        <input
-                          ref={condFileInputRef}
-                          type="file"
-                          accept="image/*"
-                          style={{ display: "none" }}
-                          onChange={(e) => handleUploadProofPhoto("cond", e)}
-                        />
-                        <Button
-                          type="button"
-                          variant="tertiary"
-                          icon="camera"
-                          iconOnly
-                          disabled={uploadingProofSlot === "cond"}
-                          title={t("Upload")}
-                          onClick={() => condFileInputRef.current?.click()}
-                        />
-                      </div>
-                    </div>
-
-                    {/* SOP hint — ported from the prototype's own copy */}
-                    {condPhotos.length === 0 && handoffMode && (
-                      <div className={styles.row}>
-                        <Icon
-                          name="infoCircle"
-                          size={16}
-                          style={{ color: "var(--text-muted)" }}
-                        />
-                        <p className={`${styles.infoHint} ${styles.muted}`}>
-                          {t(
-                            "Photograph the item condition first — then record who received it, or process a return.",
-                          )}
-                        </p>
                       </div>
                     )}
-
-                    {condPhotos.length > 0 && (
-                      <>
-                        {/* Field 2: Photo of the package / courier / receiver */}
-                        <div
-                          className={styles.proofFieldRow}
-                          style={{
-                            borderColor:
-                              recvPhotos.length > 0
-                                ? "var(--accent-primary)"
-                                : "var(--border-subtle)",
-                          }}
-                        >
-                          <div className={styles.proofFieldMain}>
-                            <div className={styles.left}>
-                              <Icon
-                                name="check"
-                                size={18}
-                                className={
-                                  recvPhotos.length > 0
-                                    ? styles.proofCheckFilled
-                                    : styles.proofCheckEmpty
-                                }
-                              />
-                              <span className={styles.fieldLabel}>
-                                {handoffMode === "third"
-                                  ? t("Photo of the package / courier")
-                                  : handoffMode === "pickup"
-                                    ? t("Photo of who collected")
-                                    : t("Receiver photo")}
-                              </span>
-                            </div>
-                            {renderThumbnails(
-                              recvPhotos.map((p, i) => ({
-                                url: p.url,
-                                title:
-                                  handoffMode === "third"
-                                    ? t("Photo of the package / courier")
-                                    : handoffMode === "pickup"
-                                      ? t("Photo of who collected")
-                                      : t("Receiver photo"),
-                                stagedProofSlot: "recv" as const,
-                                stagedProofIndex: i,
-                              })),
-                            )}
-                            <input
-                              ref={recvFileInputRef}
-                              type="file"
-                              accept="image/*"
-                              style={{ display: "none" }}
-                              onChange={(e) =>
-                                handleUploadProofPhoto("recv", e)
-                              }
-                            />
-                            <Button
-                              type="button"
-                              variant="tertiary"
-                              icon="camera"
-                              iconOnly
-                              disabled={uploadingProofSlot === "recv"}
-                              title={t("Upload")}
-                              onClick={() => recvFileInputRef.current?.click()}
-                            />
-                          </div>
-                          {/* Field 3: Driver name / Collected by / Receiver name input */}
-                          <div className={styles.outcomeRow}>
-                            <input
-                              type="text"
-                              className={styles.editInput}
-                              placeholder={
-                                handoffMode === "third"
-                                  ? t("Driver name (optional)")
-                                  : handoffMode === "pickup"
-                                    ? t("Collected by")
-                                    : t("Receiver's name")
-                              }
-                              value={receiverName}
-                              onChange={(e) => setReceiverName(e.target.value)}
-                            />
-                          </div>
-                        </div>
-
-                        {/* Field 4: Signed invoice / doc */}
-                        <div
-                          className={styles.proofFieldRow}
-                          style={{
-                            borderColor:
-                              signedPhotos.length > 0
-                                ? "var(--accent-primary)"
-                                : "var(--border-subtle)",
-                          }}
-                        >
-                          <div className={styles.proofFieldMain}>
-                            <div className={styles.left}>
-                              <Icon
-                                name="check"
-                                size={18}
-                                className={
-                                  signedPhotos.length > 0
-                                    ? styles.proofCheckFilled
-                                    : styles.proofCheckEmpty
-                                }
-                              />
-                              <span className={styles.fieldLabel}>
-                                {handoffMode === "third"
-                                  ? t("Signed invoice")
-                                  : proofRequired
-                                    ? t("Signed doc (required)")
-                                    : t("Signed doc (optional)")}
-                              </span>
-                            </div>
-                            {renderThumbnails(
-                              signedPhotos.map((p, i) => ({
-                                url: p.url,
-                                title:
-                                  handoffMode === "third"
-                                    ? t("Signed invoice")
-                                    : proofRequired
-                                      ? t("Signed doc (required)")
-                                      : t("Signed doc (optional)"),
-                                stagedProofSlot: "signed" as const,
-                                stagedProofIndex: i,
-                              })),
-                            )}
-                            <input
-                              ref={signedFileInputRef}
-                              type="file"
-                              accept="image/*"
-                              style={{ display: "none" }}
-                              onChange={(e) =>
-                                handleUploadProofPhoto("signed", e)
-                              }
-                            />
-                            <Button
-                              type="button"
-                              variant="tertiary"
-                              icon="camera"
-                              iconOnly
-                              disabled={uploadingProofSlot === "signed"}
-                              title={t("Upload")}
-                              onClick={() =>
-                                signedFileInputRef.current?.click()
-                              }
-                            />
-                          </div>
-                        </div>
-                      </>
-                    )}
-
-                    {condPhotos.length > 0 && codApplies && (
+                    <div className={styles.cardContent}>
                       <div
                         className={styles.proofFieldRow}
                         style={{
                           borderColor:
-                            cashCollected != null
+                            condPhotos.length > 0
                               ? "var(--accent-primary)"
                               : "var(--border-subtle)",
                         }}
@@ -7703,539 +7564,723 @@ export function OrderDetail() {
                               name="check"
                               size={18}
                               className={
-                                cashCollected != null
+                                condPhotos.length > 0
                                   ? styles.proofCheckFilled
                                   : styles.proofCheckEmpty
                               }
                             />
                             <span className={styles.fieldLabel}>
-                              {t("COD payment")}
-                            </span>
-                            <span className={styles.codOwedChip}>
-                              {t("Collect COD")} {currency.format(codAmount)}
+                              {handoffMode === "pickup" ||
+                              handoffMode === "third"
+                                ? t("Item condition photo (pickup)")
+                                : t("Item condition photo")}
                             </span>
                           </div>
-                        </div>
-                        <div className={styles.outcomeRow}>
-                          <div className={styles.codSegments}>
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              isActive={codOutcome === "full"}
-                              onClick={() => {
-                                setCodOutcome("full");
-                                setPartialAmountInput("");
-                                setOutstandingReason(null);
-                              }}
-                            >
-                              {t("Full")}
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              isActive={codOutcome === "partial"}
-                              onClick={() => setCodOutcome("partial")}
-                            >
-                              {t("Partial")}
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              isActive={codOutcome === "none"}
-                              onClick={() => {
-                                setCodOutcome("none");
-                                setPartialAmountInput("");
-                              }}
-                            >
-                              {t("None")}
-                            </Button>
-                          </div>
-                          {codOutcome === "partial" && (
-                            <input
-                              type="number"
-                              className={styles.editInput}
-                              placeholder={t("Amount collected (Rp)")}
-                              value={partialAmountInput}
-                              onChange={(e) =>
-                                setPartialAmountInput(e.target.value)
-                              }
-                              style={{ width: 240 }}
-                            />
+                          {renderThumbnails(
+                            condPhotos.map((p, i) => ({
+                              url: p.url,
+                              title:
+                                handoffMode === "pickup" ||
+                                handoffMode === "third"
+                                  ? t("Item condition photo (pickup)")
+                                  : t("Item condition photo"),
+                              stagedProofSlot: "cond" as const,
+                              stagedProofIndex: i,
+                            })),
                           )}
-                          {codOutcome && (
-                            <div className={styles.secondary}>
-                              {t("Collected")}{" "}
-                              {currency.format(cashCollected ?? 0)} {t("of")}{" "}
-                              {currency.format(codAmount)}
-                            </div>
-                          )}
-                          {codOutcome && codOutcome !== "full" && (
-                            <div className={styles.codReasonRow}>
-                              {OUTSTANDING_REASONS.map((r) => (
-                                <Button
-                                  key={r.key}
-                                  variant="secondary"
-                                  type="button"
-                                  size="sm"
-                                  style={{
-                                    padding: "0px 8px",
-                                    borderRadius: "var(--radius-xl)",
-                                  }}
-                                  isActive={outstandingReason === r.key}
-                                  onClick={() => setOutstandingReason(r.key)}
-                                >
-                                  {t(r.label)}
-                                </Button>
-                              ))}
-                            </div>
-                          )}
+                          <CameraButton
+                            variant="tertiary"
+                            iconOnly
+                            disabled={uploadingProofSlot === "cond"}
+                            title={t("Upload")}
+                            onChange={(e) => handleUploadProofPhoto("cond", e)}
+                          />
                         </div>
                       </div>
-                    )}
-                    {condPhotos.length > 0 &&
-                      (showRefuseForm ? (
-                        <Card className={styles.errorCard}>
-                          <div className={styles.headerRow}>
-                            <span className={styles.sectionTitle}>
-                              {t("What did the customer refuse?")}
-                            </span>
-                          </div>
-                          <div className={styles.cardContent}>
-                            <div className={styles.secondary}>
-                              {t(
-                                "Each item can have its own reason + photos — different items may come back for different reasons.",
+
+                      {/* SOP hint — ported from the prototype's own copy */}
+                      {condPhotos.length === 0 && handoffMode && (
+                        <div className={styles.row}>
+                          <Icon
+                            name="infoCircle"
+                            size={16}
+                            style={{ color: "var(--text-muted)" }}
+                          />
+                          <p className={`${styles.infoHint} ${styles.muted}`}>
+                            {t(
+                              "Photograph the item condition first — then record who received it, or process a return.",
+                            )}
+                          </p>
+                        </div>
+                      )}
+
+                      {condPhotos.length > 0 && (
+                        <>
+                          {/* Field 2: Photo of the package / courier / receiver */}
+                          <div
+                            className={styles.proofFieldRow}
+                            style={{
+                              borderColor:
+                                recvPhotos.length > 0
+                                  ? "var(--accent-primary)"
+                                  : "var(--border-subtle)",
+                            }}
+                          >
+                            <div className={styles.proofFieldMain}>
+                              <div className={styles.left}>
+                                <Icon
+                                  name="check"
+                                  size={18}
+                                  className={
+                                    recvPhotos.length > 0
+                                      ? styles.proofCheckFilled
+                                      : styles.proofCheckEmpty
+                                  }
+                                />
+                                <span className={styles.fieldLabel}>
+                                  {handoffMode === "third"
+                                    ? t("Photo of the package / courier")
+                                    : handoffMode === "pickup"
+                                      ? t("Photo of who collected")
+                                      : t("Receiver photo")}
+                                </span>
+                              </div>
+                              {renderThumbnails(
+                                recvPhotos.map((p, i) => ({
+                                  url: p.url,
+                                  title:
+                                    handoffMode === "third"
+                                      ? t("Photo of the package / courier")
+                                      : handoffMode === "pickup"
+                                        ? t("Photo of who collected")
+                                        : t("Receiver photo"),
+                                  stagedProofSlot: "recv" as const,
+                                  stagedProofIndex: i,
+                                })),
                               )}
+                              <CameraButton
+                                variant="tertiary"
+                                iconOnly
+                                disabled={uploadingProofSlot === "recv"}
+                                title={t("Upload")}
+                                onChange={(e) =>
+                                  handleUploadProofPhoto("recv", e)
+                                }
+                              />
                             </div>
-                            <div className={styles.cardListColumn}>
-                              {lines
-                                .filter((l) => !l.removed)
-                                .map((l) => {
-                                  const weight = isWeightOnlyUnit(l.unit);
-                                  const refVal =
-                                    parseFloat(refuseQtyMap[l.id] ?? "0") || 0;
-                                  const isRef = refVal > 0;
-                                  // How much is actually being sent this
-                                  // run — `sendingQtyMap` (not `l.sent`/
-                                  // `lineLeft`), same live-tracked value
-                                  // the Cold Storage "sending" input and
-                                  // `handleConfirmDelivery` both use.
-                                  // `l.sent` gets cleared to null once a
-                                  // confirm/refuse consumes it, and
-                                  // `lineLeft` depends on `delivered`/
-                                  // `returned` staying correctly reset —
-                                  // which the generic self-undo doesn't
-                                  // do (it only reverts `orders`-table
-                                  // fields, not the separate
-                                  // `order_lines` writes a refusal makes)
-                                  // — so falling back to either after an
-                                  // Undo can read stale data. Reported
-                                  // directly: refusing 1 of 2, confirming,
-                                  // then undoing showed "0 of 2" instead
-                                  // of "2 of 2" on reopening this form.
-                                  const qtyNum =
-                                    typeof l.qty === "string"
-                                      ? parseFloat(l.qty) || 0
-                                      : (l.qty ?? 0);
-                                  const maxSent = weight
-                                    ? Number(l.weight) || Number(l.qty) || 0
-                                    : ((l.id
-                                        ? sendingQtyMap[l.id]
-                                        : undefined) ?? qtyNum);
-                                  const pics = refusePhotosMap[l.id] || [];
+                            {/* Field 3: Driver name / Collected by / Receiver name input */}
+                            <div className={styles.outcomeRow}>
+                              <input
+                                type="text"
+                                className={styles.editInput}
+                                placeholder={
+                                  handoffMode === "third"
+                                    ? t("Driver name (optional)")
+                                    : handoffMode === "pickup"
+                                      ? t("Collected by")
+                                      : t("Receiver's name")
+                                }
+                                value={receiverName}
+                                onChange={(e) =>
+                                  setReceiverName(e.target.value)
+                                }
+                              />
+                            </div>
+                          </div>
 
-                                  return (
-                                    <div
-                                      key={l.id}
-                                      className={styles.followUpColumn}
-                                    >
-                                      <div className={styles.followUpRow}>
-                                        <span className={styles.itemQty}>
-                                          {maxSent}
-                                        </span>
-                                        <span className={styles.unitTag}>
-                                          {l.unit}
-                                        </span>
-                                        <div className={styles.followUpMain}>
-                                          <span className={styles.itemName}>
-                                            {l.name}
-                                          </span>
-                                        </div>
+                          {/* Field 4: Signed invoice / doc */}
+                          <div
+                            className={styles.proofFieldRow}
+                            style={{
+                              borderColor:
+                                signedPhotos.length > 0
+                                  ? "var(--accent-primary)"
+                                  : "var(--border-subtle)",
+                            }}
+                          >
+                            <div className={styles.proofFieldMain}>
+                              <div className={styles.left}>
+                                <Icon
+                                  name="check"
+                                  size={18}
+                                  className={
+                                    signedPhotos.length > 0
+                                      ? styles.proofCheckFilled
+                                      : styles.proofCheckEmpty
+                                  }
+                                />
+                                <span className={styles.fieldLabel}>
+                                  {handoffMode === "third"
+                                    ? t("Signed invoice")
+                                    : proofRequired
+                                      ? t("Signed doc (required)")
+                                      : t("Signed doc (optional)")}
+                                </span>
+                              </div>
+                              {renderThumbnails(
+                                signedPhotos.map((p, i) => ({
+                                  url: p.url,
+                                  title:
+                                    handoffMode === "third"
+                                      ? t("Signed invoice")
+                                      : proofRequired
+                                        ? t("Signed doc (required)")
+                                        : t("Signed doc (optional)"),
+                                  stagedProofSlot: "signed" as const,
+                                  stagedProofIndex: i,
+                                })),
+                              )}
+                              <CameraButton
+                                variant="tertiary"
+                                iconOnly
+                                disabled={uploadingProofSlot === "signed"}
+                                title={t("Upload")}
+                                onChange={(e) =>
+                                  handleUploadProofPhoto("signed", e)
+                                }
+                              />
+                            </div>
+                          </div>
+                        </>
+                      )}
 
-                                        <div className={styles.inputBadge}>
-                                          <span className={styles.secondary}>
-                                            {t("Returning")}
-                                          </span>
-                                          <input
-                                            type="number"
-                                            className={styles.numberInput}
-                                            placeholder="0"
-                                            min={0}
-                                            max={maxSent}
-                                            style={{
-                                              width: 64,
-                                              textAlign: "right",
-                                            }}
-                                            value={refuseQtyMap[l.id] ?? ""}
-                                            onChange={(e) => {
-                                              let s = e.target.value;
-                                              if (weight) {
-                                                // Decimals — don't clamp
-                                                // live (mid-typing "1." for
-                                                // "1.5" would get mangled by
-                                                // a parse-and-reformat round
-                                                // trip); the `max` attribute
-                                                // above still discourages it.
-                                                s = s.replace(/[^\d.,]/g, "");
-                                                setRefuseQtyMap((p) => ({
-                                                  ...p,
-                                                  [l.id]: s,
-                                                }));
-                                                return;
-                                              }
-                                              // Counted units — clamp on
-                                              // every keystroke, same
-                                              // pattern as the Cold Storage
-                                              // "sending" input.
-                                              const raw = s.replace(
-                                                /[^\d]/g,
-                                                "",
-                                              );
-                                              const n = Math.min(
-                                                maxSent,
-                                                Math.max(
-                                                  0,
-                                                  parseInt(raw, 10) || 0,
-                                                ),
-                                              );
-                                              setRefuseQtyMap((p) => ({
-                                                ...p,
-                                                [l.id]:
-                                                  raw === "" ? "" : String(n),
-                                              }));
-                                            }}
-                                          />
-                                          <span className={styles.secondary}>
-                                            {" "}
-                                            {t("of")}
-                                          </span>
-                                          <span
-                                            className={styles.secondary}
-                                            style={{
-                                              width: "16px",
-                                              textAlign: "right",
-                                            }}
-                                          >
+                      {condPhotos.length > 0 && codApplies && (
+                        <div
+                          className={styles.proofFieldRow}
+                          style={{
+                            borderColor:
+                              cashCollected != null
+                                ? "var(--accent-primary)"
+                                : "var(--border-subtle)",
+                          }}
+                        >
+                          <div className={styles.proofFieldMain}>
+                            <div className={styles.left}>
+                              <Icon
+                                name="check"
+                                size={18}
+                                className={
+                                  cashCollected != null
+                                    ? styles.proofCheckFilled
+                                    : styles.proofCheckEmpty
+                                }
+                              />
+                              <span className={styles.fieldLabel}>
+                                {t("COD payment")}
+                              </span>
+                              <span className={styles.codOwedChip}>
+                                {t("Collect COD")} {currency.format(codAmount)}
+                              </span>
+                            </div>
+                          </div>
+                          <div className={styles.outcomeRow}>
+                            <div className={styles.codSegments}>
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                isActive={codOutcome === "full"}
+                                onClick={() => {
+                                  setCodOutcome("full");
+                                  setPartialAmountInput("");
+                                  setOutstandingReason(null);
+                                }}
+                              >
+                                {t("Full")}
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                isActive={codOutcome === "partial"}
+                                onClick={() => setCodOutcome("partial")}
+                              >
+                                {t("Partial")}
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                isActive={codOutcome === "none"}
+                                onClick={() => {
+                                  setCodOutcome("none");
+                                  setPartialAmountInput("");
+                                }}
+                              >
+                                {t("None")}
+                              </Button>
+                            </div>
+                            {codOutcome === "partial" && (
+                              <input
+                                type="number"
+                                className={styles.editInput}
+                                placeholder={t("Amount collected (Rp)")}
+                                value={partialAmountInput}
+                                onChange={(e) =>
+                                  setPartialAmountInput(e.target.value)
+                                }
+                                style={{ width: 240 }}
+                              />
+                            )}
+                            {codOutcome && (
+                              <div className={styles.secondary}>
+                                {t("Collected")}{" "}
+                                {currency.format(cashCollected ?? 0)} {t("of")}{" "}
+                                {currency.format(codAmount)}
+                              </div>
+                            )}
+                            {codOutcome && codOutcome !== "full" && (
+                              <div className={styles.codReasonRow}>
+                                {OUTSTANDING_REASONS.map((r) => (
+                                  <Button
+                                    key={r.key}
+                                    variant="secondary"
+                                    type="button"
+                                    size="sm"
+                                    style={{
+                                      padding: "0px 8px",
+                                      borderRadius: "var(--radius-xl)",
+                                    }}
+                                    isActive={outstandingReason === r.key}
+                                    onClick={() => setOutstandingReason(r.key)}
+                                  >
+                                    {t(r.label)}
+                                  </Button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      {condPhotos.length > 0 &&
+                        (showRefuseForm ? (
+                          <Card className={styles.errorCard}>
+                            <div className={styles.headerRow}>
+                              <span className={styles.sectionTitle}>
+                                {t("What did the customer refuse?")}
+                              </span>
+                            </div>
+                            <div className={styles.cardContent}>
+                              <div className={styles.secondary}>
+                                {t(
+                                  "Each item can have its own reason + photos — different items may come back for different reasons.",
+                                )}
+                              </div>
+                              <div className={styles.cardListColumn}>
+                                {lines
+                                  .filter((l) => !l.removed)
+                                  .map((l) => {
+                                    const weight = isWeightOnlyUnit(l.unit);
+                                    const refVal =
+                                      parseFloat(refuseQtyMap[l.id] ?? "0") ||
+                                      0;
+                                    const isRef = refVal > 0;
+                                    // How much is actually being sent this
+                                    // run — `sendingQtyMap` (not `l.sent`/
+                                    // `lineLeft`), same live-tracked value
+                                    // the Cold Storage "sending" input and
+                                    // `handleConfirmDelivery` both use.
+                                    // `l.sent` gets cleared to null once a
+                                    // confirm/refuse consumes it, and
+                                    // `lineLeft` depends on `delivered`/
+                                    // `returned` staying correctly reset —
+                                    // which the generic self-undo doesn't
+                                    // do (it only reverts `orders`-table
+                                    // fields, not the separate
+                                    // `order_lines` writes a refusal makes)
+                                    // — so falling back to either after an
+                                    // Undo can read stale data. Reported
+                                    // directly: refusing 1 of 2, confirming,
+                                    // then undoing showed "0 of 2" instead
+                                    // of "2 of 2" on reopening this form.
+                                    const qtyNum =
+                                      typeof l.qty === "string"
+                                        ? parseFloat(l.qty) || 0
+                                        : (l.qty ?? 0);
+                                    const maxSent = weight
+                                      ? Number(l.weight) || Number(l.qty) || 0
+                                      : ((l.id
+                                          ? sendingQtyMap[l.id]
+                                          : undefined) ?? qtyNum);
+                                    const pics = refusePhotosMap[l.id] || [];
+
+                                    return (
+                                      <div
+                                        key={l.id}
+                                        className={styles.followUpColumn}
+                                      >
+                                        <div className={styles.followUpRow}>
+                                          <span className={styles.itemQty}>
                                             {maxSent}
                                           </span>
-                                          <span
-                                            className={styles.secondary}
-                                            style={{ width: "32px" }}
-                                          >
+                                          <span className={styles.unitTag}>
                                             {l.unit}
                                           </span>
-                                        </div>
-                                      </div>
-                                      {isRef && (
-                                        <div className={styles.column}>
-                                          <input
-                                            type="text"
-                                            className={styles.editInput}
-                                            placeholder={t("Reason (optional)")}
-                                            value={refuseReasonsMap[l.id] ?? ""}
-                                            onChange={(e) =>
-                                              setRefuseReasonsMap((p) => ({
-                                                ...p,
-                                                [l.id]: e.target.value,
-                                              }))
-                                            }
-                                          />
-                                          <div
-                                            className={styles.linePhotos}
-                                            style={{
-                                              paddingTop: "var(--space-sm)",
-                                              marginLeft: "16px",
-                                            }}
-                                          >
-                                            <label
+                                          <div className={styles.followUpMain}>
+                                            <span className={styles.itemName}>
+                                              {l.name}
+                                            </span>
+                                          </div>
+
+                                          <div className={styles.inputBadge}>
+                                            <span className={styles.secondary}>
+                                              {t("Returning")}
+                                            </span>
+                                            <input
+                                              type="number"
+                                              className={styles.numberInput}
+                                              placeholder="0"
+                                              min={0}
+                                              max={maxSent}
                                               style={{
-                                                display: "inline-flex",
-                                                cursor: "pointer",
+                                                width: 64,
+                                                textAlign: "right",
+                                              }}
+                                              value={refuseQtyMap[l.id] ?? ""}
+                                              onChange={(e) => {
+                                                let s = e.target.value;
+                                                if (weight) {
+                                                  // Decimals — don't clamp
+                                                  // live (mid-typing "1." for
+                                                  // "1.5" would get mangled by
+                                                  // a parse-and-reformat round
+                                                  // trip); the `max` attribute
+                                                  // above still discourages it.
+                                                  s = s.replace(/[^\d.,]/g, "");
+                                                  setRefuseQtyMap((p) => ({
+                                                    ...p,
+                                                    [l.id]: s,
+                                                  }));
+                                                  return;
+                                                }
+                                                // Counted units — clamp on
+                                                // every keystroke, same
+                                                // pattern as the Cold Storage
+                                                // "sending" input.
+                                                const raw = s.replace(
+                                                  /[^\d]/g,
+                                                  "",
+                                                );
+                                                const n = Math.min(
+                                                  maxSent,
+                                                  Math.max(
+                                                    0,
+                                                    parseInt(raw, 10) || 0,
+                                                  ),
+                                                );
+                                                setRefuseQtyMap((p) => ({
+                                                  ...p,
+                                                  [l.id]:
+                                                    raw === "" ? "" : String(n),
+                                                }));
+                                              }}
+                                            />
+                                            <span className={styles.secondary}>
+                                              {" "}
+                                              {t("of")}
+                                            </span>
+                                            <span
+                                              className={styles.secondary}
+                                              style={{
+                                                width: "16px",
+                                                textAlign: "right",
                                               }}
                                             >
-                                              <Button
-                                                type="button"
+                                              {maxSent}
+                                            </span>
+                                            <span
+                                              className={styles.secondary}
+                                              style={{ width: "32px" }}
+                                            >
+                                              {l.unit}
+                                            </span>
+                                          </div>
+                                        </div>
+                                        {isRef && (
+                                          <div className={styles.column}>
+                                            <input
+                                              type="text"
+                                              className={styles.editInput}
+                                              placeholder={t(
+                                                "Reason (optional)",
+                                              )}
+                                              value={
+                                                refuseReasonsMap[l.id] ?? ""
+                                              }
+                                              onChange={(e) =>
+                                                setRefuseReasonsMap((p) => ({
+                                                  ...p,
+                                                  [l.id]: e.target.value,
+                                                }))
+                                              }
+                                            />
+                                            <div
+                                              className={styles.linePhotos}
+                                              style={{
+                                                paddingTop: "var(--space-sm)",
+                                                marginLeft: "16px",
+                                              }}
+                                            >
+                                              <CameraButton
                                                 variant="tertiary"
                                                 size="md"
-                                                icon="camera"
                                                 title={t(
                                                   "Upload refusal photo",
                                                 )}
-                                                onClick={(e) => {
-                                                  const inputElem = (
-                                                    e.currentTarget as HTMLElement
-                                                  )
-                                                    .nextElementSibling as HTMLInputElement;
-                                                  inputElem?.click();
-                                                }}
-                                              >
-                                                {t("Add photo")}
-                                              </Button>
-                                              <input
-                                                type="file"
-                                                accept="image/*"
-                                                style={{ display: "none" }}
                                                 onChange={(e) =>
                                                   handleUploadRefusePhoto(
                                                     l.id,
                                                     e,
                                                   )
                                                 }
-                                              />
-                                            </label>
-                                            {pics.length > 0 && (
-                                              <div
-                                                className={
-                                                  styles.thumbnailsContainer
-                                                }
                                               >
-                                                {pics.map((p) => (
-                                                  <div
-                                                    key={p.id}
-                                                    className={
-                                                      styles.thumbnailItem
-                                                    }
-                                                    onClick={() =>
-                                                      setActiveImageModal({
-                                                        url: p.url,
-                                                        title: `${t("Refusal photo —")} ${l.name}`,
-                                                      })
-                                                    }
-                                                  >
-                                                    <img
-                                                      src={p.url}
-                                                      alt=""
-                                                      className={
-                                                        styles.thumbnailImg
-                                                      }
-                                                    />
+                                                {t("Add photo")}
+                                              </CameraButton>
+                                              {pics.length > 0 && (
+                                                <div
+                                                  className={
+                                                    styles.thumbnailsContainer
+                                                  }
+                                                >
+                                                  {pics.map((p) => (
                                                     <div
+                                                      key={p.id}
                                                       className={
-                                                        styles.thumbnailHoverTrash
+                                                        styles.thumbnailItem
                                                       }
-                                                      title={t("Delete image")}
-                                                      onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        setRefusePhotosMap(
-                                                          (pPrev) => ({
-                                                            ...pPrev,
-                                                            [l.id]: (
-                                                              pPrev[l.id] || []
-                                                            ).filter(
-                                                              (x) =>
-                                                                x.id !== p.id,
-                                                            ),
-                                                          }),
-                                                        );
-                                                      }}
+                                                      onClick={() =>
+                                                        setActiveImageModal({
+                                                          url: p.url,
+                                                          title: `${t("Refusal photo —")} ${l.name}`,
+                                                        })
+                                                      }
                                                     >
-                                                      <Icon
-                                                        name="trash"
-                                                        size={14}
+                                                      <img
+                                                        src={p.url}
+                                                        alt=""
+                                                        className={
+                                                          styles.thumbnailImg
+                                                        }
                                                       />
+                                                      <div
+                                                        className={
+                                                          styles.thumbnailHoverTrash
+                                                        }
+                                                        title={t(
+                                                          "Delete image",
+                                                        )}
+                                                        onClick={(e) => {
+                                                          e.stopPropagation();
+                                                          setRefusePhotosMap(
+                                                            (pPrev) => ({
+                                                              ...pPrev,
+                                                              [l.id]: (
+                                                                pPrev[l.id] ||
+                                                                []
+                                                              ).filter(
+                                                                (x) =>
+                                                                  x.id !== p.id,
+                                                              ),
+                                                            }),
+                                                          );
+                                                        }}
+                                                      >
+                                                        <Icon
+                                                          name="trash"
+                                                          size={14}
+                                                        />
+                                                      </div>
                                                     </div>
-                                                  </div>
-                                                ))}
-                                              </div>
-                                            )}
+                                                  ))}
+                                                </div>
+                                              )}
+                                            </div>
                                           </div>
-                                        </div>
-                                      )}
-                                    </div>
-                                  );
-                                })}
-                              <Button
-                                type="button"
-                                variant="tertiary"
-                                onClick={handleRefuseWholeOrder}
-                              >
-                                {t("Refuse the whole order")}
-                              </Button>
-                            </div>
-                          </div>
-
-                          {lines
-                            .filter((l) => !l.removed)
-                            .some(
-                              (l) =>
-                                (parseFloat(refuseQtyMap[l.id] ?? "0") || 0) >
-                                0,
-                            ) &&
-                            lines
-                              .filter((l) => !l.removed)
-                              .some((l) => {
-                                const isWeight = isWeightOnlyUnit(l.unit);
-                                const qtyNum =
-                                  typeof l.qty === "string"
-                                    ? parseFloat(l.qty) || 0
-                                    : (l.qty ?? 0);
-                                const maxVal = isWeight
-                                  ? Number(l.weight) || Number(l.qty) || 0
-                                  : ((l.id ? sendingQtyMap[l.id] : undefined) ??
-                                    qtyNum);
-                                return (
-                                  (parseFloat(refuseQtyMap[l.id] ?? "0") || 0) <
-                                  maxVal
-                                );
-                              }) &&
-                            handoffMode !== "third" &&
-                            (!receiverName.trim() ||
-                              (proofRequired &&
-                                (recvPhotos.length === 0 ||
-                                  signedPhotos.length === 0))) && (
-                              <div className={styles.refusalWarning}>
-                                {t(
-                                  "The customer kept some items — add the delivery proof above (received-by name, photos, and the signed/amended invoice) for those.",
-                                )}
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                <Button
+                                  type="button"
+                                  variant="tertiary"
+                                  onClick={handleRefuseWholeOrder}
+                                >
+                                  {t("Refuse the whole order")}
+                                </Button>
                               </div>
-                            )}
+                            </div>
 
+                            {lines
+                              .filter((l) => !l.removed)
+                              .some(
+                                (l) =>
+                                  (parseFloat(refuseQtyMap[l.id] ?? "0") || 0) >
+                                  0,
+                              ) &&
+                              lines
+                                .filter((l) => !l.removed)
+                                .some((l) => {
+                                  const isWeight = isWeightOnlyUnit(l.unit);
+                                  const qtyNum =
+                                    typeof l.qty === "string"
+                                      ? parseFloat(l.qty) || 0
+                                      : (l.qty ?? 0);
+                                  const maxVal = isWeight
+                                    ? Number(l.weight) || Number(l.qty) || 0
+                                    : ((l.id
+                                        ? sendingQtyMap[l.id]
+                                        : undefined) ?? qtyNum);
+                                  return (
+                                    (parseFloat(refuseQtyMap[l.id] ?? "0") ||
+                                      0) < maxVal
+                                  );
+                                }) &&
+                              handoffMode !== "third" &&
+                              (!receiverName.trim() ||
+                                (proofRequired &&
+                                  (recvPhotos.length === 0 ||
+                                    signedPhotos.length === 0))) && (
+                                <div className={styles.refusalWarning}>
+                                  {t(
+                                    "The customer kept some items — add the delivery proof above (received-by name, photos, and the signed/amended invoice) for those.",
+                                  )}
+                                </div>
+                              )}
+
+                            <div className={styles.cardActions}>
+                              <div className={styles.actionsRow}>
+                                <Button
+                                  type="button"
+                                  variant="primary"
+                                  tone="error"
+                                  icon="returned"
+                                  onClick={handleConfirmRefusal}
+                                  disabled={
+                                    submittingRefusal ||
+                                    !lines
+                                      .filter((l) => !l.removed)
+                                      .some(
+                                        (l) =>
+                                          (parseFloat(
+                                            refuseQtyMap[l.id] ?? "0",
+                                          ) || 0) > 0,
+                                      ) ||
+                                    // Ported from the prototype's own
+                                    // `refuseReady` (Dev-OrderDetail.jsx:860):
+                                    // if the customer kept ANYTHING (a
+                                    // partial refusal), the same delivery
+                                    // proof "Mark delivered" requires is
+                                    // needed here too — minus the COD check,
+                                    // which "Mark delivered" doesn't gate on
+                                    // either (it's enforced by an alert on
+                                    // click there, not the disabled state).
+                                    // A full refusal (nothing kept) or a
+                                    // 3rd-party hand-off needs none of this.
+                                    (handoffMode !== "third" &&
+                                      lines
+                                        .filter((l) => !l.removed)
+                                        .some((l) => {
+                                          const isWeight = isWeightOnlyUnit(
+                                            l.unit,
+                                          );
+                                          const qtyNum =
+                                            typeof l.qty === "string"
+                                              ? parseFloat(l.qty) || 0
+                                              : (l.qty ?? 0);
+                                          const maxVal = isWeight
+                                            ? Number(l.weight) ||
+                                              Number(l.qty) ||
+                                              0
+                                            : ((l.id
+                                                ? sendingQtyMap[l.id]
+                                                : undefined) ?? qtyNum);
+                                          return (
+                                            (parseFloat(
+                                              refuseQtyMap[l.id] ?? "0",
+                                            ) || 0) < maxVal
+                                          );
+                                        }) &&
+                                      (!receiverName.trim() ||
+                                        (proofRequired &&
+                                          (recvPhotos.length === 0 ||
+                                            signedPhotos.length === 0))))
+                                  }
+                                >
+                                  {submittingRefusal
+                                    ? t("Saving…")
+                                    : t("Confirm return")}
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="secondary"
+                                  onClick={() => {
+                                    setShowRefuseForm(false);
+                                    setRefuseQtyMap({});
+                                    setRefuseReasonsMap({});
+                                    setRefusePhotosMap({});
+                                  }}
+                                  disabled={submittingRefusal}
+                                >
+                                  {t("Cancel")}
+                                </Button>
+                              </div>
+                            </div>
+                          </Card>
+                        ) : (
                           <div className={styles.cardActions}>
+                            <Button
+                              type="button"
+                              variant="primary"
+                              buttonStyle="fullWidth"
+                              icon="tick"
+                              onClick={handleConfirmDelivery}
+                              disabled={
+                                submittingProof ||
+                                (handoffMode !== "third" &&
+                                  !receiverName.trim()) ||
+                                (handoffMode !== "third" &&
+                                  proofRequired &&
+                                  (recvPhotos.length === 0 ||
+                                    signedPhotos.length === 0))
+                              }
+                            >
+                              {submittingProof
+                                ? t("Saving…")
+                                : handoffMode === "pickup"
+                                  ? t("Mark picked up")
+                                  : handoffMode === "third"
+                                    ? t("Mark handed over")
+                                    : t("Mark delivered")}
+                            </Button>
                             <div className={styles.actionsRow}>
                               <Button
                                 type="button"
-                                variant="primary"
-                                tone="error"
-                                icon="returned"
-                                onClick={handleConfirmRefusal}
-                                disabled={
-                                  submittingRefusal ||
-                                  !lines
-                                    .filter((l) => !l.removed)
-                                    .some(
-                                      (l) =>
-                                        (parseFloat(
-                                          refuseQtyMap[l.id] ?? "0",
-                                        ) || 0) > 0,
-                                    ) ||
-                                  // Ported from the prototype's own
-                                  // `refuseReady` (Dev-OrderDetail.jsx:860):
-                                  // if the customer kept ANYTHING (a
-                                  // partial refusal), the same delivery
-                                  // proof "Mark delivered" requires is
-                                  // needed here too — minus the COD check,
-                                  // which "Mark delivered" doesn't gate on
-                                  // either (it's enforced by an alert on
-                                  // click there, not the disabled state).
-                                  // A full refusal (nothing kept) or a
-                                  // 3rd-party hand-off needs none of this.
-                                  (handoffMode !== "third" &&
-                                    lines
-                                      .filter((l) => !l.removed)
-                                      .some((l) => {
-                                        const isWeight = isWeightOnlyUnit(
-                                          l.unit,
-                                        );
-                                        const qtyNum =
-                                          typeof l.qty === "string"
-                                            ? parseFloat(l.qty) || 0
-                                            : (l.qty ?? 0);
-                                        const maxVal = isWeight
-                                          ? Number(l.weight) ||
-                                            Number(l.qty) ||
-                                            0
-                                          : ((l.id
-                                              ? sendingQtyMap[l.id]
-                                              : undefined) ?? qtyNum);
-                                        return (
-                                          (parseFloat(
-                                            refuseQtyMap[l.id] ?? "0",
-                                          ) || 0) < maxVal
-                                        );
-                                      }) &&
-                                    (!receiverName.trim() ||
-                                      (proofRequired &&
-                                        (recvPhotos.length === 0 ||
-                                          signedPhotos.length === 0))))
-                                }
-                              >
-                                {submittingRefusal
-                                  ? t("Saving…")
-                                  : t("Confirm return")}
-                              </Button>
-                              <Button
-                                type="button"
                                 variant="secondary"
-                                onClick={() => {
-                                  setShowRefuseForm(false);
-                                  setRefuseQtyMap({});
-                                  setRefuseReasonsMap({});
-                                  setRefusePhotosMap({});
-                                }}
-                                disabled={submittingRefusal}
+                                tone="error"
+                                buttonStyle="fullWidth"
+                                icon="returned"
+                                onClick={openRefuseForm}
+                                disabled={submittingProof}
                               >
-                                {t("Cancel")}
+                                {t("Customer refused / returned")}
                               </Button>
+                              {handoffMode !== "third" && (
+                                <Button
+                                  type="button"
+                                  variant="secondary"
+                                  buttonStyle="fullWidth"
+                                  icon="cancelled"
+                                  onClick={handleDeliveryFailed}
+                                  disabled={submittingProof || choosingMode}
+                                >
+                                  {t("Delivery failed — bring back & retry")}
+                                </Button>
+                              )}
                             </div>
                           </div>
-                        </Card>
-                      ) : (
-                        <div className={styles.cardActions}>
-                          <Button
-                            type="button"
-                            variant="primary"
-                            buttonStyle="fullWidth"
-                            icon="tick"
-                            onClick={handleConfirmDelivery}
-                            disabled={
-                              submittingProof ||
-                              (handoffMode !== "third" &&
-                                !receiverName.trim()) ||
-                              (handoffMode !== "third" &&
-                                proofRequired &&
-                                (recvPhotos.length === 0 ||
-                                  signedPhotos.length === 0))
-                            }
-                          >
-                            {submittingProof
-                              ? t("Saving…")
-                              : handoffMode === "pickup"
-                                ? t("Mark picked up")
-                                : handoffMode === "third"
-                                  ? t("Mark handed over")
-                                  : t("Mark delivered")}
-                          </Button>
-                          <div className={styles.actionsRow}>
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              tone="error"
-                              buttonStyle="fullWidth"
-                              icon="returned"
-                              onClick={openRefuseForm}
-                              disabled={submittingProof}
-                            >
-                              {t("Customer refused / returned")}
-                            </Button>
-                            {handoffMode !== "third" && (
-                              <Button
-                                type="button"
-                                variant="secondary"
-                                buttonStyle="fullWidth"
-                                icon="cancelled"
-                                onClick={handleDeliveryFailed}
-                                disabled={submittingProof || choosingMode}
-                              >
-                                {t("Delivery failed — bring back & retry")}
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                  </div>
-                </Card>
-              )}
+                        ))}
+                    </div>
+                  </Card>
+                )}
 
-              {/* Confirming a row keeps it in this same card as a
+                {/* Confirming a row keeps it in this same card as a
                   done+Undo row instead of removing it — matches the
                   prototype's own in-place pending→done pattern
                   (`Dev-OrderDetail.jsx:1591-1610`, `1584-1589`) rather than
@@ -8246,439 +8291,445 @@ export function OrderDetail() {
                   resolved, it reads "Follow-ups" instead — same card,
                   never vanishes while there's an Undo worth keeping
                   available. */}
-              {(showCodRow ||
-                showCodDone ||
-                showDocsRow ||
-                showDocsDone ||
-                showTermsRow ||
-                showTermsDone) && (
-                <Card
-                  className={styles.warningCard}
-                  style={{
-                    borderColor:
-                      showCodRow || showDocsRow || showTermsRow
-                        ? undefined
-                        : "var(--border-default)",
-                  }}
-                >
-                  <div className={styles.headerRowLeft}>
-                    <h3 className={styles.sectionTitle}>
-                      {showCodRow || showDocsRow || showTermsRow
-                        ? t("Follow-ups pending")
-                        : t("Follow-ups")}
-                    </h3>
-                  </div>
-                  <div className={styles.cardListColumn}></div>
-                  {showCodRow && (
-                    <div className={styles.followUpRow}>
-                      <Icon
-                        name="cash"
-                        size={24}
-                        className={styles.followUpIcon}
-                      />
-                      <div className={styles.followUpMain}>
-                        <span className={styles.fieldLabel}>
-                          {t("COD cash awaiting office reconcile")}
-                        </span>
-                        <span className={styles.secondary}>
-                          {currency.format(codReconcileAmount)}{" "}
-                          {t("collected by courier")}
-                        </span>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="md"
-                        onClick={handleReconcileCOD}
-                        disabled={reconcilingCod}
-                        style={{ width: "160px" }}
-                      >
-                        {reconcilingCod ? t("Saving…") : t("Confirm received")}
-                      </Button>
+                {(showCodRow ||
+                  showCodDone ||
+                  showDocsRow ||
+                  showDocsDone ||
+                  showTermsRow ||
+                  showTermsDone) && (
+                  <Card
+                    className={styles.warningCard}
+                    style={{
+                      borderColor:
+                        showCodRow || showDocsRow || showTermsRow
+                          ? undefined
+                          : "var(--border-default)",
+                    }}
+                  >
+                    <div className={styles.headerRowLeft}>
+                      <h3 className={styles.sectionTitle}>
+                        {showCodRow || showDocsRow || showTermsRow
+                          ? t("Follow-ups pending")
+                          : t("Follow-ups")}
+                      </h3>
                     </div>
-                  )}
-                  {showCodDone && (
-                    <div className={styles.followUpRow}>
-                      <Icon
-                        name="check"
-                        size={24}
-                        className={styles.followUpIcon}
-                        style={{ color: "var(--accent-primary)" }}
-                      />
-                      <div className={styles.followUpMain}>
-                        <span className={styles.fieldLabel}>
-                          {t("Cash reconciled")}
-                        </span>
-                        <span className={styles.secondary}>
-                          {order.cod_received_at
-                            ? `${formatDate(order.cod_received_at)}`
-                            : ""}
-                        </span>
-                      </div>
-                      {auth.can("reconcileCOD") && (
+                    <div className={styles.cardListColumn}></div>
+                    {showCodRow && (
+                      <div className={styles.followUpRow}>
+                        <Icon
+                          name="cash"
+                          size={24}
+                          className={styles.followUpIcon}
+                        />
+                        <div className={styles.followUpMain}>
+                          <span className={styles.fieldLabel}>
+                            {t("COD cash awaiting office reconcile")}
+                          </span>
+                          <span className={styles.secondary}>
+                            {currency.format(codReconcileAmount)}{" "}
+                            {t("collected by courier")}
+                          </span>
+                        </div>
                         <Button
                           type="button"
-                          variant="tertiary"
-                          icon="undo"
-                          onClick={handleUndoCOD}
+                          variant="secondary"
+                          size="md"
+                          onClick={handleReconcileCOD}
+                          disabled={reconcilingCod}
+                          style={{ width: "160px" }}
                         >
-                          {t("Undo")}
+                          {reconcilingCod
+                            ? t("Saving…")
+                            : t("Confirm received")}
                         </Button>
-                      )}
-                    </div>
-                  )}
-                  {showDocsRow && (
-                    <div className={styles.followUpRow}>
-                      <Icon
-                        name="fileDoc"
-                        size={24}
-                        className={styles.followUpIcon}
-                      />
-                      <div className={styles.followUpMain}>
-                        <span className={styles.fieldLabel}>
-                          {t("Signed DO & SI not yet returned")}
-                        </span>
-                        <span className={styles.secondary}>
-                          {t("Confirm the signed docs are back and filed")}
-                        </span>
                       </div>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="md"
-                        style={{ width: "160px" }}
-                        onClick={handleConfirmDocsReturned}
-                      >
-                        {t("Mark returned")}
-                      </Button>
-                    </div>
-                  )}
-                  {showDocsDone && (
-                    <div className={styles.followUpRow}>
-                      <Icon
-                        name="check"
-                        size={24}
-                        className={styles.followUpIcon}
-                        style={{ color: "var(--accent-primary)" }}
-                      />
-                      <div className={styles.followUpMain}>
-                        <span className={styles.fieldLabel}>
-                          {t("Signed DO & SI returned")}
-                        </span>
-                        <span className={styles.secondary}>
-                          {/* No `docs_returned_at` timestamp field exists —
+                    )}
+                    {showCodDone && (
+                      <div className={styles.followUpRow}>
+                        <Icon
+                          name="check"
+                          size={24}
+                          className={styles.followUpIcon}
+                          style={{ color: "var(--accent-primary)" }}
+                        />
+                        <div className={styles.followUpMain}>
+                          <span className={styles.fieldLabel}>
+                            {t("Cash reconciled")}
+                          </span>
+                          <span className={styles.secondary}>
+                            {order.cod_received_at
+                              ? `${formatDate(order.cod_received_at)}`
+                              : ""}
+                          </span>
+                        </div>
+                        {auth.can("reconcileCOD") && (
+                          <Button
+                            type="button"
+                            variant="tertiary"
+                            icon="undo"
+                            onClick={handleUndoCOD}
+                          >
+                            {t("Undo")}
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                    {showDocsRow && (
+                      <div className={styles.followUpRow}>
+                        <Icon
+                          name="fileDoc"
+                          size={24}
+                          className={styles.followUpIcon}
+                        />
+                        <div className={styles.followUpMain}>
+                          <span className={styles.fieldLabel}>
+                            {t("Signed DO & SI not yet returned")}
+                          </span>
+                          <span className={styles.secondary}>
+                            {t("Confirm the signed docs are back and filed")}
+                          </span>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="md"
+                          style={{ width: "160px" }}
+                          onClick={handleConfirmDocsReturned}
+                        >
+                          {t("Mark returned")}
+                        </Button>
+                      </div>
+                    )}
+                    {showDocsDone && (
+                      <div className={styles.followUpRow}>
+                        <Icon
+                          name="check"
+                          size={24}
+                          className={styles.followUpIcon}
+                          style={{ color: "var(--accent-primary)" }}
+                        />
+                        <div className={styles.followUpMain}>
+                          <span className={styles.fieldLabel}>
+                            {t("Signed DO & SI returned")}
+                          </span>
+                          <span className={styles.secondary}>
+                            {/* No `docs_returned_at` timestamp field exists —
                               derived from the matching history entry
                               instead of adding one, same trick used
                               earlier today for the failed-attempt
                               banner's reason/timestamp. */}
-                          {(() => {
-                            const at = [...history]
-                              .reverse()
-                              .find(
-                                (h) => h.what === "DO/SI returned & filed",
-                              )?.at;
-                            return at ? `${formatDate(at)}` : "";
-                          })()}
-                        </span>
+                            {(() => {
+                              const at = [...history]
+                                .reverse()
+                                .find(
+                                  (h) => h.what === "DO/SI returned & filed",
+                                )?.at;
+                              return at ? `${formatDate(at)}` : "";
+                            })()}
+                          </span>
+                        </div>
+                        {canConfirmDocsReturned && (
+                          <Button
+                            type="button"
+                            variant="tertiary"
+                            icon="undo"
+                            onClick={handleUndoDocsReturned}
+                          >
+                            {t("Undo")}
+                          </Button>
+                        )}
                       </div>
-                      {canConfirmDocsReturned && (
-                        <Button
-                          type="button"
-                          variant="tertiary"
-                          icon="undo"
-                          onClick={handleUndoDocsReturned}
-                        >
-                          {t("Undo")}
-                        </Button>
-                      )}
-                    </div>
-                  )}
-                  {showTermsRow && (
-                    <div className={styles.followUpRow}>
-                      <Icon
-                        name="wallet"
-                        size={24}
-                        className={styles.followUpIcon}
-                      />
-                      <div className={styles.followUpMain}>
-                        <span className={styles.fieldLabel}>
-                          {t("Terms invoice — payment not yet received")}
-                        </span>
-                        <span className={styles.secondary}>
-                          {order.payment_due_date
-                            ? `${t("Due")} ${formatDate(order.payment_due_date)}`
-                            : t("No due date on file")}
-                        </span>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="md"
-                        style={{ width: "160px" }}
-                        onClick={handleTermsPaymentReceived}
-                      >
-                        {t("Payment received")}
-                      </Button>
-                    </div>
-                  )}
-                  {showTermsDone && (
-                    <div className={styles.followUpRow}>
-                      <Icon
-                        name="check"
-                        size={24}
-                        className={styles.followUpIcon}
-                        style={{ color: "var(--accent-primary)" }}
-                      />
-                      <div className={styles.followUpMain}>
-                        <span className={styles.fieldLabel}>
-                          {t("Terms payment received")}
-                        </span>
-                        <span className={styles.secondary}>
-                          {order.payment_paid_at
-                            ? `${formatDate(order.payment_paid_at)}`
-                            : ""}
-                        </span>
-                      </div>
-                      {canApproveFinance && (
-                        <Button
-                          type="button"
-                          variant="tertiary"
-                          icon="undo"
-                          onClick={handleUndoTermsPayment}
-                        >
-                          {t("Undo")}
-                        </Button>
-                      )}
-                    </div>
-                  )}
-                </Card>
-              )}
-
-              {showFinanceGateForm && (
-                <Card>
-                  <div className={styles.headerRowLeft}>
-                    <h3 className={styles.sectionTitle}>{t("Finance gate")}</h3>
-                    {orderIsPriced ? (
-                      <span className={styles.fieldLabel}>
-                        {currency.format(orderTotal)}
-                      </span>
-                    ) : (
-                      <span className={styles.secondary}>
-                        {t("Priced in Accurate")}
-                      </span>
                     )}
-                  </div>
-
-                  {showCreditBlock && (
-                    <Card
-                      style={{
-                        marginBottom: "var(--space-md)",
-                        borderColor: overCreditLimit
-                          ? "var(--state-error)"
-                          : "var(--border-default)",
-                      }}
-                    >
-                      <div className={styles.proofRow}>
-                        <span className={styles.secondary}>
-                          {t("Account exposure (in flight)")}
-                        </span>
-                        <span className={styles.fieldLabel}>
-                          {currency.format(customerExposure)}
-                        </span>
-                      </div>
-                      <div className={styles.proofRow}>
-                        <span className={styles.secondary}>
-                          {t("Credit limit")}
-                        </span>
-                        <span className={styles.fieldLabel}>
-                          {creditLimitNum
-                            ? currency.format(creditLimitNum)
-                            : "—"}
-                        </span>
-                      </div>
-                      {overCreditLimit && (
-                        <p
-                          className={styles.secondary}
-                          style={{
-                            color: "var(--state-error)",
-                            marginTop: "var(--space-xs)",
-                            marginBottom: 0,
-                          }}
-                        >
-                          ⚠{" "}
-                          {canOverrideCreditLimit
-                            ? t(
-                                "Over credit limit — confirm with the owner before clearing.",
-                              )
-                            : t(
-                                "Over credit limit — only Finance or the owner can clear this.",
-                              )}
-                        </p>
-                      )}
-                    </Card>
-                  )}
-
-                  <div className={styles.financeGateRow}>
-                    <label className={styles.financeGateField}>
-                      <span className={styles.financeFieldLabel}>
-                        {t("Method")}
-                      </span>
-                      <select
-                        className={styles.editSelect}
-                        value={financeMethod}
-                        onChange={(e) => {
-                          setFinanceMethod(
-                            e.target.value as "transfer" | "cash",
-                          );
-                          setFinanceVerified(false);
-                        }}
-                      >
-                        <option value="transfer">{t("Transfer")}</option>
-                        <option value="cash">{t("Cash")}</option>
-                      </select>
-                    </label>
-                    <label className={styles.financeGateField}>
-                      <span className={styles.financeFieldLabel}>
-                        {t("Timing")}
-                      </span>
-                      <select
-                        className={styles.editSelect}
-                        value={financeTiming}
-                        onChange={(e) => {
-                          setFinanceTiming(
-                            e.target.value as "upfront" | "terms",
-                          );
-                          setFinanceVerified(false);
-                        }}
-                      >
-                        <option value="upfront">
-                          {t("Upfront (pay first)")}
-                        </option>
-                        <option value="terms">{t("Terms")}</option>
-                      </select>
-                    </label>
-                  </div>
-
-                  <label className={styles.financeGateField}>
-                    <span className={styles.financeFieldLabel}>
-                      {t("Amount received (Rp, optional)")}
-                    </span>
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      className={styles.editInput}
-                      value={financeAmount}
-                      placeholder={orderIsPriced ? String(orderTotal) : ""}
-                      onChange={(e) => setFinanceAmount(e.target.value)}
-                    />
-                  </label>
-
-                  {financeMethod === "transfer" && (
-                    <label className={styles.financeGateField}>
-                      <span className={styles.financeFieldLabel}>
-                        {t("Bank reference (optional)")}
-                      </span>
-                      <input
-                        type="text"
-                        className={styles.editInput}
-                        value={financeBankRef}
-                        onChange={(e) => setFinanceBankRef(e.target.value)}
-                      />
-                    </label>
-                  )}
-
-                  <div className={styles.financeGateActions}>
-                    {!isCodOrder &&
-                      financeTiming === "upfront" &&
-                      !financeVerified && (
+                    {showTermsRow && (
+                      <div className={styles.followUpRow}>
+                        <Icon
+                          name="wallet"
+                          size={24}
+                          className={styles.followUpIcon}
+                        />
+                        <div className={styles.followUpMain}>
+                          <span className={styles.fieldLabel}>
+                            {t("Terms invoice — payment not yet received")}
+                          </span>
+                          <span className={styles.secondary}>
+                            {order.payment_due_date
+                              ? `${t("Due")} ${formatDate(order.payment_due_date)}`
+                              : t("No due date on file")}
+                          </span>
+                        </div>
                         <Button
                           type="button"
                           variant="secondary"
-                          buttonStyle="fullWidth"
-                          icon={
-                            financeMethod === "transfer"
-                              ? "paymentSuccess"
-                              : "cash"
-                          }
-                          onClick={() => setFinanceVerified(true)}
+                          size="md"
+                          style={{ width: "160px" }}
+                          onClick={handleTermsPaymentReceived}
                         >
-                          {financeMethod === "transfer"
-                            ? t("I verify it in our bank")
-                            : t("Cash received")}
+                          {t("Payment received")}
                         </Button>
-                      )}
-                    {!isCodOrder &&
-                      financeTiming === "upfront" &&
-                      financeVerified && (
-                        <div className={styles.financeVerifiedChip}>
-                          <Icon name="check" size={16} />
-                          {t("Payment confirmed")}
+                      </div>
+                    )}
+                    {showTermsDone && (
+                      <div className={styles.followUpRow}>
+                        <Icon
+                          name="check"
+                          size={24}
+                          className={styles.followUpIcon}
+                          style={{ color: "var(--accent-primary)" }}
+                        />
+                        <div className={styles.followUpMain}>
+                          <span className={styles.fieldLabel}>
+                            {t("Terms payment received")}
+                          </span>
+                          <span className={styles.secondary}>
+                            {order.payment_paid_at
+                              ? `${formatDate(order.payment_paid_at)}`
+                              : ""}
+                          </span>
                         </div>
-                      )}
+                        {canApproveFinance && (
+                          <Button
+                            type="button"
+                            variant="tertiary"
+                            icon="undo"
+                            onClick={handleUndoTermsPayment}
+                          >
+                            {t("Undo")}
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                  </Card>
+                )}
 
+                {showFinanceGateForm && (
+                  <Card>
+                    <div className={styles.headerRowLeft}>
+                      <h3 className={styles.sectionTitle}>
+                        {t("Finance gate")}
+                      </h3>
+                      {orderIsPriced ? (
+                        <span className={styles.fieldLabel}>
+                          {currency.format(orderTotal)}
+                        </span>
+                      ) : (
+                        <span className={styles.secondary}>
+                          {t("Priced in Accurate")}
+                        </span>
+                      )}
+                    </div>
+
+                    {showCreditBlock && (
+                      <Card
+                        style={{
+                          marginBottom: "var(--space-md)",
+                          borderColor: overCreditLimit
+                            ? "var(--state-error)"
+                            : "var(--border-default)",
+                        }}
+                      >
+                        <div className={styles.proofRow}>
+                          <span className={styles.secondary}>
+                            {t("Account exposure (in flight)")}
+                          </span>
+                          <span className={styles.fieldLabel}>
+                            {currency.format(customerExposure)}
+                          </span>
+                        </div>
+                        <div className={styles.proofRow}>
+                          <span className={styles.secondary}>
+                            {t("Credit limit")}
+                          </span>
+                          <span className={styles.fieldLabel}>
+                            {creditLimitNum
+                              ? currency.format(creditLimitNum)
+                              : "—"}
+                          </span>
+                        </div>
+                        {overCreditLimit && (
+                          <p
+                            className={styles.secondary}
+                            style={{
+                              color: "var(--state-error)",
+                              marginTop: "var(--space-xs)",
+                              marginBottom: 0,
+                            }}
+                          >
+                            ⚠{" "}
+                            {canOverrideCreditLimit
+                              ? t(
+                                  "Over credit limit — confirm with the owner before clearing.",
+                                )
+                              : t(
+                                  "Over credit limit — only Finance or the owner can clear this.",
+                                )}
+                          </p>
+                        )}
+                      </Card>
+                    )}
+
+                    <div className={styles.financeGateRow}>
+                      <label className={styles.financeGateField}>
+                        <span className={styles.financeFieldLabel}>
+                          {t("Method")}
+                        </span>
+                        <select
+                          className={styles.editSelect}
+                          value={financeMethod}
+                          onChange={(e) => {
+                            setFinanceMethod(
+                              e.target.value as "transfer" | "cash",
+                            );
+                            setFinanceVerified(false);
+                          }}
+                        >
+                          <option value="transfer">{t("Transfer")}</option>
+                          <option value="cash">{t("Cash")}</option>
+                        </select>
+                      </label>
+                      <label className={styles.financeGateField}>
+                        <span className={styles.financeFieldLabel}>
+                          {t("Timing")}
+                        </span>
+                        <select
+                          className={styles.editSelect}
+                          value={financeTiming}
+                          onChange={(e) => {
+                            setFinanceTiming(
+                              e.target.value as "upfront" | "terms",
+                            );
+                            setFinanceVerified(false);
+                          }}
+                        >
+                          <option value="upfront">
+                            {t("Upfront (pay first)")}
+                          </option>
+                          <option value="terms">{t("Terms")}</option>
+                        </select>
+                      </label>
+                    </div>
+
+                    <label className={styles.financeGateField}>
+                      <span className={styles.financeFieldLabel}>
+                        {t("Amount received (Rp, optional)")}
+                      </span>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        className={styles.editInput}
+                        value={financeAmount}
+                        placeholder={orderIsPriced ? String(orderTotal) : ""}
+                        onChange={(e) => setFinanceAmount(e.target.value)}
+                      />
+                    </label>
+
+                    {financeMethod === "transfer" && (
+                      <label className={styles.financeGateField}>
+                        <span className={styles.financeFieldLabel}>
+                          {t("Bank reference (optional)")}
+                        </span>
+                        <input
+                          type="text"
+                          className={styles.editInput}
+                          value={financeBankRef}
+                          onChange={(e) => setFinanceBankRef(e.target.value)}
+                        />
+                      </label>
+                    )}
+
+                    <div className={styles.financeGateActions}>
+                      {!isCodOrder &&
+                        financeTiming === "upfront" &&
+                        !financeVerified && (
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            buttonStyle="fullWidth"
+                            icon={
+                              financeMethod === "transfer"
+                                ? "paymentSuccess"
+                                : "cash"
+                            }
+                            onClick={() => setFinanceVerified(true)}
+                          >
+                            {financeMethod === "transfer"
+                              ? t("I verify it in our bank")
+                              : t("Cash received")}
+                          </Button>
+                        )}
+                      {!isCodOrder &&
+                        financeTiming === "upfront" &&
+                        financeVerified && (
+                          <div className={styles.financeVerifiedChip}>
+                            <Icon name="check" size={16} />
+                            {t("Payment confirmed")}
+                          </div>
+                        )}
+
+                      <Button
+                        type="button"
+                        variant="primary"
+                        buttonStyle="fullWidth"
+                        icon="check"
+                        disabled={
+                          approvingFinance ||
+                          (!isCodOrder &&
+                            financeTiming === "upfront" &&
+                            !financeVerified) ||
+                          (overCreditLimit && !canOverrideCreditLimit)
+                        }
+                        onClick={handleApproveFinance}
+                      >
+                        {approvingFinance
+                          ? t("Saving…")
+                          : t("Clear — OK to proceed")}
+                      </Button>
+                    </div>
+                  </Card>
+                )}
+
+                {canUndo && order.undo_snapshot && (
+                  <div className={styles.undoRow}>
+                    <div className={styles.left}>
+                      <Icon
+                        name="infoCircle"
+                        size={16}
+                        style={{ color: "var(--text-secondary)" }}
+                      />
+                      <p className={styles.secondary}>
+                        {t("Pressed wrongly?")}
+                      </p>
+                    </div>
                     <Button
                       type="button"
-                      variant="primary"
-                      buttonStyle="fullWidth"
-                      icon="check"
-                      disabled={
-                        approvingFinance ||
-                        (!isCodOrder &&
-                          financeTiming === "upfront" &&
-                          !financeVerified) ||
-                        (overCreditLimit && !canOverrideCreditLimit)
-                      }
-                      onClick={handleApproveFinance}
+                      variant="tertiary"
+                      className={styles.inlineButton}
+                      onClick={handleUndo}
                     >
-                      {approvingFinance
-                        ? t("Saving…")
-                        : t("Clear — OK to proceed")}
+                      <Icon name="undo" size={16} />
+                      {t("Undo — back to")}{" "}
+                      {t(
+                        STAGE_LABELS[
+                          order.undo_snapshot
+                            .prevStage as keyof typeof STAGE_LABELS
+                        ] ?? order.undo_snapshot.prevStage,
+                      )}
                     </Button>
                   </div>
-                </Card>
-              )}
-
-              {canUndo && order.undo_snapshot && (
-                <div className={styles.undoRow}>
-                  <div className={styles.left}>
-                    <Icon
-                      name="infoCircle"
-                      size={16}
-                      style={{ color: "var(--text-secondary)" }}
-                    />
-                    <p className={styles.secondary}>{t("Pressed wrongly?")}</p>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="tertiary"
-                    className={styles.inlineButton}
-                    onClick={handleUndo}
-                  >
-                    <Icon name="undo" size={16} />
-                    {t("Undo — back to")}{" "}
-                    {t(
-                      STAGE_LABELS[
-                        order.undo_snapshot
-                          .prevStage as keyof typeof STAGE_LABELS
-                      ] ?? order.undo_snapshot.prevStage,
-                    )}
-                  </Button>
-                </div>
-              )}
-
-              {canTrackCourier &&
-                handoffMode === "delivery" &&
-                order.taken_by && (
-                  <CourierLiveLocation
-                    courierId={order.taken_by}
-                    courierName={displayName(order.taken_by)}
-                    pickupGeo={order.pickup_geo}
-                  />
                 )}
-            </div>
-          )}
 
-          {/* Incoming Return — the replacement was ordered before the goods
+                {canTrackCourier &&
+                  handoffMode === "delivery" &&
+                  order.taken_by && (
+                    <CourierLiveLocation
+                      courierId={order.taken_by}
+                      courierName={displayName(order.taken_by)}
+                      pickupGeo={order.pickup_geo}
+                    />
+                  )}
+              </div>
+            )}
+
+            {/* Incoming Return — the replacement was ordered before the goods
               came back; the warehouse receives + verifies them here, in
               parallel, whatever stage the replacement is now at. Same
               visual chrome as the Customer Return card above — this is the
@@ -8698,845 +8749,868 @@ export function OrderDetail() {
               This is a Warehouse-internal operational note, not something
               Courier/Admin/Finance/Production ever see — reported directly
               (Courier was seeing this card for order 260821023). */}
-          {!isReturned && order.return_inbound && canReceiveReturn && (
-            <Card className={styles.errorCard}>
-              <div className={styles.headerRow}>
-                <h3 className={styles.sectionTitle}>
-                  Incoming return — receive & verify
-                </h3>
-              </div>
-              <div className={styles.cardContent}>
-                <div className={styles.cardListColumn}>
-                  <p>
-                    {t(
-                      "The replacement is already in the pipeline — weigh/verify the returned goods when they arrive.",
-                    )}
-                  </p>
+            {!isReturned && order.return_inbound && canReceiveReturn && (
+              <Card className={styles.errorCard}>
+                <div className={styles.headerRow}>
+                  <h3 className={styles.sectionTitle}>
+                    Incoming return — receive & verify
+                  </h3>
                 </div>
-                {lines
-                  .filter(
-                    (l) => Number(l.inbound_return) > 0 || l.return_verified,
-                  )
-                  .map((l) => (
-                    <ReturnLineBox
-                      key={l.id}
-                      line={l}
-                      pendingAmount={Number(l.inbound_return)}
-                      returnedReason={l.returned_reason}
-                      orderReturnReceived={order.return_received}
-                      canReceiveReturn={canReceiveReturn}
-                      confirming={confirmingInbound}
-                      reopening={undoingInbound}
-                      onConfirm={handleConfirmInboundLine}
-                      onReopen={handleReopenInboundLine}
-                      receiveQtyValue={receiveQtyMap[l.id]}
-                      onReceiveQtyChange={(lineId, value) =>
-                        setReceiveQtyMap((prev) => ({
-                          ...prev,
-                          [lineId]: value,
-                        }))
-                      }
-                      weightValue={verifyWeightMap[l.id]}
-                      onWeightChange={(lineId, value) =>
-                        setVerifyWeightMap((prev) => ({
-                          ...prev,
-                          [lineId]: value,
-                        }))
-                      }
-                      refusalPhotos={refusePhotosMap[l.id] ?? []}
-                      photos={receivePhotosMap[l.id] ?? []}
-                      onUploadPhoto={handleUploadReceiveWeighPhoto}
-                      onRemovePhoto={handleRemoveReceiveWeighPhoto}
-                      onOpenImage={openImageGallery}
-                      t={t}
-                    />
-                  ))}
-              </div>
-              <p className={styles.infoHint} style={{ marginTop: "0.75rem" }}>
-                {t(
-                  "Waiting for an admin to update Accurate & decide — this can run before the goods arrive.",
-                )}
-              </p>
-            </Card>
-          )}
-          {!isReturned &&
-            !order.return_inbound &&
-            order.return_received &&
-            lines.some((l) => Number(l.returned) > 0) &&
-            !isDelivered &&
-            !isCancelled && (
-              <div className={styles.undoRow}>
-                <div className={styles.left}>
-                  <Icon name="infoCircle" />
-                  {t("Incoming return received")}
-                  {order.return_received_at
-                    ? ` · ${formatClock(order.return_received_at)}`
-                    : ""}
+                <div className={styles.cardContent}>
+                  <div className={styles.cardListColumn}>
+                    <p>
+                      {t(
+                        "The replacement is already in the pipeline — weigh/verify the returned goods when they arrive.",
+                      )}
+                    </p>
+                  </div>
+                  {lines
+                    .filter(
+                      (l) => Number(l.inbound_return) > 0 || l.return_verified,
+                    )
+                    .map((l) => (
+                      <ReturnLineBox
+                        key={l.id}
+                        line={l}
+                        pendingAmount={Number(l.inbound_return)}
+                        returnedReason={l.returned_reason}
+                        orderReturnReceived={order.return_received}
+                        canReceiveReturn={canReceiveReturn}
+                        confirming={confirmingInbound}
+                        reopening={undoingInbound}
+                        onConfirm={handleConfirmInboundLine}
+                        onReopen={handleReopenInboundLine}
+                        receiveQtyValue={receiveQtyMap[l.id]}
+                        onReceiveQtyChange={(lineId, value) =>
+                          setReceiveQtyMap((prev) => ({
+                            ...prev,
+                            [lineId]: value,
+                          }))
+                        }
+                        weightValue={verifyWeightMap[l.id]}
+                        onWeightChange={(lineId, value) =>
+                          setVerifyWeightMap((prev) => ({
+                            ...prev,
+                            [lineId]: value,
+                          }))
+                        }
+                        refusalPhotos={refusePhotosMap[l.id] ?? []}
+                        photos={receivePhotosMap[l.id] ?? []}
+                        onUploadPhoto={handleUploadReceiveWeighPhoto}
+                        onRemovePhoto={handleRemoveReceiveWeighPhoto}
+                        onOpenImage={openImageGallery}
+                        t={t}
+                      />
+                    ))}
                 </div>
-                {canReceiveReturn && (
-                  <Button
-                    type="button"
-                    variant="tertiary"
-                    icon="undo"
-                    size="sm"
-                    className={styles.inlineButton}
-                    onClick={handleUndoInbound}
-                    disabled={undoingInbound}
-                  >
-                    {t("Undo")}
-                  </Button>
-                )}
-              </div>
+                <p className={styles.infoHint} style={{ marginTop: "0.75rem" }}>
+                  {t(
+                    "Waiting for an admin to update Accurate & decide — this can run before the goods arrive.",
+                  )}
+                </p>
+              </Card>
             )}
+            {!isReturned &&
+              !order.return_inbound &&
+              order.return_received &&
+              lines.some((l) => Number(l.returned) > 0) &&
+              !isDelivered &&
+              !isCancelled && (
+                <div className={styles.undoRow}>
+                  <div className={styles.left}>
+                    <Icon name="infoCircle" />
+                    {t("Incoming return received")}
+                    {order.return_received_at
+                      ? ` · ${formatClock(order.return_received_at)}`
+                      : ""}
+                  </div>
+                  {canReceiveReturn && (
+                    <Button
+                      type="button"
+                      variant="tertiary"
+                      icon="undo"
+                      size="sm"
+                      className={styles.inlineButton}
+                      onClick={handleUndoInbound}
+                      disabled={undoingInbound}
+                    >
+                      {t("Undo")}
+                    </Button>
+                  )}
+                </div>
+              )}
 
-          {/* "Customer return" card — separate from the "Returned" status
+            {/* "Customer return" card — separate from the "Returned" status
               banner up in the stepper section (which stays a plain status
               banner for every returned order); this one is the actual
               receive/decide/sign workflow, placed right after the Delivery
               Proof card. Two things tell an order is returned: the plain
               banner, and this card. */}
-          {isReturned && !isCancelled && (
-            <Card className={styles.errorCard}>
-              <div className={styles.headerRow}>
-                <h3 className={styles.sectionTitle}>Customer return</h3>
-              </div>
-              <div className={styles.cardContent}>
-                {canReceiveReturn && !order.return_received && (
-                  <div className={styles.cardListColumn}>
-                    <span className={styles.row}>
-                      <p className={styles.fieldLabel}>{t("Warehouse ")}</p>
-                      <p className={styles.muted}>— receive & verify</p>
-                      <div className={styles.separator}></div>
-                    </span>
-                    <p>
-                      {t(
-                        "Weigh or count what actually came back, then confirm.",
-                      )}
-                    </p>
-                  </div>
-                )}
-                {lines
-                  .filter((l) => Number(l.returned) > 0)
-                  .map((l) => (
-                    <ReturnLineBox
-                      key={l.id}
-                      line={l}
-                      pendingAmount={Number(l.returned)}
-                      returnedReason={l.returned_reason}
-                      orderReturnReceived={order.return_received}
-                      canReceiveReturn={canReceiveReturn}
-                      confirming={confirmingReceive}
-                      reopening={undoingInbound}
-                      onConfirm={handleConfirmReturnLine}
-                      onReopen={handleReopenReturnLine}
-                      receiveQtyValue={receiveQtyMap[l.id]}
-                      onReceiveQtyChange={(lineId, value) =>
-                        setReceiveQtyMap((prev) => ({
-                          ...prev,
-                          [lineId]: value,
-                        }))
-                      }
-                      weightValue={verifyWeightMap[l.id]}
-                      onWeightChange={(lineId, value) =>
-                        setVerifyWeightMap((prev) => ({
-                          ...prev,
-                          [lineId]: value,
-                        }))
-                      }
-                      refusalPhotos={refusePhotosMap[l.id] ?? []}
-                      photos={receivePhotosMap[l.id] ?? []}
-                      onUploadPhoto={handleUploadReceiveWeighPhoto}
-                      onRemovePhoto={handleRemoveReceiveWeighPhoto}
-                      onOpenImage={openImageGallery}
-                      t={t}
-                    />
-                  ))}
-
-                {inSettleBucket && (
-                  <div className={styles.cardListColumn}>
-                    {canDecideReturn && (
+            {isReturned && !isCancelled && (
+              <Card className={styles.errorCard}>
+                <div className={styles.headerRow}>
+                  <h3 className={styles.sectionTitle}>Customer return</h3>
+                </div>
+                <div className={styles.cardContent}>
+                  {canReceiveReturn && !order.return_received && (
+                    <div className={styles.cardListColumn}>
                       <span className={styles.row}>
-                        <p className={styles.fieldLabel}>{t("Admin ")}</p>
-                        <p className={styles.muted}>
-                          — update Accurate, then process
-                        </p>
+                        <p className={styles.fieldLabel}>{t("Warehouse ")}</p>
+                        <p className={styles.muted}>— receive & verify</p>
                         <div className={styles.separator}></div>
                       </span>
-                    )}
-                    {canDecideReturn ? (
-                      <>
-                        {!order.return_received && (
-                          <p>
-                            {lines.some(
-                              (l) =>
-                                Number(l.returned) > 0 && isWeighedUnit(l.unit),
-                            )
-                              ? t(
-                                  "Goods not back yet — counted quantities are exact; the kg/loaf credit is provisional until the warehouse weighs the return.",
-                                )
-                              : t(
-                                  "Goods not back yet — quantities are exact (counted). You can prepare everything now.",
-                                )}
-                          </p>
-                        )}
-                        <select
-                          className={styles.editInput}
-                          style={{ width: "100%" }}
-                          value={selectedDocType}
-                          onChange={(e) => setSelectedDocType(e.target.value)}
-                        >
-                          <option value="">
-                            {t("— how is this settled in Accurate? —")}
-                          </option>
-                          {RETURN_DOC_OPTIONS.map((opt) => (
-                            <option key={opt.key} value={opt.key}>
-                              {t(opt.label)}
-                            </option>
-                          ))}
-                        </select>
-                        {selectedDocType === "return-note" && (
-                          <>
-                            <label className={styles.row}>
-                              <Checkbox
-                                size="sm"
-                                checked={retPrinted}
-                                onChange={setRetPrinted}
-                                label={t("Input in Accurate & printed")}
-                              />
-                              {t("Input in Accurate & printed")}
-                            </label>
-
-                            <div
-                              className={styles.proofFieldRow}
-                              style={{
-                                borderColor:
-                                  noteFileIds.length > 0
-                                    ? "var(--accent-primary)"
-                                    : "var(--border-subtle)",
-                              }}
-                            >
-                              <div className={styles.proofFieldMain}>
-                                <div className={styles.left}>
-                                  <Icon
-                                    name="check"
-                                    size={18}
-                                    className={
-                                      noteFileIds.length > 0
-                                        ? styles.proofCheckFilled
-                                        : styles.proofCheckEmpty
-                                    }
-                                  />
-                                  <span className={styles.fieldLabel}>
-                                    {noteFileIds.length > 0
-                                      ? t("Photo attached")
-                                      : t(
-                                          "Photo of the return note (optional)",
-                                        )}
-                                  </span>
-                                </div>
-                                {noteFileIds.length > 0 && (
-                                  <div className={styles.thumbnailsContainer}>
-                                    {noteFileIds.map((fileId) => (
-                                      <div
-                                        key={fileId}
-                                        className={styles.thumbnailItem}
-                                        onClick={() =>
-                                          setActiveImageModal({
-                                            url: getAssetUrl(fileId),
-                                            title: t(
-                                              "Photo of the return note",
-                                            ),
-                                          })
-                                        }
-                                      >
-                                        <img
-                                          src={getAssetUrl(fileId)}
-                                          alt=""
-                                          className={styles.thumbnailImg}
-                                        />
-                                        <div
-                                          className={styles.thumbnailHoverTrash}
-                                          title={t("Delete image")}
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleRemoveReturnNotePhoto(fileId);
-                                          }}
-                                        >
-                                          <Icon name="trash" size={14} />
-                                        </div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                                <input
-                                  ref={noteFileInputRef}
-                                  type="file"
-                                  accept="image/*"
-                                  style={{ display: "none" }}
-                                  onChange={handleUploadReturnNotePhoto}
-                                />
-                                <Button
-                                  type="button"
-                                  variant="tertiary"
-                                  icon="camera"
-                                  iconOnly
-                                  title={t("Upload")}
-                                  onClick={() =>
-                                    noteFileInputRef.current?.click()
-                                  }
-                                />
-                              </div>
-                            </div>
-                          </>
-                        )}
-
-                        <div className={styles.cardActions}>
-                          <Button
-                            type="button"
-                            variant="primary"
-                            buttonStyle="fullWidth"
-                            icon="check"
-                            onClick={handleConfirmSettle}
-                            disabled={
-                              !selectedDocType ||
-                              confirmingSettle ||
-                              (selectedDocType === "return-note" &&
-                                !retPrinted) ||
-                              (!!selectedDoc &&
-                                !selectedDoc.replacement &&
-                                selectedDoc.key !== "revise-return" &&
-                                !order.return_received)
-                            }
-                          >
-                            {confirmingSettle
-                              ? t("Saving…")
-                              : !selectedDoc
-                                ? t("Confirm & close")
-                                : selectedDoc.replacement
-                                  ? t("Send replacement — back to Cold Storage")
-                                  : selectedDoc.key === "revise-return"
-                                    ? t("Send revised DO/SI for signing")
-                                    : t("Confirm & close")}
-                          </Button>
-                        </div>
-                        <div className={styles.hints}>
-                          {selectedDoc &&
-                            !selectedDoc.replacement &&
-                            selectedDoc.key !== "revise-return" &&
-                            !order.return_received && (
-                              <p
-                                className={styles.infoHint}
-                                style={{ color: "var(--state-warning)" }}
-                              >
-                                {t(
-                                  "The order closes only after the warehouse receives the goods.",
-                                )}
-                              </p>
-                            )}
-                          {selectedDoc && (
-                            <div className={styles.infoHint}>
-                              <div className={styles.iconWrapper}>
-                                <Icon
-                                  name="infoCircle"
-                                  style={{ color: "var(--text-muted)" }}
-                                />
-                              </div>
-                              <p className={styles.muted}>
-                                {selectedDoc.key === "single-replace"
-                                  ? t(
-                                      "ONE document: the original DO/SI is revised to show what the customer finally keeps incl. the replacement. Best for a like-for-like swap.",
-                                    )
-                                  : selectedDoc.key === "separate-replace"
-                                    ? t(
-                                        "TWO documents: a Sales Return Note credits what came back + a NEW DO/SI for the replacement shipment. Best when the replacement differs (item / kg / price) or ships another day.",
-                                      )
-                                    : selectedDoc.key === "revise-return"
-                                      ? t(
-                                          "The revised DO/SI goes to the customer to sign before the order closes.",
-                                        )
-                                      : t(
-                                          "Returned goods credited — the order closes.",
-                                        )}
-                              </p>
-                            </div>
-                          )}
-                        </div>
-                      </>
-                    ) : (
-                      <p className={styles.infoHint}>
-                        {order.return_received
-                          ? t(
-                              "Received — waiting for an admin to update the Accurate documents and decide.",
-                            )
-                          : t(
-                              "Waiting for an admin to update Accurate & decide — this can run before the goods arrive.",
-                            )}
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                {inSignBucket && (
-                  <div className={styles.cardListColumn}>
-                    {!canSignReturn ? (
-                      <p className={styles.muted}>
+                      <p>
                         {t(
-                          "Revised DO/SI is out with the customer to sign — waiting for the signed copy.",
+                          "Weigh or count what actually came back, then confirm.",
                         )}
                       </p>
-                    ) : !order.return_dispatch?.taken_by ? (
-                      /* PHASE A — not yet taken: the courier takes the
-                         revised DO/SI for signing via the same tracked
-                         hand-off as a normal dispatch. */
-                      <>
-                        <div className={styles.row}>
-                          <p className={styles.fieldLabel}>
-                            {t("Take the revised DO/SI for signing")}
+                    </div>
+                  )}
+                  {lines
+                    .filter((l) => Number(l.returned) > 0)
+                    .map((l) => (
+                      <ReturnLineBox
+                        key={l.id}
+                        line={l}
+                        pendingAmount={Number(l.returned)}
+                        returnedReason={l.returned_reason}
+                        orderReturnReceived={order.return_received}
+                        canReceiveReturn={canReceiveReturn}
+                        confirming={confirmingReceive}
+                        reopening={undoingInbound}
+                        onConfirm={handleConfirmReturnLine}
+                        onReopen={handleReopenReturnLine}
+                        receiveQtyValue={receiveQtyMap[l.id]}
+                        onReceiveQtyChange={(lineId, value) =>
+                          setReceiveQtyMap((prev) => ({
+                            ...prev,
+                            [lineId]: value,
+                          }))
+                        }
+                        weightValue={verifyWeightMap[l.id]}
+                        onWeightChange={(lineId, value) =>
+                          setVerifyWeightMap((prev) => ({
+                            ...prev,
+                            [lineId]: value,
+                          }))
+                        }
+                        refusalPhotos={refusePhotosMap[l.id] ?? []}
+                        photos={receivePhotosMap[l.id] ?? []}
+                        onUploadPhoto={handleUploadReceiveWeighPhoto}
+                        onRemovePhoto={handleRemoveReceiveWeighPhoto}
+                        onOpenImage={openImageGallery}
+                        t={t}
+                      />
+                    ))}
+
+                  {inSettleBucket && (
+                    <div className={styles.cardListColumn}>
+                      {canDecideReturn && (
+                        <span className={styles.row}>
+                          <p className={styles.fieldLabel}>{t("Admin ")}</p>
+                          <p className={styles.muted}>
+                            — update Accurate, then process
                           </p>
                           <div className={styles.separator}></div>
-                        </div>
-                        <div className={styles.rowStretch}>
-                          <p className={styles.secondary}>
-                            {t(
-                              "Carry the revised DO/SI to the customer, get it signed, and bring the signed copy back.",
-                            )}
-                          </p>
-                          {canDecideReturn && (
-                            <Button
-                              type="button"
-                              variant="tertiary"
-                              className={styles.inlineButton}
-                              onClick={handleChangeReturnDocument}
-                            >
-                              {t("Change document")}
-                            </Button>
+                        </span>
+                      )}
+                      {canDecideReturn ? (
+                        <>
+                          {!order.return_received && (
+                            <p>
+                              {lines.some(
+                                (l) =>
+                                  Number(l.returned) > 0 &&
+                                  isWeighedUnit(l.unit),
+                              )
+                                ? t(
+                                    "Goods not back yet — counted quantities are exact; the kg/loaf credit is provisional until the warehouse weighs the return.",
+                                  )
+                                : t(
+                                    "Goods not back yet — quantities are exact (counted). You can prepare everything now.",
+                                  )}
+                            </p>
                           )}
-                        </div>
-                        {!showThirdPartyForm ? (
+                          <select
+                            className={styles.editInput}
+                            style={{ width: "100%" }}
+                            value={selectedDocType}
+                            onChange={(e) => setSelectedDocType(e.target.value)}
+                          >
+                            <option value="">
+                              {t("— how is this settled in Accurate? —")}
+                            </option>
+                            {RETURN_DOC_OPTIONS.map((opt) => (
+                              <option key={opt.key} value={opt.key}>
+                                {t(opt.label)}
+                              </option>
+                            ))}
+                          </select>
+                          {selectedDocType === "return-note" && (
+                            <>
+                              <label className={styles.row}>
+                                <Checkbox
+                                  size="sm"
+                                  checked={retPrinted}
+                                  onChange={setRetPrinted}
+                                  label={t("Input in Accurate & printed")}
+                                />
+                                {t("Input in Accurate & printed")}
+                              </label>
+
+                              <div
+                                className={styles.proofFieldRow}
+                                style={{
+                                  borderColor:
+                                    noteFileIds.length > 0
+                                      ? "var(--accent-primary)"
+                                      : "var(--border-subtle)",
+                                }}
+                              >
+                                <div className={styles.proofFieldMain}>
+                                  <div className={styles.left}>
+                                    <Icon
+                                      name="check"
+                                      size={18}
+                                      className={
+                                        noteFileIds.length > 0
+                                          ? styles.proofCheckFilled
+                                          : styles.proofCheckEmpty
+                                      }
+                                    />
+                                    <span className={styles.fieldLabel}>
+                                      {noteFileIds.length > 0
+                                        ? t("Photo attached")
+                                        : t(
+                                            "Photo of the return note (optional)",
+                                          )}
+                                    </span>
+                                  </div>
+                                  {noteFileIds.length > 0 && (
+                                    <div className={styles.thumbnailsContainer}>
+                                      {noteFileIds.map((fileId) => (
+                                        <div
+                                          key={fileId}
+                                          className={styles.thumbnailItem}
+                                          onClick={() =>
+                                            setActiveImageModal({
+                                              url: getAssetUrl(fileId),
+                                              title: t(
+                                                "Photo of the return note",
+                                              ),
+                                            })
+                                          }
+                                        >
+                                          <img
+                                            src={getAssetUrl(fileId)}
+                                            alt=""
+                                            className={styles.thumbnailImg}
+                                          />
+                                          <div
+                                            className={
+                                              styles.thumbnailHoverTrash
+                                            }
+                                            title={t("Delete image")}
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleRemoveReturnNotePhoto(
+                                                fileId,
+                                              );
+                                            }}
+                                          >
+                                            <Icon name="trash" size={14} />
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                  <CameraButton
+                                    variant="tertiary"
+                                    iconOnly
+                                    title={t("Upload")}
+                                    onChange={handleUploadReturnNotePhoto}
+                                  />
+                                </div>
+                              </div>
+                            </>
+                          )}
+
                           <div className={styles.cardActions}>
                             <Button
                               type="button"
                               variant="primary"
-                              icon="delivered"
                               buttonStyle="fullWidth"
-                              onClick={handleTakeReturnDispatchOwnCourier}
-                              disabled={choosingMode}
-                            >
-                              {t("Take this delivery")}
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              icon="pickup"
-                              buttonStyle="fullWidth"
-                              onClick={handleTakeReturnDispatchPickup}
-                              disabled={choosingMode}
-                            >
-                              {t("Customer collects & signs")}
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              icon="scooter"
-                              buttonStyle="fullWidth"
-                              onClick={() => setShowThirdPartyForm(true)}
-                              disabled={choosingMode}
-                            >
-                              {t("Send by online courier (Gojek / Grab …)")}
-                            </Button>
-                          </div>
-                        ) : (
-                          <div className={styles.thirdPartyForm}>
-                            <select
-                              className={styles.editInput}
-                              aria-label={t("Courier service")}
-                              value={thirdPartyService}
-                              onChange={(e) =>
-                                setThirdPartyService(e.target.value)
+                              icon="check"
+                              onClick={handleConfirmSettle}
+                              disabled={
+                                !selectedDocType ||
+                                confirmingSettle ||
+                                (selectedDocType === "return-note" &&
+                                  !retPrinted) ||
+                                (!!selectedDoc &&
+                                  !selectedDoc.replacement &&
+                                  selectedDoc.key !== "revise-return" &&
+                                  !order.return_received)
                               }
                             >
-                              {THIRD_PARTY_SERVICES.map((svc) => (
-                                <option key={svc} value={svc}>
-                                  {svc === "Other" ? t("Other") : svc}
-                                </option>
-                              ))}
-                            </select>
-                            <input
-                              type="text"
-                              className={styles.editInput}
-                              placeholder={t("Tracking / order ref (optional)")}
-                              value={thirdPartyRef}
-                              onChange={(e) => setThirdPartyRef(e.target.value)}
-                              style={{ flex: 1, minWidth: 160 }}
-                            />
+                              {confirmingSettle
+                                ? t("Saving…")
+                                : !selectedDoc
+                                  ? t("Confirm & close")
+                                  : selectedDoc.replacement
+                                    ? t(
+                                        "Send replacement — back to Cold Storage",
+                                      )
+                                    : selectedDoc.key === "revise-return"
+                                      ? t("Send revised DO/SI for signing")
+                                      : t("Confirm & close")}
+                            </Button>
+                          </div>
+                          <div className={styles.hints}>
+                            {selectedDoc &&
+                              !selectedDoc.replacement &&
+                              selectedDoc.key !== "revise-return" &&
+                              !order.return_received && (
+                                <p
+                                  className={styles.infoHint}
+                                  style={{ color: "var(--state-warning)" }}
+                                >
+                                  {t(
+                                    "The order closes only after the warehouse receives the goods.",
+                                  )}
+                                </p>
+                              )}
+                            {selectedDoc && (
+                              <div className={styles.infoHint}>
+                                <div className={styles.iconWrapper}>
+                                  <Icon
+                                    name="infoCircle"
+                                    style={{ color: "var(--text-muted)" }}
+                                  />
+                                </div>
+                                <p className={styles.muted}>
+                                  {selectedDoc.key === "single-replace"
+                                    ? t(
+                                        "ONE document: the original DO/SI is revised to show what the customer finally keeps incl. the replacement. Best for a like-for-like swap.",
+                                      )
+                                    : selectedDoc.key === "separate-replace"
+                                      ? t(
+                                          "TWO documents: a Sales Return Note credits what came back + a NEW DO/SI for the replacement shipment. Best when the replacement differs (item / kg / price) or ships another day.",
+                                        )
+                                      : selectedDoc.key === "revise-return"
+                                        ? t(
+                                            "The revised DO/SI goes to the customer to sign before the order closes.",
+                                          )
+                                        : t(
+                                            "Returned goods credited — the order closes.",
+                                          )}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        </>
+                      ) : (
+                        <p className={styles.infoHint}>
+                          {order.return_received
+                            ? t(
+                                "Received — waiting for an admin to update the Accurate documents and decide.",
+                              )
+                            : t(
+                                "Waiting for an admin to update Accurate & decide — this can run before the goods arrive.",
+                              )}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {inSignBucket && (
+                    <div className={styles.cardListColumn}>
+                      {!canSignReturn ? (
+                        <p className={styles.muted}>
+                          {t(
+                            "Revised DO/SI is out with the customer to sign — waiting for the signed copy.",
+                          )}
+                        </p>
+                      ) : !order.return_dispatch?.taken_by ? (
+                        /* PHASE A — not yet taken: the courier takes the
+                         revised DO/SI for signing via the same tracked
+                         hand-off as a normal dispatch. */
+                        <>
+                          <div className={styles.row}>
+                            <p className={styles.fieldLabel}>
+                              {t("Take the revised DO/SI for signing")}
+                            </p>
+                            <div className={styles.separator}></div>
+                          </div>
+                          <div>
+                            <span className={styles.secondary}>
+                              {t(
+                                "Carry the revised DO/SI to the customer, get it signed, and bring the signed copy back. ",
+                              )}
+                              {canDecideReturn && (
+                                <Button
+                                  type="button"
+                                  variant="tertiary"
+                                  className={styles.inlineButton}
+                                  onClick={handleChangeReturnDocument}
+                                >
+                                  {t("Change document")}
+                                </Button>
+                              )}
+                            </span>
+                          </div>
+                          {!showThirdPartyForm ? (
+                            <div className={styles.cardActions}>
+                              <Button
+                                type="button"
+                                variant="primary"
+                                icon="delivered"
+                                buttonStyle="fullWidth"
+                                onClick={handleTakeReturnDispatchOwnCourier}
+                                disabled={choosingMode}
+                              >
+                                {t("Take this delivery")}
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                icon="pickup"
+                                buttonStyle="fullWidth"
+                                onClick={handleTakeReturnDispatchPickup}
+                                disabled={choosingMode}
+                              >
+                                {t("Customer collects & signs")}
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                icon="scooter"
+                                buttonStyle="fullWidth"
+                                onClick={() => setShowThirdPartyForm(true)}
+                                disabled={choosingMode}
+                              >
+                                {t("Send by online courier (Gojek / Grab …)")}
+                              </Button>
+                            </div>
+                          ) : (
+                            <div className={styles.thirdPartyForm}>
+                              <select
+                                className={styles.editInput}
+                                aria-label={t("Courier service")}
+                                value={thirdPartyService}
+                                onChange={(e) =>
+                                  setThirdPartyService(e.target.value)
+                                }
+                              >
+                                {THIRD_PARTY_SERVICES.map((svc) => (
+                                  <option key={svc} value={svc}>
+                                    {svc === "Other" ? t("Other") : svc}
+                                  </option>
+                                ))}
+                              </select>
+                              <input
+                                type="text"
+                                className={styles.editInput}
+                                placeholder={t(
+                                  "Tracking / order ref (optional)",
+                                )}
+                                value={thirdPartyRef}
+                                onChange={(e) =>
+                                  setThirdPartyRef(e.target.value)
+                                }
+                                style={{ flex: 1, minWidth: 160 }}
+                              />
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                onClick={() => setShowThirdPartyForm(false)}
+                                disabled={choosingMode}
+                              >
+                                {t("Cancel")}
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="primary"
+                                onClick={handleConfirmReturnDispatchThirdParty}
+                                disabled={choosingMode}
+                              >
+                                {choosingMode
+                                  ? t("Saving…")
+                                  : `${t("Hand to")} ${thirdPartyService}`}
+                              </Button>
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        /* PHASE B — taken: deliver, capture the signed copy,
+                         close. Own-courier mode also streams live GPS
+                         (silent — see the useDriverLive call above). */
+                        <>
+                          <span className={styles.row}>
+                            <p className={styles.fieldLabel}>
+                              {t("Revised DO/SI ")}
+                            </p>
+                            <p className={styles.muted}>— out for signing</p>
+                            <div className={styles.separator}></div>
+                          </span>
+                          <div className={styles.rowStretch}>
+                            <p className={styles.secondary}>
+                              {t("Taken by")}{" "}
+                              <strong>
+                                {displayName(order.return_dispatch.taken_by)}
+                              </strong>
+                              {order.return_dispatch.taken_at
+                                ? ` on ${formatTakenAt(order.return_dispatch.taken_at)}`
+                                : ""}
+                              {order.return_dispatch.mode === "third" &&
+                              order.return_dispatch.service
+                                ? ` · ${order.return_dispatch.service}${
+                                    order.return_dispatch.ref
+                                      ? ` (${order.return_dispatch.ref})`
+                                      : ""
+                                  }`
+                                : ""}
+                              {order.return_dispatch.mode === "pickup"
+                                ? ` · ${t("customer collects")}`
+                                : ""}
+                            </p>
                             <Button
                               type="button"
-                              variant="secondary"
-                              onClick={() => setShowThirdPartyForm(false)}
-                              disabled={choosingMode}
+                              variant="tertiary"
+                              onClick={handleResetReturnDispatch}
+                              className={styles.inlineButton}
                             >
-                              {t("Cancel")}
+                              {t("change")}
                             </Button>
+                          </div>
+
+                          <div className={styles.proofFieldMain}>
+                            <div className={styles.left}>
+                              <Icon
+                                name="check"
+                                size={18}
+                                className={
+                                  signedDocFileId
+                                    ? styles.proofCheckFilled
+                                    : styles.proofCheckEmpty
+                                }
+                              />
+                              <span className={styles.fieldLabel}>
+                                {signedDocFileId
+                                  ? t("Photo attached")
+                                  : `${t("Photo of the signed DO/SI")} · ${t("required")}`}
+                              </span>
+                            </div>
+                            {signedDocFileId && (
+                              <div className={styles.thumbnailsContainer}>
+                                <div
+                                  className={styles.thumbnailItem}
+                                  onClick={() =>
+                                    setActiveImageModal({
+                                      url: getAssetUrl(signedDocFileId),
+                                      title: t("Photo of the signed DO/SI"),
+                                    })
+                                  }
+                                >
+                                  <img
+                                    src={getAssetUrl(signedDocFileId)}
+                                    alt=""
+                                    className={styles.thumbnailImg}
+                                  />
+                                  <div
+                                    className={styles.thumbnailHoverTrash}
+                                    title={t("Delete image")}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSignedDocFileId(null);
+                                    }}
+                                  >
+                                    <Icon name="trash" size={14} />
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                            <CameraButton
+                              variant="tertiary"
+                              iconOnly
+                              title={t("Upload")}
+                              onChange={handleUploadSignedDoc}
+                            />
+                          </div>
+                          {!signedDocFileId && (
+                            <p
+                              className={styles.infoHint}
+                              style={{ color: "var(--warning-text)" }}
+                            >
+                              {t(
+                                "Add the signed-DO/SI photo to close the order.",
+                              )}
+                            </p>
+                          )}
+                          {signedDocFileId && !order.return_received && (
+                            <p
+                              className={styles.infoHint}
+                              style={{ color: "var(--warning-text)" }}
+                            >
+                              {t(
+                                "The order closes only after the warehouse receives the goods.",
+                              )}
+                            </p>
+                          )}
+                          <div className={styles.cardActions}>
                             <Button
                               type="button"
                               variant="primary"
-                              onClick={handleConfirmReturnDispatchThirdParty}
-                              disabled={choosingMode}
+                              icon="check"
+                              buttonStyle="fullWidth"
+                              onClick={handleCloseSignedReturn}
+                              disabled={
+                                !signedDocFileId ||
+                                !order.return_received ||
+                                closingSigned
+                              }
                             >
-                              {choosingMode
+                              {closingSigned
                                 ? t("Saving…")
-                                : `${t("Hand to")} ${thirdPartyService}`}
+                                : t("Mark signed & close")}
                             </Button>
                           </div>
-                        )}
-                      </>
-                    ) : (
-                      /* PHASE B — taken: deliver, capture the signed copy,
-                         close. Own-courier mode also streams live GPS
-                         (silent — see the useDriverLive call above). */
-                      <>
-                        <span className={styles.row}>
-                          <p className={styles.fieldLabel}>
-                            {t("Revised DO/SI ")}
-                          </p>
-                          <p className={styles.muted}>— out for signing</p>
-                          <div className={styles.separator}></div>
-                        </span>
-                        <div className={styles.rowStretch}>
-                          <p className={styles.secondary}>
-                            {t("Taken by")}{" "}
-                            <strong>
-                              {displayName(order.return_dispatch.taken_by)}
-                            </strong>
-                            {order.return_dispatch.taken_at
-                              ? ` on ${formatTakenAt(order.return_dispatch.taken_at)}`
-                              : ""}
-                            {order.return_dispatch.mode === "third" &&
-                            order.return_dispatch.service
-                              ? ` · ${order.return_dispatch.service}${
-                                  order.return_dispatch.ref
-                                    ? ` (${order.return_dispatch.ref})`
-                                    : ""
-                                }`
-                              : ""}
-                            {order.return_dispatch.mode === "pickup"
-                              ? ` · ${t("customer collects")}`
-                              : ""}
-                          </p>
-                          <Button
-                            type="button"
-                            variant="tertiary"
-                            onClick={handleResetReturnDispatch}
-                            className={styles.inlineButton}
-                          >
-                            {t("change")}
-                          </Button>
-                        </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </Card>
+            )}
 
-                        <div className={styles.proofFieldMain}>
-                          <div className={styles.left}>
-                            <Icon
-                              name="check"
-                              size={18}
-                              className={
-                                signedDocFileId
-                                  ? styles.proofCheckFilled
-                                  : styles.proofCheckEmpty
-                              }
-                            />
-                            <span className={styles.fieldLabel}>
-                              {signedDocFileId
-                                ? t("Photo attached")
-                                : `${t("Photo of the signed DO/SI")} · ${t("required")}`}
-                            </span>
-                          </div>
-                          {signedDocFileId && (
-                            <div className={styles.thumbnailsContainer}>
-                              <div
-                                className={styles.thumbnailItem}
-                                onClick={() =>
-                                  setActiveImageModal({
-                                    url: getAssetUrl(signedDocFileId),
-                                    title: t("Photo of the signed DO/SI"),
-                                  })
-                                }
-                              >
-                                <img
-                                  src={getAssetUrl(signedDocFileId)}
-                                  alt=""
-                                  className={styles.thumbnailImg}
-                                />
-                                <div
-                                  className={styles.thumbnailHoverTrash}
-                                  title={t("Delete image")}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setSignedDocFileId(null);
-                                  }}
-                                >
-                                  <Icon name="trash" size={14} />
-                                </div>
-                              </div>
-                            </div>
-                          )}
-                          <input
-                            ref={signedDocFileInputRef}
-                            type="file"
-                            accept="image/*"
-                            style={{ display: "none" }}
-                            onChange={handleUploadSignedDoc}
-                          />
-                          <Button
-                            type="button"
-                            variant="tertiary"
-                            icon="camera"
-                            iconOnly
-                            title={t("Upload")}
-                            onClick={() =>
-                              signedDocFileInputRef.current?.click()
-                            }
-                          />
-                        </div>
-                        {!signedDocFileId && (
-                          <p
-                            className={styles.infoHint}
-                            style={{ color: "var(--warning-text)" }}
-                          >
-                            {t(
-                              "Add the signed-DO/SI photo to close the order.",
-                            )}
-                          </p>
-                        )}
-                        {signedDocFileId && !order.return_received && (
-                          <p
-                            className={styles.infoHint}
-                            style={{ color: "var(--warning-text)" }}
-                          >
-                            {t(
-                              "The order closes only after the warehouse receives the goods.",
-                            )}
-                          </p>
-                        )}
-                        <div className={styles.cardActions}>
-                          <Button
-                            type="button"
-                            variant="primary"
-                            icon="check"
-                            buttonStyle="fullWidth"
-                            onClick={handleCloseSignedReturn}
-                            disabled={
-                              !signedDocFileId ||
-                              !order.return_received ||
-                              closingSigned
-                            }
-                          >
-                            {closingSigned
-                              ? t("Saving…")
-                              : t("Mark signed & close")}
-                          </Button>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                )}
-              </div>
-            </Card>
-          )}
-
-          {/* Return Settlement — a persistent, ungated record of how a return
+            {/* Return Settlement — a persistent, ungated record of how a return
               was settled in Accurate (kept on the order for disputes), unlike
               the Documents section below which is Admin/Finance/Owner only.
               Ported from the prototype's own ungated `order.returnDoc` card
               (Dev-OrderDetail.jsx:1492-1508). */}
-          {order.return_doc && (
-            <Card>
-              <div className={styles.headerRow}>
-                <h3 className={styles.sectionTitle}>
-                  {t("Return settlement")}
-                </h3>
-              </div>
-              <div className={styles.cardContent}>
-                <div className={styles.docList}>
-                  <div className={styles.docRow}>
-                    <p>
-                      {t("Document")} · <strong>{order.return_doc}</strong>
-                    </p>
-                  </div>
+            {order.return_doc && (
+              <Card>
+                <div className={styles.headerRow}>
+                  <h3 className={styles.sectionTitle}>
+                    {t("Return settlement")}
+                  </h3>
+                </div>
+                <div className={styles.cardContent}>
+                  <div className={styles.docList}>
+                    <div className={styles.docRow}>
+                      <p>
+                        {t("Document")} · <strong>{order.return_doc}</strong>
+                      </p>
+                    </div>
 
-                  {lines
-                    .filter((l) => Number(l.returned) > 0)
-                    .map((l) => (
-                      <div key={l.id} className={styles.docRow}>
+                    {lines
+                      .filter((l) => Number(l.returned) > 0)
+                      .map((l) => (
+                        <div key={l.id} className={styles.docRow}>
+                          <div className={styles.docTop}>
+                            <p>
+                              {l.name} · {t("returned")}{" "}
+                              <strong>
+                                {l.returned} {l.unit}
+                              </strong>
+                            </p>
+                            {renderThumbnails(
+                              (receivePhotosMap[l.id] ?? []).map((p) => ({
+                                url: p.url,
+                                title: `${t("Scale photo")} · ${l.name}`,
+                                receiveLineId: l.id,
+                                receivePhotoId: p.id,
+                              })),
+                            )}
+                          </div>
+                        </div>
+                      ))}
+
+                    {returnDocs.some((d) => d.photo_id) && (
+                      <div className={styles.docRow}>
                         <div className={styles.docTop}>
-                          <p>
-                            {l.name} · {t("returned")}{" "}
-                            <strong>
-                              {l.returned} {l.unit}
-                            </strong>
+                          <p className={styles.docType}>
+                            {t("Return documents")}
                           </p>
                           {renderThumbnails(
-                            (receivePhotosMap[l.id] ?? []).map((p) => ({
-                              url: p.url,
-                              title: `${t("Scale photo")} · ${l.name}`,
-                              receiveLineId: l.id,
-                              receivePhotoId: p.id,
-                            })),
+                            returnDocs
+                              .filter((d) => d.photo_id)
+                              .map((d) => ({
+                                url: getAssetUrl(d.photo_id!),
+                                title: RETURN_DOC_KIND_LABELS[d.kind] ?? d.kind,
+                              })),
                           )}
                         </div>
                       </div>
-                    ))}
-
-                  {returnDocs.some((d) => d.photo_id) && (
-                    <div className={styles.docRow}>
-                      <div className={styles.docTop}>
-                        <p className={styles.docType}>
-                          {t("Return documents")}
-                        </p>
-                        {renderThumbnails(
-                          returnDocs
-                            .filter((d) => d.photo_id)
-                            .map((d) => ({
-                              url: getAssetUrl(d.photo_id!),
-                              title: RETURN_DOC_KIND_LABELS[d.kind] ?? d.kind,
-                            })),
-                        )}
-                      </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
-              </div>
-            </Card>
-          )}
+              </Card>
+            )}
 
-          {/* Documents Section — Admin/Finance/Owner only, matching the
+            {/* Documents Section — Admin/Finance/Owner only, matching the
               prototype's own hardcoded role check (see `canSeeDocuments`'s
               doc comment above). Previously visible to every role. */}
-          {canSeeDocuments && (
-            <Card>
-              <div className={styles.headerRowLeft}>
-                <h3 className={styles.sectionTitle}>{t("Documents")} </h3>
-                <span className={styles.count}>{docEntries.length}</span>
-              </div>
-
-              {docEntries.length === 0 ? (
-                <p className={styles.muted}>{t("No documents logged yet.")}</p>
-              ) : (
-                <div className={styles.docList}>
-                  {docEntries.map((doc) => {
-                    const fileId = doc.document_file ?? doc.file_path;
-                    return (
-                      <div key={doc.id} className={styles.docRow}>
-                        <div className={styles.docTop}>
-                          <span className={styles.docType}>
-                            {doc.doc_type} —{" "}
-                          </span>
-                          <span className={styles.docNumber}>
-                            {doc.number ?? "—"}
-                          </span>
-
-                          {fileId && (
-                            <div
-                              className={styles.thumbnailItem}
-                              style={{ width: 36, height: 36 }}
-                              onClick={() =>
-                                setActiveImageModal({
-                                  url: directusFileUrl(fileId),
-                                  title: `${doc.doc_type} ${doc.number ?? ""}`,
-                                  attachmentId: doc.id ?? undefined,
-                                })
-                              }
-                            >
-                              <img
-                                src={directusFileUrl(fileId)}
-                                alt="doc"
-                                className={styles.thumbnailImg}
-                              />
-                            </div>
-                          )}
-
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            icon="trash"
-                            iconOnly
-                            title={t("Delete document")}
-                            onClick={() =>
-                              doc.id != null && handleDeleteDocument(doc.id)
-                            }
-                          ></Button>
-                        </div>
-
-                        {doc.note && (
-                          <div className={styles.docNote}>{doc.note}</div>
-                        )}
-                      </div>
-                    );
-                  })}
+            {canSeeDocuments && (
+              <Card>
+                <div className={styles.headerRowLeft}>
+                  <h3 className={styles.sectionTitle}>{t("Documents")} </h3>
+                  <span className={styles.count}>{docEntries.length}</span>
                 </div>
-              )}
 
-              {canAddDocs && (
-                <form className={styles.docForm} onSubmit={handleAddDocument}>
-                  <div className={styles.docFormRow}>
-                    <select
-                      className={styles.editInput}
-                      style={{ maxWidth: "120px" }}
-                      value={docType}
-                      onChange={(e) => setDocType(e.target.value)}
-                    >
-                      {DOC_TYPES.map((docTypeOption) => (
-                        <option key={docTypeOption} value={docTypeOption}>
-                          {docTypeOption}
-                        </option>
-                      ))}
-                    </select>
+                {docEntries.length === 0 ? (
+                  <p className={styles.muted}>
+                    {t("No documents logged yet.")}
+                  </p>
+                ) : (
+                  <div className={styles.docList}>
+                    {docEntries.map((doc) => {
+                      const fileId = doc.document_file ?? doc.file_path;
+                      return (
+                        <div key={doc.id} className={styles.docRow}>
+                          <div className={styles.docTop}>
+                            <span className={styles.docType}>
+                              {doc.doc_type} —{" "}
+                            </span>
+                            <span className={styles.docNumber}>
+                              {doc.number ?? "—"}
+                            </span>
+
+                            {fileId && (
+                              <div
+                                className={styles.thumbnailItem}
+                                style={{ width: 36, height: 36 }}
+                                onClick={() => {
+                                  if (brokenDocImageIds.has(fileId)) {
+                                    window.open(
+                                      directusFileUrl(fileId),
+                                      "_blank",
+                                      "noopener,noreferrer",
+                                    );
+                                  } else {
+                                    setActiveImageModal({
+                                      url: directusFileUrl(fileId),
+                                      title: `${doc.doc_type} ${doc.number ?? ""}`,
+                                      attachmentId: doc.id ?? undefined,
+                                    });
+                                  }
+                                }}
+                              >
+                                {brokenDocImageIds.has(fileId) ? (
+                                  <div className={styles.fileTypeThumb}>
+                                    <Icon
+                                      name={docTypeIcon(docFileMeta[fileId])}
+                                      size={18}
+                                    />
+                                  </div>
+                                ) : (
+                                  <img
+                                    src={directusFileUrl(fileId)}
+                                    alt="doc"
+                                    className={styles.thumbnailImg}
+                                    onError={() =>
+                                      setBrokenDocImageIds((prev) =>
+                                        new Set(prev).add(fileId),
+                                      )
+                                    }
+                                  />
+                                )}
+                              </div>
+                            )}
+
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              icon="trash"
+                              iconOnly
+                              title={t("Delete document")}
+                              onClick={() =>
+                                doc.id != null && handleDeleteDocument(doc.id)
+                              }
+                            ></Button>
+                          </div>
+
+                          {doc.note && (
+                            <div className={styles.docNote}>{doc.note}</div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {canAddDocs && (
+                  <form className={styles.docForm} onSubmit={handleAddDocument}>
+                    <div className={styles.docFormRow}>
+                      <select
+                        className={`${styles.editInput} ${styles.docSelect}`}
+                        value={docType}
+                        onChange={(e) => setDocType(e.target.value)}
+                      >
+                        {DOC_TYPES.map((docTypeOption) => (
+                          <option key={docTypeOption} value={docTypeOption}>
+                            {docTypeOption}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        type="text"
+                        className={styles.editInput}
+                        style={{ width: "100%" }}
+                        placeholder={t("Document number")}
+                        value={docNumber}
+                        onChange={(e) => setDocNumber(e.target.value)}
+                        required
+                      />
+                      <input
+                        ref={docFileInputRef}
+                        type="file"
+                        style={{ display: "none" }}
+                        accept="image/*,application/pdf"
+                        onChange={handleDocFileUpload}
+                      />
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="md"
+                        isActive={!!docFileName}
+                        icon={
+                          docUploading
+                            ? "loading"
+                            : docFileName
+                              ? "paperclip"
+                              : "add"
+                        }
+                        iconClassName={
+                          docUploading ? styles.spinningIcon : undefined
+                        }
+                        iconOnly
+                        disabled={docUploading}
+                        title={docUploading ? t("Uploading…") : undefined}
+                        onClick={() => docFileInputRef.current?.click()}
+                      />
+                      <Button
+                        type="submit"
+                        variant="primary"
+                        disabled={savingDoc || !docNumber.trim()}
+                      >
+                        {savingDoc ? "…" : t("+ Add")}
+                      </Button>
+                    </div>
                     <input
                       type="text"
                       className={styles.editInput}
-                      style={{ flex: 1 }}
-                      placeholder={t("Document number")}
-                      value={docNumber}
-                      onChange={(e) => setDocNumber(e.target.value)}
-                      required
+                      placeholder={t("Put notes here...")}
+                      value={docNote}
+                      onChange={(e) => setDocNote(e.target.value)}
                     />
-                    <input
-                      ref={docFileInputRef}
-                      type="file"
-                      style={{ display: "none" }}
-                      accept="image/*,application/pdf"
-                      onChange={handleDocFileUpload}
-                    />
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="md"
-                      isActive={!!docFileName}
-                      icon={docFileName ? "paperclip" : "add"}
-                      iconOnly
-                      onClick={() => docFileInputRef.current?.click()}
-                    />
-                    <Button
-                      type="submit"
-                      variant="primary"
-                      disabled={savingDoc || !docNumber.trim()}
-                    >
-                      {savingDoc ? "…" : t("+ Add")}
-                    </Button>
-                  </div>
-                  <input
-                    type="text"
-                    className={styles.editInput}
-                    placeholder={t("Put notes here...")}
-                    value={docNote}
-                    onChange={(e) => setDocNote(e.target.value)}
-                  />
-                </form>
-              )}
-            </Card>
-          )}
+                  </form>
+                )}
+              </Card>
+            )}
 
-          {/*
+            {/*
             Order Actions — every cross-stage override lives here, same place
             at every stage (Reorder / Put on hold / Send back / Restore /
             Cancel — "Reopen" is the delivered→dispatch case of Send back).
@@ -9546,220 +9620,222 @@ export function OrderDetail() {
             current stage, so they stay in one predictable place instead of
             moving around per stage.
           */}
-          {(canReorder ||
-            canCancel ||
-            canHold ||
-            canSendBack ||
-            canRestore) && (
-            <div className={styles.orderActions}>
-              <div className={styles.actionsRow}>
-                {canReorder && (
+            {(canReorder ||
+              canCancel ||
+              canHold ||
+              canSendBack ||
+              canRestore) && (
+              <div className={styles.orderActions}>
+                <div className={styles.actionsRow}>
+                  {canReorder && (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      buttonStyle="fullWidth"
+                      size="lg"
+                      icon="reload"
+                      onClick={handleReorder}
+                      disabled={reordering}
+                    >
+                      {reordering ? t("Creating…") : t("Reorder")}
+                    </Button>
+                  )}
+                  {canHold && (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      buttonStyle="fullWidth"
+                      size="lg"
+                      icon={isHold ? "play" : "pause"}
+                      onClick={handleToggleHold}
+                    >
+                      {isHold ? t("Resume order") : t("Put on Hold")}
+                    </Button>
+                  )}
+                </div>
+                <div className={styles.actionsRow}>
+                  {canSendBack && (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      buttonStyle="fullWidth"
+                      size="lg"
+                      icon="backward"
+                      onClick={handleSendBack}
+                      disabled={advancing}
+                    >
+                      {sendBackLabel()}
+                    </Button>
+                  )}
+                  {canRestore && (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      buttonStyle="fullWidth"
+                      size="lg"
+                      icon="refresh"
+                      onClick={handleRestore}
+                    >
+                      {t("Restore Order")}
+                    </Button>
+                  )}
+                </div>
+                {canCancel && (
                   <Button
                     type="button"
                     variant="secondary"
-                    buttonStyle="fullWidth"
                     size="lg"
-                    icon="reload"
-                    onClick={handleReorder}
-                    disabled={reordering}
-                  >
-                    {reordering ? t("Creating…") : t("Reorder")}
-                  </Button>
-                )}
-                {canHold && (
-                  <Button
-                    type="button"
-                    variant="secondary"
                     buttonStyle="fullWidth"
-                    size="lg"
-                    icon={isHold ? "play" : "pause"}
-                    onClick={handleToggleHold}
+                    icon="close"
+                    tone="error"
+                    onClick={handleCancel}
+                    disabled={cancelling}
                   >
-                    {isHold ? t("Resume order") : t("Put on Hold")}
+                    {cancelling ? t("Cancelling…") : t("Cancel Order")}
                   </Button>
                 )}
               </div>
-              <div className={styles.actionsRow}>
-                {canSendBack && (
+            )}
+          </div>
+
+          {/* ── Collapsible Side Panel (Notes & History) ── */}
+          <aside className={styles.sidePanelColumn}>
+            <Button
+              type="button"
+              variant="secondary"
+              icon={isPanelOpen ? "chevronRight" : "chevronLeft"}
+              iconOnly
+              className={styles.panelToggleBtn}
+              isActive={isPanelOpen}
+              onClick={() => setIsPanelOpen((prev) => !prev)}
+              title={
+                isPanelOpen ? t("Collapse side panel") : t("Expand side panel")
+              }
+            />
+
+            <div
+              className={[
+                styles.sidePanelStickyContent,
+                !isPanelOpen ? styles.sidePanelStickyContentCollapsed : "",
+              ].join(" ")}
+            >
+              {/* Notes Card */}
+              <Card className={styles.notesCard}>
+                <div className={styles.headerRowLeft}>
+                  <h3 className={styles.sectionTitle}>{t("Notes")}</h3>
+                </div>
+                <div className={styles.notesListScroll}>
+                  {history.filter((h) => h.what.startsWith("Note")).length ===
+                  0 ? (
+                    <p className={styles.muted}>{t("No note")}</p>
+                  ) : (
+                    history
+                      .filter((h) => h.what.startsWith("Note:"))
+                      .reverse()
+                      .map((n, idx) => (
+                        <div key={n.id ?? idx} className={styles.noteItem}>
+                          <div className={styles.historyTime}>
+                            <span>{formatDate(n.at, true)}</span>
+                            <span style={{ fontWeight: "600" }}>
+                              {n.who ? `${displayName(n.who)}` : ""}
+                            </span>
+                          </div>
+                          <div style={{ whiteSpace: "pre-wrap" }}>
+                            {n.what.replace("Note:", "").trim()}
+                          </div>
+                        </div>
+                      ))
+                  )}
+                </div>
+                <form className={styles.noteFormFixed} onSubmit={handleAddNote}>
+                  <textarea
+                    className={styles.noteInput}
+                    placeholder={t("Add note for the team...")}
+                    value={noteText}
+                    onChange={(e) => setNoteText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        submitNote();
+                      }
+                    }}
+                    disabled={savingNote}
+                    rows={2}
+                    style={{
+                      resize: "vertical",
+                      fontFamily: "inherit",
+                      minHeight: 38,
+                    }}
+                  />
                   <Button
-                    type="button"
-                    variant="secondary"
-                    buttonStyle="fullWidth"
-                    size="lg"
-                    icon="backward"
-                    onClick={handleSendBack}
-                    disabled={advancing}
+                    type="submit"
+                    variant="primary"
+                    icon="add"
+                    disabled={savingNote || !noteText.trim()}
                   >
-                    {sendBackLabel()}
+                    {t("Add")}
                   </Button>
-                )}
-                {canRestore && (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    buttonStyle="fullWidth"
-                    size="lg"
-                    icon="refresh"
-                    onClick={handleRestore}
-                  >
-                    {t("Restore Order")}
-                  </Button>
-                )}
-              </div>
-              {canCancel && (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="lg"
-                  buttonStyle="fullWidth"
-                  icon="close"
-                  tone="error"
-                  onClick={handleCancel}
-                  disabled={cancelling}
-                >
-                  {cancelling ? t("Cancelling…") : t("Cancel Order")}
-                </Button>
-              )}
+                </form>
+              </Card>
+
+              {/* History Card */}
+              <Card className={styles.historyCard}>
+                <div className={styles.headerRow}>
+                  <h3 className={styles.sectionTitle}>{t("History")}</h3>
+                </div>
+
+                <div className={styles.historyListScroll}>
+                  {visibleHistory.length === 0 && (
+                    <p className={styles.muted}>{t("No history yet.")}</p>
+                  )}
+                  {visibleHistory
+                    .slice()
+                    .reverse()
+                    .map((h, i) => (
+                      <div key={h.id ?? i} className={styles.historyItem}>
+                        <span className={styles.historyTime}>
+                          {formatDate(h.at, true)}
+                          <span style={{ fontWeight: "600" }}>
+                            {h.who ? ` ${displayName(h.who)}` : ""}
+                          </span>
+                        </span>
+                        <span className={styles.historyContent}>
+                          {t(h.what)}
+                        </span>
+                      </div>
+                    ))}
+                </div>
+              </Card>
             </div>
-          )}
+          </aside>
         </div>
 
-        {/* ── Collapsible Side Panel (Notes & History) ── */}
-        <aside className={styles.sidePanelColumn}>
-          <Button
-            type="button"
-            variant="secondary"
-            icon={isPanelOpen ? "chevronRight" : "chevronLeft"}
-            iconOnly
-            className={styles.panelToggleBtn}
-            isActive={isPanelOpen}
-            onClick={() => setIsPanelOpen((prev) => !prev)}
-            title={
-              isPanelOpen ? t("Collapse side panel") : t("Expand side panel")
-            }
-          />
-
-          <div
-            className={[
-              styles.sidePanelStickyContent,
-              !isPanelOpen ? styles.sidePanelStickyContentCollapsed : "",
-            ].join(" ")}
-          >
-            {/* Notes Card */}
-            <Card className={styles.notesCard}>
-              <div className={styles.headerRowLeft}>
-                <h3 className={styles.sectionTitle}>{t("Notes")}</h3>
-              </div>
-              <div className={styles.notesListScroll}>
-                {history.filter((h) => h.what.startsWith("Note")).length ===
-                0 ? (
-                  <p className={styles.muted}>{t("No note")}</p>
-                ) : (
-                  history
-                    .filter((h) => h.what.startsWith("Note:"))
-                    .reverse()
-                    .map((n, idx) => (
-                      <div key={n.id ?? idx} className={styles.noteItem}>
-                        <div className={styles.historyTime}>
-                          <span>{formatDate(n.at, true)}</span>
-                          <span style={{ fontWeight: "600" }}>
-                            {n.who ? `${displayName(n.who)}` : ""}
-                          </span>
-                        </div>
-                        <div style={{ whiteSpace: "pre-wrap" }}>
-                          {n.what.replace("Note:", "").trim()}
-                        </div>
-                      </div>
-                    ))
-                )}
-              </div>
-              <form className={styles.noteFormFixed} onSubmit={handleAddNote}>
-                <textarea
-                  className={styles.noteInput}
-                  placeholder={t("Add note for the team...")}
-                  value={noteText}
-                  onChange={(e) => setNoteText(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      submitNote();
-                    }
-                  }}
-                  disabled={savingNote}
-                  rows={2}
-                  style={{
-                    resize: "vertical",
-                    fontFamily: "inherit",
-                    minHeight: 38,
-                  }}
-                />
-                <Button
-                  type="submit"
-                  variant="primary"
-                  icon="add"
-                  disabled={savingNote || !noteText.trim()}
-                >
-                  {t("Add")}
-                </Button>
-              </form>
-            </Card>
-
-            {/* History Card */}
-            <Card className={styles.historyCard}>
-              <div className={styles.headerRow}>
-                <h3 className={styles.sectionTitle}>{t("History")}</h3>
-              </div>
-
-              <div className={styles.historyListScroll}>
-                {visibleHistory.length === 0 && (
-                  <p className={styles.muted}>{t("No history yet.")}</p>
-                )}
-                {visibleHistory
-                  .slice()
-                  .reverse()
-                  .map((h, i) => (
-                    <div key={h.id ?? i} className={styles.historyItem}>
-                      <span className={styles.historyTime}>
-                        {formatDate(h.at, true)}
-                        <span style={{ fontWeight: "600" }}>
-                          {h.who ? ` ${displayName(h.who)}` : ""}
-                        </span>
-                      </span>
-                      <span className={styles.historyContent}>{t(h.what)}</span>
-                    </div>
-                  ))}
-              </div>
-            </Card>
-          </div>
-        </aside>
-      </div>
-
-      <ImageDetailsModal
-        open={!!activeImageModal}
-        title={activeImageModal?.title ?? ""}
-        url={activeImageModal?.url ?? ""}
-        onClose={() => setActiveImageModal(null)}
-        onDelete={
-          activeImageModal && canDeleteImageEntry(activeImageModal)
-            ? () => {
-                deleteImageEntry(activeImageModal);
-                setActiveImageModal(null);
-              }
-            : undefined
-        }
-        onPrev={
-          activeImageModal?.gallery && activeImageModal.gallery.length > 1
-            ? () => handleImageModalNav(-1)
-            : undefined
-        }
-        onNext={
-          activeImageModal?.gallery && activeImageModal.gallery.length > 1
-            ? () => handleImageModalNav(1)
-            : undefined
-        }
-        currentIndex={activeImageModal?.galleryIndex}
-        total={activeImageModal?.gallery?.length}
-      />
+        <ImageDetailsModal
+          open={!!activeImageModal}
+          title={activeImageModal?.title ?? ""}
+          url={activeImageModal?.url ?? ""}
+          onClose={() => setActiveImageModal(null)}
+          onDelete={
+            activeImageModal && canDeleteImageEntry(activeImageModal)
+              ? () => {
+                  deleteImageEntry(activeImageModal);
+                  setActiveImageModal(null);
+                }
+              : undefined
+          }
+          onPrev={
+            activeImageModal?.gallery && activeImageModal.gallery.length > 1
+              ? () => handleImageModalNav(-1)
+              : undefined
+          }
+          onNext={
+            activeImageModal?.gallery && activeImageModal.gallery.length > 1
+              ? () => handleImageModalNav(1)
+              : undefined
+          }
+          currentIndex={activeImageModal?.galleryIndex}
+          total={activeImageModal?.gallery?.length}
+        />
       </div>
     </div>
   );

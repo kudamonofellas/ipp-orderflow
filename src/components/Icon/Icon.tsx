@@ -1,5 +1,5 @@
-import { Icon as Iconify } from '@iconify/react';
-import { ICONS, type IconName } from './icons';
+import { Icon as Iconify } from "@iconify/react";
+import { ICONS, type IconName } from "./icons";
 
 /**
  * Central icon component. Wraps Iconify + the offline HugeIcons set so every
@@ -28,10 +28,10 @@ export function Icon({ name, size = 20, className, style, label }: IconProps) {
       width={size}
       height={size}
       className={className}
-      style={style}
+      style={{ flexShrink: 0, ...style }}
       aria-hidden={label ? undefined : true}
       aria-label={label}
-      role={label ? 'img' : undefined}
+      role={label ? "img" : undefined}
     />
   );
 }

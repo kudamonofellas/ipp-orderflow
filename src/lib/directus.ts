@@ -22,6 +22,7 @@ import {
   createDirectus,
   createItem,
   createItems,
+  readFile,
   readItem,
   readItems,
   readUser,
@@ -1009,6 +1010,37 @@ export async function uploadFile(
       return { data: null, error: "File upload returned no id" };
     }
     return { data: { id: result.id }, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+export interface DirectusFileMeta {
+  /** MIME type, e.g. "application/pdf" — null for a handful of edge cases
+   *  Directus can't sniff. */
+  type: string | null;
+  filename_download: string;
+}
+
+/** Fetch a file's MIME type + original filename — needed to tell an image
+ *  apart from a PDF/Word/Excel document (an `<img>` just renders broken for
+ *  anything that isn't an image, with no way to distinguish *why* from the
+ *  `document_file` uuid alone). */
+export async function getFileMeta(
+  fileId: string,
+): Promise<DirectusResult<DirectusFileMeta>> {
+  try {
+    const raw = await getClient().request(
+      readFile(fileId, { fields: ["type", "filename_download"] }),
+    );
+    const result = raw as unknown as DirectusFileMeta;
+    return {
+      data: {
+        type: result.type ?? null,
+        filename_download: result.filename_download,
+      },
+      error: null,
+    };
   } catch (err) {
     return { data: null, error: errMsg(err) };
   }

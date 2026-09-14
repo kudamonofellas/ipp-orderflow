@@ -10,6 +10,7 @@
 export const ICONS = {
   arrowRight: "hugeicons:arrow-right-02",
   arrowUpRight: "hugeicons:arrow-up-right-01",
+  touch: "hugeicons:touch-04",
   dashboard: "hugeicons:dashboard-square-02",
   orders: "hugeicons:license-draft",
   customers: "hugeicons:user-multiple",
@@ -94,6 +95,11 @@ export const ICONS = {
   wallet: "hugeicons:wallet-01",
   arrowBigUpDash: "hugeicons:arrow-big-up-dash",
   arrowBigDownDash: "hugeicons:arrow-big-down-dash",
+  loading: "hugeicons:loading-03",
+  filePdf: "hugeicons:pdf-02",
+  fileWord: "hugeicons:doc-02",
+  fileExcel: "hugeicons:xls-02",
+  fileCsv: "hugeicons:csv-02",
 } as const;
 
 export type IconName = keyof typeof ICONS;

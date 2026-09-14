@@ -52,14 +52,7 @@ export function ImageDetailsModal({
     <div className={styles.modalBackdrop} onClick={onClose}>
       <div className={styles.modalContent} onClick={(e) => e.stopPropagation()}>
         <div className={styles.modalHeader}>
-          <span>
-            {title}
-            {hasMultiple && (
-              <span className={styles.modalCounter}>
-                {(currentIndex ?? 0) + 1} / {total}
-              </span>
-            )}
-          </span>
+          <span>{title}</span>
           <div className={styles.modalActions}>
             {onDelete && (
               <Button
@@ -97,13 +90,19 @@ export function ImageDetailsModal({
           </div>
         </div>
         <div className={styles.modalBody}>
-          {hasMultiple && (
+          <img
+            src={url}
+            alt={title || "Detail preview"}
+            className={styles.modalImage}
+          />
+        </div>
+        {hasMultiple && (
+          <div className={styles.modalFooter}>
             <Button
               type="button"
               icon="chevronLeft"
               iconOnly
               aria-label="Previous image"
-              className={`${styles.navButton} ${styles.navButtonPrev}`}
               style={{
                 color: "var(--bg-surface)",
                 backgroundColor: "rgba(0, 0, 0, 0.4)",
@@ -112,19 +111,16 @@ export function ImageDetailsModal({
               }}
               onClick={onPrev}
             />
-          )}
-          <img
-            src={url}
-            alt={title || "Detail preview"}
-            className={styles.modalImage}
-          />
-          {hasMultiple && (
+
+            <span className={styles.modalCounter}>
+              {(currentIndex ?? 0) + 1} / {total}
+            </span>
+
             <Button
               type="button"
               icon="chevronRight"
               iconOnly
               aria-label="Next image"
-              className={`${styles.navButton} ${styles.navButtonNext}`}
               style={{
                 color: "var(--bg-surface)",
                 backgroundColor: "rgba(0, 0, 0, 0.4)",
@@ -133,8 +129,8 @@ export function ImageDetailsModal({
               }}
               onClick={onNext}
             />
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );

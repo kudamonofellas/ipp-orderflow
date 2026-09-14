@@ -1,6 +1,9 @@
 /* One bordered box per returned line, shared between the direct
    (isReturned-stage) and parallel (Incoming Return) receive flows in
-   OrderDetail.tsx. */
+   OrderDetail.tsx. `container-type: inline-size` turns this into a query
+   container so a descendant (the refusal-photos row specifically — see
+   `.thumbnailsContainerLoose` below) can collapse based on *this card's*
+   own width instead of the screen's. */
 .returnLineBox {
   display: flex;
   flex-direction: column;
@@ -8,6 +11,7 @@
   border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
   padding: var(--space-lg);
+  container-type: inline-size;
 }
 
 .returnLineBox + .returnLineBox {
@@ -86,6 +90,14 @@
   flex-wrap: wrap;
 }
 
+/* The refusal-photos row — sits on its own full-width line instead of
+ * sharing one with other controls, so left-aligned (not pushed to the far
+ * right like the default) reads better; see the `@container` collapse rule
+ * further down for its width-based (not screen-based) mobile behavior. */
+.thumbnailsContainerLoose {
+  justify-content: flex-start;
+}
+
 .thumbnailItem {
   position: relative;
   width: 56px;
@@ -139,6 +151,98 @@
   }
 }
 
+/* Mobile: collapse every thumbnail after the first into a "See all" overlay
+ * hint instead of letting the row wrap onto several lines — same pattern as
+ * OrderDetail.tsx's `renderThumbnails()`. Driven purely by a breakpoint, not
+ * a per-container ResizeObserver measurement. Clicking the visible
+ * thumbnail still opens the full slideshow via the existing `onOpenImage`
+ * wiring, so every photo stays reachable.
+ *
+ * Two different breakpoint types on purpose: `.thumbnailsContainer` (the
+ * receive-photos row) shares its row with other controls, so a plain
+ * viewport `@media` query is the right call there — its available space
+ * really does shrink in lockstep with the screen. `.thumbnailsContainerLoose`
+ * (the refusal-photos row) sits on its own full-width line in
+ * `.returnLineBox` instead, so it often has room for several thumbnails
+ * even on a narrow phone — it collapses on a `@container` query keyed off
+ * the *card's* own width instead, via `.returnLineBox`'s
+ * `container-type: inline-size` above. */
+.thumbnailCountBadge {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .thumbnailsContainer:not(.thumbnailsContainerLoose) {
+    flex-wrap: nowrap;
+  }
+
+  /* Scoped to `.thumbnailsContainer` specifically (and excluding
+   * `.thumbnailsContainerLoose`, which gets its own container-query rule
+   * below) — a bare `.thumbnailItem:not(:first-child)` would also match any
+   * other lone `.thumbnailItem` elsewhere on the page that isn't its own
+   * row's first child, hiding it even though it has nothing to do with this
+   * collapse. */
+  .thumbnailsContainer:not(.thumbnailsContainerLoose)
+    .thumbnailItem:not(:first-child) {
+    display: none;
+  }
+
+  .thumbnailsContainer:not(.thumbnailsContainerLoose) .thumbnailCountBadge {
+    display: flex;
+    position: absolute;
+    inset: 0;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    background: rgba(0, 0, 0, 0.55);
+    color: #fff;
+    font: var(--text-caption);
+    font-weight: 600;
+    border-radius: calc(var(--radius-sm) - 1px);
+    pointer-events: none;
+  }
+
+  /* The collapsed thumbnail's own delete button would sit awkwardly on top
+   * of (or behind) the "See all" overlay — hide it here, same breakpoint. */
+  .thumbnailsContainer:not(.thumbnailsContainerLoose)
+    .thumbnailItem:has(.thumbnailCountBadge)
+    .thumbnailHoverTrash {
+    display: none;
+  }
+}
+
+/* `.thumbnailsContainerLoose` — the refusal-photos row's own collapse,
+ * keyed off `.returnLineBox`'s width (the nearest `container-type`
+ * ancestor) rather than the screen's. 260px is roughly 3 thumbnails
+ * (56px + gap each) plus padding — below that, showing just one with a
+ * "See all" hint reads better than a cramped partial row. */
+@container (max-width: 260px) {
+  .thumbnailsContainerLoose {
+    flex-wrap: nowrap;
+  }
+
+  .thumbnailsContainerLoose .thumbnailItem:not(:first-child) {
+    display: none;
+  }
+
+  .thumbnailsContainerLoose .thumbnailCountBadge {
+    display: flex;
+    position: absolute;
+    inset: 0;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    background: rgba(0, 0, 0, 0.55);
+    color: #fff;
+    font: var(--text-caption);
+    font-weight: 600;
+    border-radius: calc(var(--radius-sm) - 1px);
+    pointer-events: none;
+  }
+}
+
 .undoRow {
   display: flex;
   flex-direction: row;
@@ -186,4 +290,12 @@
   gap: var(--space-sm);
   font: var(--text-caption);
   color: var(--text-muted);
+}
+
+@media (max-width: 768px) {
+  .undoRow {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-md);
+  }
 }

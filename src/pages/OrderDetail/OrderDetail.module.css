@@ -561,7 +561,6 @@
   flex: 1;
   align-items: center;
   gap: var(--space-sm);
-  padding: var(--space-sm);
   border-radius: var(--radius-md);
 }
 
@@ -604,16 +603,31 @@
   min-width: 0;
 }
 
+/* `.header` (its direct parent) is `align-items: flex-start`, so without
+ * `align-self: stretch` this box sizes to its own content instead of the
+ * available header width — since `.stepperTrack` inside it has
+ * `min-width: 720px`, that meant `.stepperContainer` just grew to 720px
+ * and pushed `.header` wider than the viewport instead of ever activating
+ * its own `overflow-x: auto` (nothing to scroll if the box is already as
+ * wide as its content). `min-width: 0` is the flex-item shrink override
+ * needed for `align-self: stretch` to actually clamp it back down — a flex
+ * item's default `min-width: auto` refuses to shrink below its content's
+ * intrinsic size otherwise. Without both, the scroll-centering effect in
+ * OrderDetail.tsx has nothing to scroll (its own `max-scroll` computes to
+ * 0), which is what silently broke it. */
 .stepperContainer {
-  width: 100%;
   overflow-x: auto;
   padding-top: 8px;
+  scrollbar-width: none;
+  align-self: stretch;
+  min-width: 0;
 }
 
 .stepperTrack {
   display: flex;
+  flex-direction: row;
   align-items: flex-start;
-  width: 100%;
+  min-width: 720px;
 }
 
 .stepColumn {
@@ -621,7 +635,7 @@
   flex-direction: column;
   align-items: center;
   flex: 1;
-  gap: var(--space-md);
+  gap: var(--space-sm);
 }
 
 .stepHeaderRow {
@@ -660,6 +674,7 @@
 .stepLabel {
   font: var(--text-body);
   color: var(--text-muted);
+  padding: var(--space-xs) var(--space-md);
   white-space: nowrap;
   text-align: center;
 }
@@ -667,8 +682,8 @@
 .stepLabelActive {
   color: var(--accent-primary);
   font-weight: 700;
-  background: rgba(12, 68, 88, 0.08);
-  padding: 4px 12px;
+  background: var(--bg-surface-hover-dark);
+  padding: var(--space-xs) var(--space-sm);
   border-radius: 12px;
 }
 
@@ -723,7 +738,7 @@
 
 .itemHeader {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: var(--space-md);
 }
@@ -731,8 +746,9 @@
 .itemInfo {
   display: flex;
   flex-direction: row;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--space-sm);
+  width: 100%;
   height: auto;
 }
 
@@ -741,7 +757,7 @@
   font: var(--text-body);
   font-weight: 600;
   text-align: right;
-  min-width: 32px;
+  width: 32px;
 }
 
 .unitTag {
@@ -763,6 +779,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-sm);
+  width: fit-content;
 }
 
 .numberInput {
@@ -788,7 +805,6 @@
 
 /* Weighing Section */
 .weighingSection {
-  margin-left: 28px;
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);
@@ -866,7 +882,7 @@
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-default);
   cursor: pointer;
-  background: var(--bg-surface-hover);
+  background: var(--bg-surface-hover-dark);
 }
 
 .thumbnailImg {
@@ -911,11 +927,85 @@
   }
 }
 
+/* Fallback for a document thumbnail whose `<img>` failed to load (a PDF,
+ * Word, or Excel file always will) — a plain centered file-type icon inside
+ * the same `.thumbnailItem` box. */
+.fileTypeThumb {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent-primary);
+}
+
+.spinningIcon {
+  animation: docUploadSpin 0.8s linear infinite;
+}
+
+@keyframes docUploadSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Mobile: collapse every thumbnail after the first into a "+N" overlay
+ * badge instead of letting the row wrap onto several lines — driven purely
+ * by a breakpoint, not a per-container ResizeObserver measurement (that
+ * approach, tried previously as the `Thumbnails` component, was removed
+ * 2026-09-03 for causing visible upload lag with 20+ live instances on one
+ * page). Clicking the visible thumbnail still opens the full slideshow via
+ * the existing `openImageGallery` wiring, so every photo stays reachable. */
+.thumbnailCountBadge {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .thumbnailsContainer {
+    flex-wrap: nowrap;
+  }
+
+  /* Scoped to `.thumbnailsContainer` specifically — a bare
+   * `.thumbnailItem:not(:first-child)` also matches the Documents section's
+   * one-off thumbnail (never literally its own row's first child, since the
+   * doc-type/number spans come before it there), hiding it even though it
+   * has nothing to do with the gallery-collapse feature. Always scope a
+   * `:not(:first-child)`-style rule to the specific container it's meant
+   * for, not the bare shared class. */
+  .thumbnailsContainer .thumbnailItem:not(:first-child) {
+    display: none;
+  }
+
+  .thumbnailCountBadge {
+    display: flex;
+    position: absolute;
+    inset: 0;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.55);
+    color: #fff;
+    font: var(--text-caption);
+    font-weight: 300;
+    border-radius: calc(var(--radius-sm) - 1px);
+    pointer-events: none;
+  }
+
+  /* The collapsed thumbnail's own delete button would sit awkwardly on top
+   * of (or behind) the count-badge overlay, and "delete just this one
+   * photo" doesn't read sensibly while every other photo is hidden behind
+   * it anyway — hide it here, same breakpoint. */
+  .thumbnailsContainer
+    .thumbnailItem:has(.thumbnailCountBadge)
+    .thumbnailHoverTrash {
+    display: none;
+  }
+}
+
 .cuttingInstructions {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-xs);
-  margin-left: 28px;
 }
 
 .cuttingRow {
@@ -1009,14 +1099,12 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-left: 28px;
   font: var(--text-body);
   color: var(--text-secondary);
 }
 
 .totalWeight {
-  font-weight: 600;
-  color: var(--text-primary);
+  color: var(--text-muted);
 }
 
 .weighHint {
@@ -1036,7 +1124,7 @@
 .lineTotalPrice {
   font-weight: 600;
   color: var(--text-primary);
-  min-width: 160px;
+  width: 160px;
   text-align: right;
   overflow: hidden;
   white-space: nowrap;
@@ -1078,6 +1166,10 @@
   background: var(--bg-surface);
 }
 
+.docSelect {
+  max-width: 120px;
+}
+
 .editSelect {
   background: var(--bg-surface-hover);
   border: 1px solid var(--border-default);
@@ -1092,7 +1184,7 @@
 
 .editItemHeader {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--space-sm);
   width: 100%;
 }
@@ -1145,7 +1237,7 @@
 
 .docNote {
   font: var(--text-body);
-  color: var(--text-primary);
+  color: var(--text-muted);
   border: 1px solid var(--border-subtle);
   padding: 6px 12px;
   border-radius: var(--radius-sm);
@@ -1350,7 +1442,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  color: var(--text-state-warning);
+  color: var(--state-warning);
 }
 
 .warningTitle {
@@ -1376,6 +1468,11 @@
   font: var(--text-h3);
   font-weight: 700;
   color: var(--state-error);
+}
+
+.hintColumn {
+  display: flex;
+  flex-direction: column;
 }
 
 .hints {
@@ -1415,5 +1512,17 @@
 @media (max-width: 768px) {
   .sectionsContainer {
     padding: 0 var(--space-md) var(--space-md);
+  }
+
+  .itemQty {
+    width: 16px;
+  }
+
+  .lineTotalPrice {
+    width: 120px;
+  }
+
+  .docSelect {
+    max-width: 72px;
   }
 }

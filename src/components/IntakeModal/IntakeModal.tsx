@@ -1,18 +1,21 @@
-import { useEffect, useRef, useState } from 'react';
-import { Icon } from '../Icon/Icon';
-import { Button } from '../Button/Button';
-import { useLanguage } from '../../hooks/useLanguage';
-import { parseOrderText, type ParsedOrderDraft } from '../../lib/directus';
-import styles from './IntakeModal.module.css';
+import { useEffect, useRef, useState } from "react";
+import { Button } from "../Button/Button";
+import { useLanguage } from "../../hooks/useLanguage";
+import { parseOrderText, type ParsedOrderDraft } from "../../lib/directus";
+import styles from "./IntakeModal.module.css";
 
 interface IntakeModalProps {
   open: boolean;
-  channel: 'horeca';
+  channel: "horeca";
   onClose: () => void;
   /** Called after a successful parse — hands off the draft to the next step.
-     *  `attachments` are any files the admin attached here (e.g. a photographed PO) —
-     *  the caller is responsible for actually uploading/persisting them. */
-  onParsed: (draft: ParsedOrderDraft, rawText: string, attachments: File[]) => void;
+   *  `attachments` are any files the admin attached here (e.g. a photographed PO) —
+   *  the caller is responsible for actually uploading/persisting them. */
+  onParsed: (
+    draft: ParsedOrderDraft,
+    rawText: string,
+    attachments: File[],
+  ) => void;
 }
 
 /**
@@ -24,9 +27,14 @@ interface IntakeModalProps {
  *
  * If parse fails, the user can still tap "Skip" to open a blank order form.
  */
-export function IntakeModal({ open, channel, onClose, onParsed }: IntakeModalProps) {
+export function IntakeModal({
+  open,
+  channel,
+  onClose,
+  onParsed,
+}: IntakeModalProps) {
   const { t } = useLanguage();
-  const [text, setText] = useState('');
+  const [text, setText] = useState("");
   const [attachments, setAttachments] = useState<File[]>([]);
   const [parsing, setParsing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -37,7 +45,7 @@ export function IntakeModal({ open, channel, onClose, onParsed }: IntakeModalPro
     if (!open) {
       // reset when closed
       function reset() {
-        setText('');
+        setText("");
         setAttachments([]);
         setError(null);
       }
@@ -48,10 +56,10 @@ export function IntakeModal({ open, channel, onClose, onParsed }: IntakeModalPro
   useEffect(() => {
     if (!open) return;
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape' && !parsing) onClose();
+      if (e.key === "Escape" && !parsing) onClose();
     }
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
   }, [open, onClose, parsing]);
 
   if (!open) return null;
@@ -59,7 +67,7 @@ export function IntakeModal({ open, channel, onClose, onParsed }: IntakeModalPro
   async function handleParse() {
     const trimmed = text.trim();
     if (!trimmed) {
-      setError(t('Paste a WhatsApp message first.'));
+      setError(t("Paste a WhatsApp message first."));
       return;
     }
     setParsing(true);
@@ -67,7 +75,7 @@ export function IntakeModal({ open, channel, onClose, onParsed }: IntakeModalPro
     const res = await parseOrderText(trimmed);
     setParsing(false);
     if (res.error || !res.data) {
-      setError(`Parse failed: ${res.error ?? 'empty response'}`);
+      setError(`Parse failed: ${res.error ?? "empty response"}`);
       return;
     }
     onParsed(res.data, trimmed, attachments);
@@ -92,7 +100,7 @@ export function IntakeModal({ open, channel, onClose, onParsed }: IntakeModalPro
         sales: null,
         lines: [],
       },
-      '',
+      "",
       attachments,
     );
   }
@@ -100,7 +108,7 @@ export function IntakeModal({ open, channel, onClose, onParsed }: IntakeModalPro
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
     setAttachments((prev) => [...prev, ...files]);
-    if (fileInputRef.current) fileInputRef.current.value = '';
+    if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
   function removeAttachment(index: number) {
@@ -110,7 +118,9 @@ export function IntakeModal({ open, channel, onClose, onParsed }: IntakeModalPro
   return (
     <div
       className={styles.overlay}
-      onClick={(e) => { if (e.target === e.currentTarget && !parsing) onClose(); }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !parsing) onClose();
+      }}
       role="dialog"
       aria-modal="true"
       aria-label="WhatsApp intake"
@@ -119,38 +129,39 @@ export function IntakeModal({ open, channel, onClose, onParsed }: IntakeModalPro
         <div className={styles.header}>
           <div className={styles.headerText}>
             <h2 className={styles.title}>
-              {t('WhatsApp Intake')}
+              {t("WhatsApp Intake")}
               <span className={styles.channelBadge}>
-                {channel === 'horeca' ? 'Horeca' : channel}
+                {channel === "horeca" ? "Horeca" : channel}
               </span>
             </h2>
             <p className={styles.subtitle}>
-              {t("Paste the customer's WhatsApp order message to auto-fill the order form.")}
+              {t(
+                "Paste the customer's WhatsApp order message to auto-fill the order form.",
+              )}
             </p>
           </div>
           <Button
             type="button"
             variant="tertiary"
+            icon="close"
             iconOnly
             size="sm"
             disabled={parsing}
             aria-label="Close"
-            onClick={onClose}>
-            <Icon name="close" size={18} />
-          </Button>
-
+            onClick={onClose}
+          />
         </div>
 
         <div className={styles.body}>
           <div>
             <label htmlFor="intake-text" className={styles.label}>
-              {t('Order Message')}
+              {t("Order Message")}
             </label>
             <textarea
               id="intake-text"
               className={styles.textarea}
               placeholder={
-                'Example:\n\nToko Makmur\nDelivery: besok\n- Salmon 5kg\n- Tuna fillet 3kg\n- Udang 1kg'
+                "Example:\n\nToko Makmur\nDelivery: besok\n- Salmon 5kg\n- Tuna fillet 3kg\n- Udang 1kg"
               }
               value={text}
               onChange={(e) => setText(e.target.value)}
@@ -158,38 +169,39 @@ export function IntakeModal({ open, channel, onClose, onParsed }: IntakeModalPro
               spellCheck={false}
             />
             <p className={styles.hint}>
-              {t('The message will be parsed automatically. You can review and correct every line before saving.')}
+              {t(
+                "The message will be parsed automatically. You can review and correct every line before saving.",
+              )}
             </p>
           </div>
 
           {/* Attachment upload */}
           <div>
-            <span className={styles.label}>{t('Attachments (optional)')}</span>
+            <span className={styles.label}>{t("Attachments (optional)")}</span>
             <div className={styles.attachRow}>
               <Button
                 variant="secondary"
                 id="intake-attach"
                 type="button"
+                icon="attach"
                 isActive={!!attachments.length}
                 onClick={() => fileInputRef.current?.click()}
                 disabled={parsing}
               >
-                <Icon name="attach" size={16} />
-                {t('Add file')}
+                {t("Add file")}
               </Button>
               {attachments.length > 0 && (
                 <div className={styles.attachList}>
                   {attachments.map((f, i) => (
                     <span key={i} className={styles.attachChip} title={f.name}>
                       {f.name}
-                      <button
+                      <Button
                         type="button"
                         className={styles.attachChipRemove}
+                        icon="close"
                         onClick={() => removeAttachment(i)}
                         aria-label={`Remove ${f.name}`}
-                      >
-                        <Icon name="close" size={12} />
-                      </button>
+                      />
                     </span>
                   ))}
                 </div>
@@ -199,7 +211,7 @@ export function IntakeModal({ open, channel, onClose, onParsed }: IntakeModalPro
               ref={fileInputRef}
               type="file"
               multiple
-              style={{ display: 'none' }}
+              style={{ display: "none" }}
               onChange={handleFileChange}
             />
           </div>
@@ -216,22 +228,22 @@ export function IntakeModal({ open, channel, onClose, onParsed }: IntakeModalPro
             onClick={handleSkip}
             disabled={parsing}
           >
-            {t('Skip — enter manually')}
+            {t("Skip — enter manually")}
           </Button>
           <Button
             variant="primary"
             id="intake-parse"
             type="button"
+            icon={parsing ? undefined : "whatsapp"}
             onClick={handleParse}
             disabled={parsing || !text.trim()}
           >
             {parsing ? (
-              <><span className={styles.spinner} /> {t('Parsing…')}</>
-            ) : (
               <>
-                <Icon name="whatsapp" size={16} />
-                {t('Parse & Continue')}
+                <span className={styles.spinner} /> {t("Parsing…")}
               </>
+            ) : (
+              t("Parse & Continue")
             )}
           </Button>
         </div>

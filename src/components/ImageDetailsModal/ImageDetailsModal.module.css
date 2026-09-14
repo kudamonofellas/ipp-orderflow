@@ -52,24 +52,40 @@
   object-fit: contain;
 }
 
+.modalFooter {
+  padding: var(--space-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-lg);
+}
+
 .modalCounter {
-  margin-left: var(--space-sm);
   font-weight: 400;
+  text-align: center;
+  width: 100px;
   color: var(--text-secondary);
 }
 
-/* Sizing/color/icon come from Button's own iconOnly styling + the inline
-   style passed alongside this class — only absolute placement lives here. */
-.navButton {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-}
+@media (max-width: 768px) {
+  .modalBackdrop {
+    padding: 0;
+  }
 
-.navButtonPrev {
-  left: var(--space-md);
-}
+  .modalContent {
+    max-width: 100vw;
+    width: 100vw;
+    height: 100dvh;
+    border-radius: 0;
+  }
 
-.navButtonNext {
-  right: var(--space-md);
+  .modalBody {
+    flex: 1;
+    max-height: none;
+    padding: var(--space-lg);
+  }
+
+  .modalImage {
+    max-height: 100%;
+  }
 }
