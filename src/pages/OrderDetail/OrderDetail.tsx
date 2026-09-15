@@ -3,6 +3,7 @@ import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { Card } from "../../components/Card/Card";
 import { CameraButton } from "../../components/CameraButton/CameraButton";
 import { Icon } from "../../components/Icon/Icon";
+import { ThumbnailGallery } from "../../components/ThumbnailGallery/ThumbnailGallery";
 import type { IconName } from "../../components/Icon/icons";
 import { Button } from "../../components/Button/Button";
 import { Checkbox } from "../../components/Checkbox/Checkbox";
@@ -516,56 +517,34 @@ export function OrderDetail() {
     }
   }
 
-  /** Plain, always-expanded thumbnail row — replaces the `Thumbnails`
-   *  component (removed 2026-09-03): its per-instance `ResizeObserver` +
-   *  `useLayoutEffect` measured real, avoidable overhead on orders with
-   *  many lines/photos, most noticeable as visible lag right after an
-   *  upload. Every photo always renders in the DOM and wraps onto a new
-   *  line on desktop; below the mobile breakpoint, CSS alone (see
-   *  `.thumbnailCountBadge`/`.thumbnailItem:not(:first-child)`) hides every
-   *  thumbnail after the first and overlays a "+N" badge on it instead of
-   *  letting the row stack onto several lines — no measurement involved,
-   *  same non-collapsing DOM either way. Clicking the (visible) thumbnail
-   *  opens the slideshow modal (`openImageGallery`) starting at index 0, so
-   *  every photo is still reachable via the modal's prev/next; hovering
-   *  shows a trash icon (touch: always visible) that deletes in place via
-   *  `deleteImageEntry`, restoring the per-thumbnail delete this file had
-   *  before `Thumbnails` centralized it into the modal only. */
+  /** Thin adapter around the shared `ThumbnailGallery` component — replaces
+   *  the old `Thumbnails` component (removed 2026-09-03, whose per-instance
+   *  `ResizeObserver` + `useLayoutEffect` measured real, avoidable overhead
+   *  on orders with many lines/photos, most noticeable as visible lag right
+   *  after an upload) and this file's own since-removed inline thumbnail
+   *  markup. `ThumbnailGallery` collapses via a pure-CSS `@container`
+   *  "quantity query" (no measurement) instead. Clicking a thumbnail opens
+   *  the slideshow modal (`openImageGallery`) starting at that index, so
+   *  every photo stays reachable via the modal's prev/next; `deleteImageEntry`
+   *  wires up the per-thumbnail delete when the entries support it. */
   function renderThumbnails(
     photos: ImageModalEntry[],
     style?: React.CSSProperties,
   ) {
     if (photos.length === 0) return null;
+    // Every entry in a given `photos` array always carries the same set of
+    // id-fields (all-or-nothing per call site), so checking the first entry
+    // is enough to know whether the whole row should offer delete.
+    const deletable = canDeleteImageEntry(photos[0]);
     return (
-      <div className={styles.thumbnailsContainer} style={style}>
-        {photos.map((p, i) => (
-          <div
-            key={i}
-            className={styles.thumbnailItem}
-            onClick={() => openImageGallery(photos, i)}
-          >
-            <img src={p.url} alt="" className={styles.thumbnailImg} />
-            {i === 0 && photos.length > 1 && (
-              <div className={styles.thumbnailCountBadge}>
-                <Icon name="touch" size={14} />
-                {t("See all")}
-              </div>
-            )}
-            {canDeleteImageEntry(p) && (
-              <div
-                className={styles.thumbnailHoverTrash}
-                title={t("Delete image")}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  deleteImageEntry(p);
-                }}
-              >
-                <Icon name="trash" size={14} />
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
+      <ThumbnailGallery
+        items={photos.map((p, i) => ({ key: String(i), url: p.url }))}
+        onOpen={(i) => openImageGallery(photos, i)}
+        onDelete={deletable ? (i) => deleteImageEntry(photos[i]) : undefined}
+        deleteLabel={t("Delete image")}
+        seeAllLabel={t("See all")}
+        style={style}
+      />
     );
   }
 
@@ -3117,7 +3096,14 @@ export function OrderDetail() {
 
   function handleCopyTrackingRef() {
     if (!parsedThirdPartyRef) return;
-    navigator.clipboard.writeText(parsedThirdPartyRef);
+    // `navigator.clipboard` is only defined in a secure context (HTTPS or
+    // localhost) — on a plain-HTTP origin (e.g. a phone hitting the dev
+    // server over LAN/Tailscale before HTTPS was set up) it's `undefined`,
+    // and calling `.writeText` on it throws *synchronously*, aborting the
+    // function before the label-toggle state below ever runs. Optional
+    // chaining + `.catch` keeps the visible "Copied" feedback decoupled
+    // from whether the copy itself actually succeeded.
+    navigator.clipboard?.writeText(parsedThirdPartyRef).catch(() => {});
     setCopiedTrackingRef(true);
     setTimeout(() => setCopiedTrackingRef(false), 2500);
   }
@@ -6150,7 +6136,6 @@ export function OrderDetail() {
                                     title: `${t("Attachment for")} ${line.name}`,
                                   },
                             ),
-                            { marginLeft: 28 },
                           )}
                         </div>
                       )}
@@ -6298,7 +6283,7 @@ export function OrderDetail() {
                     </div>
 
                     {deliveryDocPhotos.length > 0 && (
-                      <div className={styles.followUpRow}>
+                      <div className={styles.cardRow}>
                         <Icon
                           name="image"
                           size={24}
@@ -6321,7 +6306,7 @@ export function OrderDetail() {
                         // legs captured) without duplicating the JSX.
                         const deliveredRow = order.taken_by &&
                           order.deliver_geo && (
-                            <div className={styles.followUpRow}>
+                            <div className={styles.cardRow}>
                               <Icon
                                 name="delivered"
                                 size={24}
@@ -6344,6 +6329,8 @@ export function OrderDetail() {
                               <Button
                                 type="button"
                                 variant="tertiary"
+                                icon="arrowUpRight"
+                                iconPosition="right"
                                 className={styles.inlineButton}
                                 onClick={() =>
                                   window.open(
@@ -6354,7 +6341,6 @@ export function OrderDetail() {
                                 }
                               >
                                 {t("Map")}
-                                <Icon name="arrowUpRight" size={16} />
                               </Button>
                             </div>
                           );
@@ -6362,7 +6348,7 @@ export function OrderDetail() {
                         return (
                           <>
                             {order.pickup_geo ? (
-                              <div className={styles.followUpRow}>
+                              <div className={styles.cardRow}>
                                 <Icon
                                   name="pickup"
                                   size={24}
@@ -6385,6 +6371,8 @@ export function OrderDetail() {
                                 <Button
                                   type="button"
                                   variant="tertiary"
+                                  icon="arrowUpRight"
+                                  iconPosition="right"
                                   className={styles.inlineButton}
                                   onClick={() =>
                                     window.open(
@@ -6395,7 +6383,6 @@ export function OrderDetail() {
                                   }
                                 >
                                   {t("Map")}
-                                  <Icon name="arrowUpRight" size={16} />
                                 </Button>
                               </div>
                             ) : order.third_party ? (
@@ -6406,7 +6393,7 @@ export function OrderDetail() {
                               // the hand-off/proof cards use, in place of a
                               // Map button there's no GPS to back.
                               order.delivered_at && (
-                                <div className={styles.followUpRow}>
+                                <div className={styles.cardRow}>
                                   <Icon
                                     name="scooter"
                                     size={24}
@@ -6450,17 +6437,15 @@ export function OrderDetail() {
                                         type="button"
                                         variant="tertiary"
                                         className={styles.inlineButton}
+                                        icon={
+                                          copiedTrackingRef ? "check" : "copy"
+                                        }
+                                        iconPosition="right"
                                         onClick={handleCopyTrackingRef}
                                       >
                                         {copiedTrackingRef
                                           ? t("Copied")
-                                          : `${t("Ref:")} ${parsedThirdPartyRef}`}
-                                        <Icon
-                                          name={
-                                            copiedTrackingRef ? "check" : "copy"
-                                          }
-                                          size={16}
-                                        />
+                                          : `${parsedThirdPartyRef}`}
                                       </Button>
                                     ))}
                                 </div>
@@ -6471,7 +6456,7 @@ export function OrderDetail() {
                               // doubles as the "picked up at" moment;
                               // `activeProof.name` is the "Photo of who
                               // collected" name captured at proof.
-                              <div className={styles.followUpRow}>
+                              <div className={styles.cardRow}>
                                 <Icon
                                   name="pickup"
                                   size={24}
@@ -6726,9 +6711,9 @@ export function OrderDetail() {
                 </div>
                 <div className={styles.cardContent}>
                   <div className={styles.cardListColumn}>
-                    <div className={styles.rowStretch}>
+                    <div className={styles.followUpRow}>
                       {order.backorder_of && (
-                        <span>
+                        <span className={styles.row}>
                           {t("Backorder of")}{" "}
                           <Button
                             type="button"
@@ -6749,7 +6734,7 @@ export function OrderDetail() {
                           const due = new Date(order.remind_on!) <= new Date();
                           return (
                             <span
-                              className={styles.row}
+                              className={styles.left}
                               style={{
                                 color: due
                                   ? "var(--state-warning)"
@@ -7480,72 +7465,59 @@ export function OrderDetail() {
                       </div>
                     )}
                     {handoffMode === "third" && (
-                      <div
-                        className={styles.headerRow}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "var(--space-sm)",
-                          flexWrap: "wrap",
-                        }}
-                      >
-                        <span>
+                      <div className={styles.headerRow}>
+                        <span className={styles.secondary}>
                           {t("Handed to")}{" "}
                           <strong>
                             {parsedThirdPartyService ||
                               order.courier_service ||
                               t("Online courier")}
-                            {parsedThirdPartyRef
-                              ? ` · ${parsedThirdPartyRef}`
-                              : ""}
-                          </strong>
-                        </span>
-                        {parsedThirdPartyRef && (
-                          <>
-                            {parsedThirdPartyService.toLowerCase() ===
-                            "paxel" ? (
-                              <Button
-                                type="button"
-                                variant="tertiary"
-                                className={styles.inlineButton}
-                                onClick={() =>
-                                  window.open(
-                                    `https://paxel.co.id/tracking/${encodeURIComponent(parsedThirdPartyRef)}`,
-                                    "_blank",
-                                    "noopener",
-                                  )
-                                }
-                              >
-                                {t("Track")}
-                              </Button>
-                            ) : (
-                              <span
-                                style={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  gap: 6,
-                                }}
-                              >
-                                <span>
-                                  {t("Ref:")}{" "}
-                                  <strong>{parsedThirdPartyRef}</strong>
-                                </span>
+                          </strong>{" "}
+                          {parsedThirdPartyRef && (
+                            <>
+                              {parsedThirdPartyService.toLowerCase() ===
+                              "paxel" ? (
                                 <Button
                                   type="button"
                                   variant="tertiary"
-                                  size="md"
-                                  icon={copiedTrackingRef ? "check" : "copy"}
-                                  onClick={handleCopyTrackingRef}
                                   className={styles.inlineButton}
+                                  onClick={() =>
+                                    window.open(
+                                      `https://paxel.co.id/tracking/${encodeURIComponent(parsedThirdPartyRef)}`,
+                                      "_blank",
+                                      "noopener",
+                                    )
+                                  }
                                 >
-                                  {copiedTrackingRef
-                                    ? t("Copied")
-                                    : t("Copy ref")}
+                                  {t("Track")}
                                 </Button>
-                              </span>
-                            )}
-                          </>
-                        )}
+                              ) : (
+                                <span
+                                  style={{
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: 6,
+                                  }}
+                                >
+                                  <span>
+                                    <strong>{parsedThirdPartyRef}</strong>
+                                  </span>
+                                  <Button
+                                    type="button"
+                                    variant="tertiary"
+                                    size="md"
+                                    onClick={handleCopyTrackingRef}
+                                    className={styles.inlineButton}
+                                  >
+                                    {copiedTrackingRef
+                                      ? t("Copied")
+                                      : t("Copy ref")}
+                                  </Button>
+                                </span>
+                              )}
+                            </>
+                          )}
+                        </span>
                       </div>
                     )}
                     <div className={styles.cardContent}>
@@ -7906,7 +7878,7 @@ export function OrderDetail() {
                                         key={l.id}
                                         className={styles.followUpColumn}
                                       >
-                                        <div className={styles.followUpRow}>
+                                        <div className={styles.cardRow}>
                                           <span className={styles.itemQty}>
                                             {maxSent}
                                           </span>
@@ -8034,62 +8006,35 @@ export function OrderDetail() {
                                                 {t("Add photo")}
                                               </CameraButton>
                                               {pics.length > 0 && (
-                                                <div
-                                                  className={
-                                                    styles.thumbnailsContainer
+                                                <ThumbnailGallery
+                                                  items={pics.map((p) => ({
+                                                    key: p.id,
+                                                    url: p.url,
+                                                  }))}
+                                                  onOpen={(i) =>
+                                                    setActiveImageModal({
+                                                      url: pics[i].url,
+                                                      title: `${t("Refusal photo —")} ${l.name}`,
+                                                    })
                                                   }
-                                                >
-                                                  {pics.map((p) => (
-                                                    <div
-                                                      key={p.id}
-                                                      className={
-                                                        styles.thumbnailItem
-                                                      }
-                                                      onClick={() =>
-                                                        setActiveImageModal({
-                                                          url: p.url,
-                                                          title: `${t("Refusal photo —")} ${l.name}`,
-                                                        })
-                                                      }
-                                                    >
-                                                      <img
-                                                        src={p.url}
-                                                        alt=""
-                                                        className={
-                                                          styles.thumbnailImg
-                                                        }
-                                                      />
-                                                      <div
-                                                        className={
-                                                          styles.thumbnailHoverTrash
-                                                        }
-                                                        title={t(
-                                                          "Delete image",
-                                                        )}
-                                                        onClick={(e) => {
-                                                          e.stopPropagation();
-                                                          setRefusePhotosMap(
-                                                            (pPrev) => ({
-                                                              ...pPrev,
-                                                              [l.id]: (
-                                                                pPrev[l.id] ||
-                                                                []
-                                                              ).filter(
-                                                                (x) =>
-                                                                  x.id !== p.id,
-                                                              ),
-                                                            }),
-                                                          );
-                                                        }}
-                                                      >
-                                                        <Icon
-                                                          name="trash"
-                                                          size={14}
-                                                        />
-                                                      </div>
-                                                    </div>
-                                                  ))}
-                                                </div>
+                                                  onDelete={(i) => {
+                                                    const p = pics[i];
+                                                    setRefusePhotosMap(
+                                                      (pPrev) => ({
+                                                        ...pPrev,
+                                                        [l.id]: (
+                                                          pPrev[l.id] || []
+                                                        ).filter(
+                                                          (x) => x.id !== p.id,
+                                                        ),
+                                                      }),
+                                                    );
+                                                  }}
+                                                  deleteLabel={t(
+                                                    "Delete image",
+                                                  )}
+                                                  seeAllLabel={t("See all")}
+                                                />
                                               )}
                                             </div>
                                           </div>
@@ -8316,27 +8261,28 @@ export function OrderDetail() {
                     <div className={styles.cardListColumn}></div>
                     {showCodRow && (
                       <div className={styles.followUpRow}>
-                        <Icon
-                          name="cash"
-                          size={24}
-                          className={styles.followUpIcon}
-                        />
-                        <div className={styles.followUpMain}>
-                          <span className={styles.fieldLabel}>
-                            {t("COD cash awaiting office reconcile")}
-                          </span>
-                          <span className={styles.secondary}>
-                            {currency.format(codReconcileAmount)}{" "}
-                            {t("collected by courier")}
-                          </span>
+                        <div className={styles.row}>
+                          <Icon
+                            name="cash"
+                            size={24}
+                            className={styles.followUpIcon}
+                          />
+                          <div className={styles.followUpMain}>
+                            <span className={styles.fieldLabel}>
+                              {t("COD cash awaiting office reconcile")}
+                            </span>
+                            <span className={styles.secondary}>
+                              {currency.format(codReconcileAmount)}{" "}
+                              {t("collected by courier")}
+                            </span>
+                          </div>
                         </div>
                         <Button
                           type="button"
                           variant="secondary"
-                          size="md"
+                          className={styles.followUpButton}
                           onClick={handleReconcileCOD}
                           disabled={reconcilingCod}
-                          style={{ width: "160px" }}
                         >
                           {reconcilingCod
                             ? t("Saving…")
@@ -8345,22 +8291,24 @@ export function OrderDetail() {
                       </div>
                     )}
                     {showCodDone && (
-                      <div className={styles.followUpRow}>
-                        <Icon
-                          name="check"
-                          size={24}
-                          className={styles.followUpIcon}
-                          style={{ color: "var(--accent-primary)" }}
-                        />
-                        <div className={styles.followUpMain}>
-                          <span className={styles.fieldLabel}>
-                            {t("Cash reconciled")}
-                          </span>
-                          <span className={styles.secondary}>
-                            {order.cod_received_at
-                              ? `${formatDate(order.cod_received_at)}`
-                              : ""}
-                          </span>
+                      <div className={styles.cardRow}>
+                        <div className={styles.row}>
+                          <Icon
+                            name="check"
+                            size={24}
+                            className={styles.followUpIcon}
+                            style={{ color: "var(--accent-primary)" }}
+                          />
+                          <div className={styles.followUpMain}>
+                            <span className={styles.fieldLabel}>
+                              {t("Cash reconciled")}
+                            </span>
+                            <span className={styles.secondary}>
+                              {order.cod_received_at
+                                ? `${formatDate(order.cod_received_at)}`
+                                : ""}
+                            </span>
+                          </div>
                         </div>
                         {auth.can("reconcileCOD") && (
                           <Button
@@ -8376,24 +8324,25 @@ export function OrderDetail() {
                     )}
                     {showDocsRow && (
                       <div className={styles.followUpRow}>
-                        <Icon
-                          name="fileDoc"
-                          size={24}
-                          className={styles.followUpIcon}
-                        />
-                        <div className={styles.followUpMain}>
-                          <span className={styles.fieldLabel}>
-                            {t("Signed DO & SI not yet returned")}
-                          </span>
-                          <span className={styles.secondary}>
-                            {t("Confirm the signed docs are back and filed")}
-                          </span>
+                        <div className={styles.row}>
+                          <Icon
+                            name="fileDoc"
+                            size={24}
+                            className={styles.followUpIcon}
+                          />
+                          <div className={styles.followUpMain}>
+                            <span className={styles.fieldLabel}>
+                              {t("Signed DO & SI not yet returned")}
+                            </span>
+                            <span className={styles.secondary}>
+                              {t("Confirm the signed docs are back and filed")}
+                            </span>
+                          </div>
                         </div>
                         <Button
                           type="button"
                           variant="secondary"
-                          size="md"
-                          style={{ width: "160px" }}
+                          className={styles.followUpButton}
                           onClick={handleConfirmDocsReturned}
                         >
                           {t("Mark returned")}
@@ -8401,7 +8350,7 @@ export function OrderDetail() {
                       </div>
                     )}
                     {showDocsDone && (
-                      <div className={styles.followUpRow}>
+                      <div className={styles.cardRow}>
                         <Icon
                           name="check"
                           size={24}
@@ -8442,26 +8391,28 @@ export function OrderDetail() {
                     )}
                     {showTermsRow && (
                       <div className={styles.followUpRow}>
-                        <Icon
-                          name="wallet"
-                          size={24}
-                          className={styles.followUpIcon}
-                        />
-                        <div className={styles.followUpMain}>
-                          <span className={styles.fieldLabel}>
-                            {t("Terms invoice — payment not yet received")}
-                          </span>
-                          <span className={styles.secondary}>
-                            {order.payment_due_date
-                              ? `${t("Due")} ${formatDate(order.payment_due_date)}`
-                              : t("No due date on file")}
-                          </span>
+                        <div className={styles.row}>
+                          <Icon
+                            name="wallet"
+                            size={24}
+                            className={styles.followUpIcon}
+                          />
+                          <div className={styles.followUpMain}>
+                            <span className={styles.fieldLabel}>
+                              {t("Terms invoice — payment not yet received")}
+                            </span>
+                            <span className={styles.secondary}>
+                              {order.payment_due_date
+                                ? `${t("Due")} ${formatDate(order.payment_due_date)}`
+                                : t("No due date on file")}
+                            </span>
+                          </div>
                         </div>
                         <Button
                           type="button"
                           variant="secondary"
                           size="md"
-                          style={{ width: "160px" }}
+                          className={styles.followUpButton}
                           onClick={handleTermsPaymentReceived}
                         >
                           {t("Payment received")}
@@ -8469,7 +8420,7 @@ export function OrderDetail() {
                       </div>
                     )}
                     {showTermsDone && (
-                      <div className={styles.followUpRow}>
+                      <div className={styles.cardRow}>
                         <Icon
                           name="check"
                           size={24}
@@ -8703,9 +8654,9 @@ export function OrderDetail() {
                       type="button"
                       variant="tertiary"
                       className={styles.inlineButton}
+                      icon="undo"
                       onClick={handleUndo}
                     >
-                      <Icon name="undo" size={16} />
                       {t("Undo — back to")}{" "}
                       {t(
                         STAGE_LABELS[
@@ -8987,42 +8938,27 @@ export function OrderDetail() {
                                     </span>
                                   </div>
                                   {noteFileIds.length > 0 && (
-                                    <div className={styles.thumbnailsContainer}>
-                                      {noteFileIds.map((fileId) => (
-                                        <div
-                                          key={fileId}
-                                          className={styles.thumbnailItem}
-                                          onClick={() =>
-                                            setActiveImageModal({
-                                              url: getAssetUrl(fileId),
-                                              title: t(
-                                                "Photo of the return note",
-                                              ),
-                                            })
-                                          }
-                                        >
-                                          <img
-                                            src={getAssetUrl(fileId)}
-                                            alt=""
-                                            className={styles.thumbnailImg}
-                                          />
-                                          <div
-                                            className={
-                                              styles.thumbnailHoverTrash
-                                            }
-                                            title={t("Delete image")}
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              handleRemoveReturnNotePhoto(
-                                                fileId,
-                                              );
-                                            }}
-                                          >
-                                            <Icon name="trash" size={14} />
-                                          </div>
-                                        </div>
-                                      ))}
-                                    </div>
+                                    <ThumbnailGallery
+                                      items={noteFileIds.map((fileId) => ({
+                                        key: fileId,
+                                        url: getAssetUrl(fileId),
+                                      }))}
+                                      onOpen={(i) =>
+                                        setActiveImageModal({
+                                          url: getAssetUrl(noteFileIds[i]),
+                                          title: t(
+                                            "Photo of the return note",
+                                          ),
+                                        })
+                                      }
+                                      onDelete={(i) =>
+                                        handleRemoveReturnNotePhoto(
+                                          noteFileIds[i],
+                                        )
+                                      }
+                                      deleteLabel={t("Delete image")}
+                                      seeAllLabel={t("See all")}
+                                    />
                                   )}
                                   <CameraButton
                                     variant="tertiary"
@@ -9302,33 +9238,22 @@ export function OrderDetail() {
                               </span>
                             </div>
                             {signedDocFileId && (
-                              <div className={styles.thumbnailsContainer}>
-                                <div
-                                  className={styles.thumbnailItem}
-                                  onClick={() =>
-                                    setActiveImageModal({
-                                      url: getAssetUrl(signedDocFileId),
-                                      title: t("Photo of the signed DO/SI"),
-                                    })
-                                  }
-                                >
-                                  <img
-                                    src={getAssetUrl(signedDocFileId)}
-                                    alt=""
-                                    className={styles.thumbnailImg}
-                                  />
-                                  <div
-                                    className={styles.thumbnailHoverTrash}
-                                    title={t("Delete image")}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setSignedDocFileId(null);
-                                    }}
-                                  >
-                                    <Icon name="trash" size={14} />
-                                  </div>
-                                </div>
-                              </div>
+                              <ThumbnailGallery
+                                items={[
+                                  {
+                                    key: signedDocFileId,
+                                    url: getAssetUrl(signedDocFileId),
+                                  },
+                                ]}
+                                onOpen={() =>
+                                  setActiveImageModal({
+                                    url: getAssetUrl(signedDocFileId),
+                                    title: t("Photo of the signed DO/SI"),
+                                  })
+                                }
+                                onDelete={() => setSignedDocFileId(null)}
+                                deleteLabel={t("Delete image")}
+                              />
                             )}
                             <CameraButton
                               variant="tertiary"

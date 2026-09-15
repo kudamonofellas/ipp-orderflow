@@ -109,7 +109,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  flex: 1;
+  flex-shrink: 0;
 }
 
 .row {
@@ -117,6 +117,7 @@
   flex-direction: row;
   align-items: center;
   gap: var(--space-sm);
+  width: 100%;
 }
 
 .rowStretch {
@@ -125,6 +126,14 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-lg);
+}
+
+.handedToRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding-bottom: var(--space-md);
 }
 
 .fieldLabel {
@@ -210,6 +219,13 @@
   color: var(--text-muted);
   background: color-mix(in srgb, var(--text-secondary), transparent 90%);
   border: 1px solid var(--text-muted);
+  /* Without these, a narrow `.itemHeader` shrinks the pill (the default
+   * for any flex child) and its text wraps onto two lines instead —
+   * `flex-shrink: 0` keeps the pill at its natural single-line width, and
+   * `white-space: nowrap` is the fallback belt-and-braces in case it's
+   * still constrained some other way. */
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .pillWarning {
@@ -512,7 +528,7 @@
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: var(--space-sm);
+  justify-content: space-between;
 }
 
 /* ===== Finance gate form ===== */
@@ -589,6 +605,10 @@
 .followUpIcon {
   flex-shrink: 0;
   color: var(--state-warning);
+}
+
+.followUpButton {
+  width: 160px;
 }
 
 .successIcon {
@@ -750,6 +770,11 @@
   gap: var(--space-sm);
   width: 100%;
   height: auto;
+  /* Now that `.pill` (its `.itemHeader` sibling) no longer shrinks, this
+   * needs to be the one absorbing a narrow row instead — `min-width: 0`
+   * is required for a flex child to shrink below its content's intrinsic
+   * width at all. */
+  min-width: 0;
 }
 
 .itemQty {
@@ -771,6 +796,7 @@
   font: var(--text-body);
   font-weight: 600;
   color: var(--text-primary);
+  min-width: 0;
 }
 
 .inputBadge {
@@ -864,16 +890,11 @@
   gap: var(--space-sm);
 }
 
-/* Thumbnails list */
-.thumbnailsContainer {
-  display: flex;
-  flex: 1;
-  justify-content: flex-end;
-  align-items: center;
-  gap: var(--space-sm);
-  flex-wrap: wrap;
-}
-
+/* Gallery-row thumbnail styling (multi-photo, collapsible) now lives in the
+ * shared `ThumbnailGallery` component (src/components/ThumbnailGallery) —
+ * every former `.thumbnailsContainer` usage in OrderDetail.tsx renders that
+ * instead. Only the plain, non-collapsing single-tile classes below remain,
+ * for the Documents section's one-off per-row file thumbnail. */
 .thumbnailItem {
   position: relative;
   width: 56px;
@@ -891,40 +912,6 @@
   object-fit: cover;
   display: block;
   border-radius: calc(var(--radius-sm) - 1px);
-}
-
-.thumbnailHoverTrash {
-  position: absolute;
-  top: -4px;
-  right: -4px;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: rgba(0, 0, 0, 0.65);
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0;
-  transition:
-    opacity 0.15s ease,
-    background-color 0.15s ease;
-  z-index: 1;
-}
-
-.thumbnailHoverTrash:hover {
-  background: var(--state-error, #d13c3c);
-}
-
-.thumbnailItem:hover .thumbnailHoverTrash {
-  opacity: 1;
-}
-
-/* Touch devices have no hover state — always show the badge so it's reachable */
-@media (hover: none) {
-  .thumbnailHoverTrash {
-    opacity: 1;
-  }
 }
 
 /* Fallback for a document thumbnail whose `<img>` failed to load (a PDF,
@@ -946,59 +933,6 @@
 @keyframes docUploadSpin {
   to {
     transform: rotate(360deg);
-  }
-}
-
-/* Mobile: collapse every thumbnail after the first into a "+N" overlay
- * badge instead of letting the row wrap onto several lines — driven purely
- * by a breakpoint, not a per-container ResizeObserver measurement (that
- * approach, tried previously as the `Thumbnails` component, was removed
- * 2026-09-03 for causing visible upload lag with 20+ live instances on one
- * page). Clicking the visible thumbnail still opens the full slideshow via
- * the existing `openImageGallery` wiring, so every photo stays reachable. */
-.thumbnailCountBadge {
-  display: none;
-}
-
-@media (max-width: 768px) {
-  .thumbnailsContainer {
-    flex-wrap: nowrap;
-  }
-
-  /* Scoped to `.thumbnailsContainer` specifically — a bare
-   * `.thumbnailItem:not(:first-child)` also matches the Documents section's
-   * one-off thumbnail (never literally its own row's first child, since the
-   * doc-type/number spans come before it there), hiding it even though it
-   * has nothing to do with the gallery-collapse feature. Always scope a
-   * `:not(:first-child)`-style rule to the specific container it's meant
-   * for, not the bare shared class. */
-  .thumbnailsContainer .thumbnailItem:not(:first-child) {
-    display: none;
-  }
-
-  .thumbnailCountBadge {
-    display: flex;
-    position: absolute;
-    inset: 0;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    background: rgba(0, 0, 0, 0.55);
-    color: #fff;
-    font: var(--text-caption);
-    font-weight: 300;
-    border-radius: calc(var(--radius-sm) - 1px);
-    pointer-events: none;
-  }
-
-  /* The collapsed thumbnail's own delete button would sit awkwardly on top
-   * of (or behind) the count-badge overlay, and "delete just this one
-   * photo" doesn't read sensibly while every other photo is hidden behind
-   * it anyway — hide it here, same breakpoint. */
-  .thumbnailsContainer
-    .thumbnailItem:has(.thumbnailCountBadge)
-    .thumbnailHoverTrash {
-    display: none;
   }
 }
 
@@ -1049,6 +983,18 @@
   background-color: var(--bg-surface-hover-dark);
   gap: var(--space-sm);
   font: var(--text-body);
+}
+
+.cardRow {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--space-md);
+  padding: var(--space-sm) 0;
+}
+
+.cardRow + .cardRow {
+  border-top: 1px solid var(--border-subtle);
 }
 
 .cardListColumn {
@@ -1514,6 +1460,13 @@
     padding: 0 var(--space-md) var(--space-md);
   }
 
+  .titleRow {
+    flex-direction: column;
+    width: 100%;
+    align-items: flex-start;
+    gap: var(--space-xs);
+  }
+
   .itemQty {
     width: 16px;
   }
@@ -1524,5 +1477,22 @@
 
   .docSelect {
     max-width: 72px;
+  }
+
+  .handedToRow {
+    flex-direction: column;
+    text-align: left;
+    align-items: flex-start;
+  }
+
+  .followUpRow {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-sm);
+  }
+
+  .followUpButton {
+    width: 100%;
   }
 }

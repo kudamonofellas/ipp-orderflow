@@ -1,0 +1,446 @@
+/* Shared thumbnail row — extracted from OrderDetail.module.css's original
+ * `.thumbnailsContainer` block, which is this component's styling baseline.
+ *
+ * The "auto" collapse mode below uses a pure-CSS "quantity query": each
+ * tile is a fixed 56px + 8px (--space-sm) gap = 64px, so the number of
+ * tiles that fit in the parent's actual available width can be precomputed
+ * as a fixed list of `@container (min-width: …)` breakpoints — one per
+ * tile, revealing (and un-revealing the "N+ See all" badge from) one more
+ * tile per 64px of room. This is deliberately NOT a ResizeObserver/JS
+ * measurement — an earlier attempt at that caused real upload lag with 20+
+ * live instances on one page. Capped at MAX_VISIBLE (6, see .tsx) so the
+ * breakpoint list here stays finite; beyond the widest breakpoint the
+ * container is wide enough that no collapsing is needed at all.
+ *
+ * Breakpoint math: threshold(p) = p*56 + (p-1)*8 = 64p - 8
+ *   p=1: 56   p=2: 120   p=3: 184   p=4: 248   p=5: 312   p=6: 376
+ */
+
+.wrapper {
+  container-type: inline-size;
+  width: 100%;
+}
+
+.thumbnailsContainer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-wrap: nowrap;
+  width: 100%;
+  justify-content: flex-end;
+}
+
+.wrapper[data-align="left"] .thumbnailsContainer {
+  justify-content: flex-start;
+}
+
+.thumbnailItem {
+  position: relative;
+  width: 56px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-default);
+  cursor: pointer;
+  background: var(--bg-surface-hover-dark);
+}
+
+.thumbnailImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  border-radius: calc(var(--radius-sm) - 1px);
+}
+
+.thumbnailHoverTrash {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition:
+    opacity 0.15s ease,
+    background-color 0.15s ease;
+  z-index: 1;
+}
+
+.thumbnailHoverTrash:hover {
+  background: var(--state-error, #d13c3c);
+}
+
+.thumbnailItem:hover .thumbnailHoverTrash {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .thumbnailHoverTrash {
+    opacity: 1;
+  }
+}
+
+.thumbnailCountBadge {
+  display: none;
+  position: absolute;
+  inset: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font: var(--text-caption);
+  font-weight: 300;
+  border-radius: calc(var(--radius-sm) - 1px);
+  pointer-events: none;
+}
+
+.thumbnailCountNumber {
+  font-weight: 700;
+  font-size: 13px;
+  line-height: 1.1;
+}
+
+/* Trash-suppression on the tile currently showing the "N+ See all" badge
+ * is handled per-mode below, paired at the exact same selector/breakpoint
+ * as the badge's own `display: flex`/`none` toggle. A single blanket
+ * `:has(.thumbnailCountBadge)` rule looks tempting but is wrong: every
+ * collapsible tile up to the cap carries a (mostly hidden) badge element in
+ * the DOM regardless of whether it's the currently-visible one, so `:has()`
+ * — which matches DOM presence, not computed visibility — would suppress
+ * trash on every tile at once instead of just the active badge tile. */
+
+/* ── "expanded": force every tile visible, never collapse. ── */
+.wrapper[data-collapse="expanded"] .thumbnailItem {
+  display: block;
+}
+.wrapper[data-collapse="expanded"] .thumbnailCountBadge {
+  display: none;
+}
+
+/* ── "compact": always exactly the first tile + its badge. ── */
+.wrapper[data-collapse="compact"] .thumbnailItem:not(:first-child) {
+  display: none;
+}
+.wrapper[data-collapse="compact"] .thumbnailItem:first-child .thumbnailCountBadge {
+  display: flex;
+}
+.wrapper[data-collapse="compact"] .thumbnailItem:first-child .thumbnailHoverTrash {
+  display: none;
+}
+
+/* ── "auto" (default): base state = just the first tile, then the
+ * container-query breakpoints below progressively reveal more. ── */
+.wrapper[data-collapse="auto"] .thumbnailItem {
+  display: none;
+}
+.wrapper[data-collapse="auto"] .thumbnailItem:first-child {
+  display: block;
+}
+.wrapper[data-collapse="auto"] .thumbnailItem:first-child .thumbnailCountBadge {
+  display: flex;
+}
+.wrapper[data-collapse="auto"] .thumbnailItem:first-child .thumbnailHoverTrash {
+  display: none;
+}
+
+@container (min-width: 56px) {
+  .wrapper[data-collapse="auto"] .thumbnailItem:nth-child(-n + 1) {
+    display: block;
+  }
+}
+@container (min-width: 120px) {
+  .wrapper[data-collapse="auto"] .thumbnailItem:nth-child(-n + 2) {
+    display: block;
+  }
+}
+@container (min-width: 184px) {
+  .wrapper[data-collapse="auto"] .thumbnailItem:nth-child(-n + 3) {
+    display: block;
+  }
+}
+@container (min-width: 248px) {
+  .wrapper[data-collapse="auto"] .thumbnailItem:nth-child(-n + 4) {
+    display: block;
+  }
+}
+@container (min-width: 312px) {
+  .wrapper[data-collapse="auto"] .thumbnailItem:nth-child(-n + 5) {
+    display: block;
+  }
+}
+@container (min-width: 376px) {
+  .wrapper[data-collapse="auto"] .thumbnailItem:nth-child(-n + 6) {
+    display: block;
+  }
+}
+
+/* Badge "enable" — turn on tile p's badge (and hide its trash) once it's
+ * the last revealed tile. */
+@container (min-width: 56px) {
+  .wrapper[data-collapse="auto"] .thumbnailItem:nth-child(1) .thumbnailCountBadge {
+    display: flex;
+  }
+  .wrapper[data-collapse="auto"] .thumbnailItem:nth-child(1) .thumbnailHoverTrash {
+    display: none;
+  }
+}
+@container (min-width: 120px) {
+  .wrapper[data-collapse="auto"] .thumbnailItem:nth-child(2) .thumbnailCountBadge {
+    display: flex;
+  }
+  .wrapper[data-collapse="auto"] .thumbnailItem:nth-child(2) .thumbnailHoverTrash {
+    display: none;
+  }
+}
+@container (min-width: 184px) {
+  .wrapper[data-collapse="auto"] .thumbnailItem:nth-child(3) .thumbnailCountBadge {
+    display: flex;
+  }
+  .wrapper[data-collapse="auto"] .thumbnailItem:nth-child(3) .thumbnailHoverTrash {
+    display: none;
+  }
+}
+@container (min-width: 248px) {
+  .wrapper[data-collapse="auto"] .thumbnailItem:nth-child(4) .thumbnailCountBadge {
+    display: flex;
+  }
+  .wrapper[data-collapse="auto"] .thumbnailItem:nth-child(4) .thumbnailHoverTrash {
+    display: none;
+  }
+}
+@container (min-width: 312px) {
+  .wrapper[data-collapse="auto"] .thumbnailItem:nth-child(5) .thumbnailCountBadge {
+    display: flex;
+  }
+  .wrapper[data-collapse="auto"] .thumbnailItem:nth-child(5) .thumbnailHoverTrash {
+    display: none;
+  }
+}
+@container (min-width: 376px) {
+  .wrapper[data-collapse="auto"] .thumbnailItem:nth-child(6) .thumbnailCountBadge {
+    display: flex;
+  }
+  .wrapper[data-collapse="auto"] .thumbnailItem:nth-child(6) .thumbnailHoverTrash {
+    display: none;
+  }
+}
+
+/* Badge "disable" — once the NEXT tile is also revealed, tile p is no
+ * longer the cutoff, so its badge (and trash-suppression) turns back off.
+ * Must come after the "enable" rules above so it wins the cascade once
+ * both match. */
+@container (min-width: 120px) {
+  .wrapper[data-collapse="auto"] .thumbnailItem:nth-child(1) .thumbnailCountBadge {
+    display: none;
+  }
+  .wrapper[data-collapse="auto"] .thumbnailItem:nth-child(1) .thumbnailHoverTrash {
+    display: flex;
+  }
+}
+@container (min-width: 184px) {
+  .wrapper[data-collapse="auto"] .thumbnailItem:nth-child(2) .thumbnailCountBadge {
+    display: none;
+  }
+  .wrapper[data-collapse="auto"] .thumbnailItem:nth-child(2) .thumbnailHoverTrash {
+    display: flex;
+  }
+}
+@container (min-width: 248px) {
+  .wrapper[data-collapse="auto"] .thumbnailItem:nth-child(3) .thumbnailCountBadge {
+    display: none;
+  }
+  .wrapper[data-collapse="auto"] .thumbnailItem:nth-child(3) .thumbnailHoverTrash {
+    display: flex;
+  }
+}
+@container (min-width: 312px) {
+  .wrapper[data-collapse="auto"] .thumbnailItem:nth-child(4) .thumbnailCountBadge {
+    display: none;
+  }
+  .wrapper[data-collapse="auto"] .thumbnailItem:nth-child(4) .thumbnailHoverTrash {
+    display: flex;
+  }
+}
+@container (min-width: 376px) {
+  .wrapper[data-collapse="auto"] .thumbnailItem:nth-child(5) .thumbnailCountBadge {
+    display: none;
+  }
+  .wrapper[data-collapse="auto"] .thumbnailItem:nth-child(5) .thumbnailHoverTrash {
+    display: flex;
+  }
+}
+/* tile 6 is the cap — no "disable" rule, its badge (if it has one) stays
+ * on for every width beyond 376px since there's no further tile to reveal. */
+
+@media (max-width: 768px) {
+  .wrapper[data-align-mobile="left"] .thumbnailsContainer {
+    justify-content: flex-start;
+  }
+  .wrapper[data-align-mobile="right"] .thumbnailsContainer {
+    justify-content: flex-end;
+  }
+
+  .wrapper[data-mobile-collapse="expanded"] .thumbnailItem {
+    display: block !important;
+  }
+  .wrapper[data-mobile-collapse="expanded"] .thumbnailCountBadge {
+    display: none !important;
+  }
+
+  .wrapper[data-mobile-collapse="compact"] .thumbnailItem:not(:first-child) {
+    display: none !important;
+  }
+  .wrapper[data-mobile-collapse="compact"] .thumbnailItem:first-child .thumbnailCountBadge {
+    display: flex !important;
+  }
+  .wrapper[data-mobile-collapse="compact"] .thumbnailItem:first-child .thumbnailHoverTrash {
+    display: none !important;
+  }
+  .wrapper[data-mobile-collapse="compact"] .thumbnailItem:not(:first-child) .thumbnailCountBadge {
+    display: none !important;
+  }
+
+  .wrapper[data-mobile-collapse="auto"] .thumbnailItem {
+    display: none !important;
+  }
+  .wrapper[data-mobile-collapse="auto"] .thumbnailItem:first-child {
+    display: block !important;
+  }
+  .wrapper[data-mobile-collapse="auto"] .thumbnailItem:first-child .thumbnailCountBadge {
+    display: flex !important;
+  }
+  .wrapper[data-mobile-collapse="auto"] .thumbnailItem:first-child .thumbnailHoverTrash {
+    display: none !important;
+  }
+
+  /* Nested container queries stay scoped inside this max-width:768px block
+   * so a forced mobileCollapse="auto" never leaks its reveal behavior into
+   * desktop widths — unlike the shared data-collapse="auto" rules above,
+   * which are meant to apply at every viewport. */
+  @container (min-width: 56px) {
+    .wrapper[data-mobile-collapse="auto"] .thumbnailItem:nth-child(-n + 1) {
+      display: block;
+    }
+  }
+  @container (min-width: 120px) {
+    .wrapper[data-mobile-collapse="auto"] .thumbnailItem:nth-child(-n + 2) {
+      display: block;
+    }
+  }
+  @container (min-width: 184px) {
+    .wrapper[data-mobile-collapse="auto"] .thumbnailItem:nth-child(-n + 3) {
+      display: block;
+    }
+  }
+  @container (min-width: 248px) {
+    .wrapper[data-mobile-collapse="auto"] .thumbnailItem:nth-child(-n + 4) {
+      display: block;
+    }
+  }
+  @container (min-width: 312px) {
+    .wrapper[data-mobile-collapse="auto"] .thumbnailItem:nth-child(-n + 5) {
+      display: block;
+    }
+  }
+  @container (min-width: 376px) {
+    .wrapper[data-mobile-collapse="auto"] .thumbnailItem:nth-child(-n + 6) {
+      display: block;
+    }
+  }
+
+  @container (min-width: 56px) {
+    .wrapper[data-mobile-collapse="auto"] .thumbnailItem:nth-child(1) .thumbnailCountBadge {
+      display: flex;
+    }
+    .wrapper[data-mobile-collapse="auto"] .thumbnailItem:nth-child(1) .thumbnailHoverTrash {
+      display: none;
+    }
+  }
+  @container (min-width: 120px) {
+    .wrapper[data-mobile-collapse="auto"] .thumbnailItem:nth-child(2) .thumbnailCountBadge {
+      display: flex;
+    }
+    .wrapper[data-mobile-collapse="auto"] .thumbnailItem:nth-child(2) .thumbnailHoverTrash {
+      display: none;
+    }
+  }
+  @container (min-width: 184px) {
+    .wrapper[data-mobile-collapse="auto"] .thumbnailItem:nth-child(3) .thumbnailCountBadge {
+      display: flex;
+    }
+    .wrapper[data-mobile-collapse="auto"] .thumbnailItem:nth-child(3) .thumbnailHoverTrash {
+      display: none;
+    }
+  }
+  @container (min-width: 248px) {
+    .wrapper[data-mobile-collapse="auto"] .thumbnailItem:nth-child(4) .thumbnailCountBadge {
+      display: flex;
+    }
+    .wrapper[data-mobile-collapse="auto"] .thumbnailItem:nth-child(4) .thumbnailHoverTrash {
+      display: none;
+    }
+  }
+  @container (min-width: 312px) {
+    .wrapper[data-mobile-collapse="auto"] .thumbnailItem:nth-child(5) .thumbnailCountBadge {
+      display: flex;
+    }
+    .wrapper[data-mobile-collapse="auto"] .thumbnailItem:nth-child(5) .thumbnailHoverTrash {
+      display: none;
+    }
+  }
+  @container (min-width: 376px) {
+    .wrapper[data-mobile-collapse="auto"] .thumbnailItem:nth-child(6) .thumbnailCountBadge {
+      display: flex;
+    }
+    .wrapper[data-mobile-collapse="auto"] .thumbnailItem:nth-child(6) .thumbnailHoverTrash {
+      display: none;
+    }
+  }
+  @container (min-width: 120px) {
+    .wrapper[data-mobile-collapse="auto"] .thumbnailItem:nth-child(1) .thumbnailCountBadge {
+      display: none;
+    }
+    .wrapper[data-mobile-collapse="auto"] .thumbnailItem:nth-child(1) .thumbnailHoverTrash {
+      display: flex;
+    }
+  }
+  @container (min-width: 184px) {
+    .wrapper[data-mobile-collapse="auto"] .thumbnailItem:nth-child(2) .thumbnailCountBadge {
+      display: none;
+    }
+    .wrapper[data-mobile-collapse="auto"] .thumbnailItem:nth-child(2) .thumbnailHoverTrash {
+      display: flex;
+    }
+  }
+  @container (min-width: 248px) {
+    .wrapper[data-mobile-collapse="auto"] .thumbnailItem:nth-child(3) .thumbnailCountBadge {
+      display: none;
+    }
+    .wrapper[data-mobile-collapse="auto"] .thumbnailItem:nth-child(3) .thumbnailHoverTrash {
+      display: flex;
+    }
+  }
+  @container (min-width: 312px) {
+    .wrapper[data-mobile-collapse="auto"] .thumbnailItem:nth-child(4) .thumbnailCountBadge {
+      display: none;
+    }
+    .wrapper[data-mobile-collapse="auto"] .thumbnailItem:nth-child(4) .thumbnailHoverTrash {
+      display: flex;
+    }
+  }
+  @container (min-width: 376px) {
+    .wrapper[data-mobile-collapse="auto"] .thumbnailItem:nth-child(5) .thumbnailCountBadge {
+      display: none;
+    }
+    .wrapper[data-mobile-collapse="auto"] .thumbnailItem:nth-child(5) .thumbnailHoverTrash {
+      display: flex;
+    }
+  }
+}

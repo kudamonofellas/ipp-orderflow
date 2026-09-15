@@ -1,6 +1,8 @@
 import type { ChangeEvent } from "react";
 import { Icon } from "../Icon/Icon";
 import { Button } from "../Button/Button";
+import { CameraButton } from "../CameraButton/CameraButton";
+import { ThumbnailGallery } from "../ThumbnailGallery/ThumbnailGallery";
 import type { OrderLinesCollection } from "../../types/directus";
 import { formatClock } from "../../lib/format";
 import styles from "./ReturnLineBox.module.css";
@@ -144,33 +146,20 @@ export function ReturnLineBox({
       <div className={styles.returnLineName}>{line.name}</div>
 
       {refusalPhotos.length > 0 && (
-        <div
-          className={`${styles.thumbnailsContainer} ${styles.thumbnailsContainerLoose}`}
-        >
-          {refusalPhotos.map((p, i) => (
-            <div
-              key={p.id}
-              className={styles.thumbnailItem}
-              onClick={() =>
-                onOpenImage(
-                  refusalPhotos.map((p2) => ({
-                    url: p2.url,
-                    title: `${t("Refusal photo")} · ${line.name}`,
-                  })),
-                  i,
-                )
-              }
-            >
-              <img src={p.url} alt="" className={styles.thumbnailImg} />
-              {i === 0 && refusalPhotos.length > 1 && (
-                <div className={styles.thumbnailCountBadge}>
-                  <Icon name="touch" size={14} />
-                  {t("See all")}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
+        <ThumbnailGallery
+          align="left"
+          items={refusalPhotos.map((p) => ({ key: p.id, url: p.url }))}
+          onOpen={(i) =>
+            onOpenImage(
+              refusalPhotos.map((p2) => ({
+                url: p2.url,
+                title: `${t("Refusal photo ")} ${line.name}`,
+              })),
+              i,
+            )
+          }
+          seeAllLabel={t("See all")}
+        />
       )}
       {isConfirmed && (
         <>
@@ -233,77 +222,47 @@ export function ReturnLineBox({
 
       {isConfirmed ? null : isPending && canReceiveReturn ? (
         <>
-          <div className={styles.followUpRow}>
-            <input
-              type="number"
-              min="0"
-              step="any"
-              className={styles.editInput}
-              style={{ width: 90 }}
-              value={receiveQtyValue ?? String(pendingAmount)}
-              onChange={(e) => onReceiveQtyChange(line.id, e.target.value)}
-            />
-            <span className="tiny muted">{line.unit}</span>
-            <label style={{ display: "inline-flex", cursor: "pointer" }}>
-              <Button
-                type="button"
-                variant="tertiary"
-                icon="camera"
-                title={t("Add weighing photo")}
-                onClick={(e) => {
-                  const inputElem = (e.currentTarget as HTMLElement)
-                    .nextElementSibling as HTMLInputElement;
-                  inputElem?.click();
-                }}
-              >
-                Add weighing photo
-              </Button>
+          <div className={styles.cardColumn}>
+            <div className={styles.row}>
               <input
-                type="file"
-                accept="image/*"
-                style={{ display: "none" }}
-                onChange={(e) => onUploadPhoto(line.id, e)}
+                type="number"
+                min="0"
+                step="any"
+                className={styles.editInput}
+                style={{ width: 90 }}
+                value={receiveQtyValue ?? String(pendingAmount)}
+                onChange={(e) => onReceiveQtyChange(line.id, e.target.value)}
               />
-            </label>
-            {photos.length > 0 && (
-              <div className={styles.thumbnailsContainer}>
-                {photos.map((p, i) => (
-                  <div
-                    key={p.id}
-                    className={styles.thumbnailItem}
-                    onClick={() =>
-                      onOpenImage(
-                        photos.map((p2) => ({
-                          url: p2.url,
-                          title: `${t("Scale photo")} · ${line.name}`,
-                          receiveLineId: line.id,
-                          receivePhotoId: p2.id,
-                        })),
-                        i,
-                      )
-                    }
-                  >
-                    <img src={p.url} alt="" className={styles.thumbnailImg} />
-                    {i === 0 && photos.length > 1 && (
-                      <div className={styles.thumbnailCountBadge}>
-                        <Icon name="touch" size={14} />
-                        {t("See all")}
-                      </div>
-                    )}
-                    <div
-                      className={styles.thumbnailHoverTrash}
-                      title={t("Delete image")}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onRemovePhoto(line.id, p.id);
-                      }}
-                    >
-                      <Icon name="trash" size={14} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+              <span className="tiny muted">{line.unit}</span>
+            </div>
+            <div className={styles.followUpRow}>
+              <CameraButton
+                variant="tertiary"
+                title={t("Add weighing photo")}
+                onChange={(e) => onUploadPhoto(line.id, e)}
+              >
+                {t("Add weighing photo")}
+              </CameraButton>
+              {photos.length > 0 && (
+                <ThumbnailGallery
+                  items={photos.map((p) => ({ key: p.id, url: p.url }))}
+                  onOpen={(i) =>
+                    onOpenImage(
+                      photos.map((p2) => ({
+                        url: p2.url,
+                        title: `${t("Scale photo ")} ${line.name}`,
+                        receiveLineId: line.id,
+                        receivePhotoId: p2.id,
+                      })),
+                      i,
+                    )
+                  }
+                  onDelete={(i) => onRemovePhoto(line.id, photos[i].id)}
+                  deleteLabel={t("Delete image")}
+                  seeAllLabel={t("See all")}
+                />
+              )}
+            </div>
           </div>
 
           <div className={styles.cardActions}>
