@@ -76,8 +76,15 @@ export function ThumbnailGallery({
     >
       <div className={styles.thumbnailsContainer}>
         {visible.map((item, i) => {
-          const position = i + 1; // 1-indexed "how many tiles shown up to here"
-          const remaining = items.length - position;
+          // A tile only carries a badge if items exist past it — i.e. if it
+          // would be a cut-off point at some width. Which one is actually
+          // showing its badge at any moment is CSS's call (see module.css).
+          const isCutoff = items.length > i + 1;
+          // The badge counts every photo the viewer can't see, INCLUDING this
+          // tile's own — its overlay covers the photo underneath completely,
+          // so a lone collapsed tile out of 3 reads "3", not "2". The number
+          // is exact rather than a lower bound, so it carries no "+".
+          const hiddenCount = items.length - i;
           return (
             <div
               key={item.key}
@@ -85,10 +92,10 @@ export function ThumbnailGallery({
               onClick={() => onOpen(i)}
             >
               <img src={item.url} alt="" className={styles.thumbnailImg} />
-              {remaining > 0 && (
+              {isCutoff && (
                 <div className={styles.thumbnailCountBadge}>
                   <span className={styles.thumbnailCountNumber}>
-                    {remaining}+
+                    {hiddenCount}
                   </span>
                   {seeAllLabel}
                 </div>

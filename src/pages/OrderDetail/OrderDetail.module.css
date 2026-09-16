@@ -102,7 +102,6 @@
   flex-direction: row;
   flex: 1;
   align-items: stretch;
-  gap: var(--space-lg);
 }
 
 .left {
@@ -621,6 +620,20 @@
   flex-direction: column;
   flex: 1;
   min-width: 0;
+}
+
+/* For a row whose other flexible sibling is a `ThumbnailGallery`. `.followUpMain`'s
+ * `flex: 1` means flex-basis 0 — it never reserves its own text width, it only
+ * receives leftover space — and the gallery grows at the same rate, so the two
+ * split the row 50/50. On a narrow card that hands the gallery more than its
+ * tiles need while starving the label into wrapping.
+ * `flex: 0 1 auto` instead: the label claims exactly its one-line width and
+ * stops (grow 0), leaving every remaining pixel to the gallery, which is the
+ * sibling that can actually use it — it shows one more tile per 64px it's
+ * given. Shrink stays 1 so a genuinely too-narrow row still degrades by
+ * wrapping the label rather than overflowing the card. */
+.followUpMainFit {
+  flex: 0 1 auto;
 }
 
 /* `.header` (its direct parent) is `align-items: flex-start`, so without

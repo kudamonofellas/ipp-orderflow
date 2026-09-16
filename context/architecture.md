@@ -26,7 +26,18 @@
 - **Shared Parsing Service (`dev-admin.kudafellas.cloud/order-api/parse-order`)** — A server-side REST endpoint that parses raw WhatsApp order text into a structured draft (customer match, delivery date, item lines with match status). Called by the frontend's in-app copy-paste intake flow (`IntakeModal` → `parseOrderText()` in `directus.ts`, `x-internal-token` header / `VITE_INTERNAL_TOKEN`) — removed 2026-08-11, **restored 2026-08-14** per explicit user request (see `progress-tracker.md`). May also be invoked independently by the n8n WhatsApp automation flow — not verified as part of either change since that's backend/n8n scope, not frontend.
 - **n8n** — Owns the WhatsApp intake automation. Reads from Evolution API webhooks, calls the shared parsing service, and writes draft orders + messages into Directus. The frontend does NOT call n8n directly, and (as of 2026-08-11) no longer reads what this workflow writes either — see the Automation row in Stack above.
 - **Evolution API** — Owns the WhatsApp connection. Sends webhooks to n8n. The frontend does NOT talk to Evolution API.
-- **Postgres `horeca_orders_dev`** (dev) / **`horeca_orders`** (prod) — The business database Directus sits on top of. Not accessed directly by the frontend (always via Directus). We are currently in development using `horeca_orders_dev`.
+- **Postgres `horeca_orders_dev`** (dev) / **`horeca_orders`** (prod) — The business database Directus sits on top of. Not accessed directly by the frontend (always via Directus). Both live in the same `business-postgres` container. **`horeca_orders` was provisioned 2026-09-16** (previously empty) — schema, roles, permissions and users migrated from dev; see `context/schema/roles-and-permissions` for the parity record.
+
+### Build-time environment (which Directus a build talks to)
+
+Vite selects the env file by mode automatically — no flags:
+
+| command | file | Directus |
+|---|---|---|
+| `npm run dev` | `.env.development` | `dev-admin.kudafellas.cloud` |
+| `npm run build` | `.env.production` | `admin.kudafellas.cloud` |
+
+Both are gitignored; `.env.example` documents the shape. **Every `VITE_*` value is inlined into the built bundle and is publicly readable** — never put a real secret in `.env.production`. `VITE_DIRECTUS_TOKEN` is deliberately blank there (and is in fact dead config — `getTokenClient()` in `directus.ts` is exported but never called, so all requests go through the authenticated login client). `VITE_INTERNAL_TOKEN` is also blank on prod: it would be exposed in the bundle, and the prod `directus` service has no `ORDER_API_TOKEN` env var (unlike `directus-dev`), so `/order-api/parse-order` is not expected to work there yet.
 
 ## Storage Model
 

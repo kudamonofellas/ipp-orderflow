@@ -53,6 +53,7 @@
   flex-direction: row;
   align-items: center;
   gap: var(--space-sm);
+  padding-top: var(--space-md);
   width: 100%;
 }
 
@@ -80,7 +81,6 @@
 .cardColumn {
   display: flex;
   flex-direction: column;
-  gap: var(--space-md);
 }
 
 .followUpRow {
@@ -149,5 +149,12 @@
     flex-direction: column;
     align-items: flex-start;
     gap: var(--space-md);
+  }
+
+  .followUpRow {
+    display: flex;
+    align-items: flex-start;
+    flex-direction: column;
+    gap: var(--space-xs);
   }
 }

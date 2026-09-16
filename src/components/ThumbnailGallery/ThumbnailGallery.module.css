@@ -16,9 +16,30 @@
  *   p=1: 56   p=2: 120   p=3: 184   p=4: 248   p=5: 312   p=6: 376
  */
 
+/* `flex: 1` + `min-width: 0` matter whenever this sits as a flex item in a
+ * row beside other content (e.g. OrderDetail's `.cardRow`: icon, label,
+ * gallery). Without them the wrapper's `width: 100%` becomes its flex base
+ * size, so it out-competes a sibling label (`flex: 1`, base 0) and squeezes
+ * it until its text wraps. With `flex: 1` the wrapper instead takes only the
+ * leftover space, and `min-width: 0` lets it shrink below its tiles'
+ * min-content width — which is what lets the container query below drop to
+ * fewer visible tiles instead of overflowing the row.
+ * `width: 100%` still carries the cross-axis size when this is a child of a
+ * COLUMN flex container (ReturnLineBox's mobile `.followUpRow`), where
+ * `flex` applies to height and an `align-items: flex-start` parent would
+ * otherwise shrink-wrap it to its tiles — leaving the container query
+ * measuring its own content instead of the space actually available. */
 .wrapper {
   container-type: inline-size;
   width: 100%;
+  flex: 1;
+  /* One tile wide (56px), NOT 0 — `container-type: inline-size` applies
+   * inline-size containment, so this box can never size itself from its own
+   * tiles; the row has to allocate its width. Letting it shrink to 0 doesn't
+   * hide anything (the base rule always renders the first tile), it just
+   * makes that tile overflow the row. Flooring it here means a cramped row
+   * gives up the label's second line instead of spilling a tile. */
+  min-width: 56px;
 }
 
 .thumbnailsContainer {

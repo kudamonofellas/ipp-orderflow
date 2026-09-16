@@ -145,22 +145,6 @@ export function ReturnLineBox({
     <div className={styles.returnLineBox}>
       <div className={styles.returnLineName}>{line.name}</div>
 
-      {refusalPhotos.length > 0 && (
-        <ThumbnailGallery
-          align="left"
-          items={refusalPhotos.map((p) => ({ key: p.id, url: p.url }))}
-          onOpen={(i) =>
-            onOpenImage(
-              refusalPhotos.map((p2) => ({
-                url: p2.url,
-                title: `${t("Refusal photo ")} ${line.name}`,
-              })),
-              i,
-            )
-          }
-          seeAllLabel={t("See all")}
-        />
-      )}
       {isConfirmed && (
         <>
           <div className={styles.undoRow}>
@@ -169,9 +153,9 @@ export function ReturnLineBox({
                 name="check"
                 style={{ color: "var(--accent-primary)", flexShrink: 0 }}
               />
-              {t("Received & verified at the warehouse")}
+              {t("Received & verified by warehouse")}
               {line.return_verified_at
-                ? ` · ${formatClock(line.return_verified_at)}`
+                ? ` at ${formatClock(line.return_verified_at)}`
                 : ""}
             </div>
             {canReceiveReturn && (
@@ -189,6 +173,23 @@ export function ReturnLineBox({
             )}
           </div>
         </>
+      )}
+
+      {refusalPhotos.length > 0 && (
+        <ThumbnailGallery
+          align="left"
+          items={refusalPhotos.map((p) => ({ key: p.id, url: p.url }))}
+          onOpen={(i) =>
+            onOpenImage(
+              refusalPhotos.map((p2) => ({
+                url: p2.url,
+                title: `${t("Refusal photo ")} ${line.name}`,
+              })),
+              i,
+            )
+          }
+          seeAllLabel={t("See all")}
+        />
       )}
 
       {keptQty > 0 && (
@@ -245,6 +246,7 @@ export function ReturnLineBox({
               </CameraButton>
               {photos.length > 0 && (
                 <ThumbnailGallery
+                  mobileAlign="left"
                   items={photos.map((p) => ({ key: p.id, url: p.url }))}
                   onOpen={(i) =>
                     onOpenImage(

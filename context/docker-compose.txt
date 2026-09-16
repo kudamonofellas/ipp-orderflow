@@ -235,7 +235,7 @@ services:
   # DIRECTUS (ADMIN CMS UI)
   # =========================
   directus:
-    image: directus/directus:latest
+    image: directus/directus:10.13.0
     container_name: directus
     restart: unless-stopped
     depends_on:
@@ -251,13 +251,14 @@ services:
       - TZ=${TZ}
       - KEY=${DIRECTUS_KEY}
       - SECRET=${DIRECTUS_SECRET}
-      
+
       - ADMIN_EMAIL=kudamonofellas@gmail.com
       - ADMIN_PASSWORD=${DIRECTUS_ADMIN_PASSWORD}
 
       - CORS_ENABLED=true
-      - CORS_ORIGIN=http://localhost:3000,http://localhost:3001,https://app.kudafellas.cloud
-      
+      - CORS_ORIGIN=http://localhost:3000,http://localhost:3001,https://app.kudafellas.cloud,http://192.168.0.177:3000,http://100.65.1.125:3000,http://192.168.18.6:3000,http://100.102.152.68:3000
+      - CORS_METHODS=GET,POST,PATCH,DELETE,OPTIONS
+
       - PUBLIC_URL=https://admin.kudafellas.cloud
     volumes:
       - directus_uploads:/directus/uploads
@@ -277,7 +278,7 @@ services:
   # DIRECTUS DEV (ADMIN CMS UI)
   # =========================
   directus-dev:
-    image: directus/directus:latest
+    image: directus/directus:10.13.0
     container_name: directus_dev
     restart: unless-stopped
     depends_on:
@@ -295,9 +296,13 @@ services:
       - SECRET=${DIRECTUS_DEV_SECRET}
       - ADMIN_EMAIL=kudamonofellas@gmail.com
       - ADMIN_PASSWORD=${DIRECTUS_ADMIN_PASSWORD}
+
       - CORS_ENABLED=true
-      - CORS_ORIGIN=http://localhost:3000,http://localhost:3001,https://app.kudafellas.cloud
+      - CORS_ORIGIN=http://localhost:3000,http://localhost:3001,https://app.kudafellas.cloud,http://192.168.0.177:3000,http://100.65.1.125:3000,http://192.168.18.6:3000,http://100.102.152.68:3000
+      - CORS_METHODS=GET,POST,PATCH,DELETE,OPTIONS
+
       - PUBLIC_URL=https://dev-admin.kudafellas.cloud
+      - ORDER_API_TOKEN=${ORDER_API_TOKEN}
     volumes:
       - directus_dev_uploads:/directus/uploads
       - directus_dev_extensions:/directus/extensions

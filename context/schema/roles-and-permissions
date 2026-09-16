@@ -1,23 +1,36 @@
+> **Source of truth is the live instance, not this doc.** This file has drifted from reality before (it listed the Finance/Courier `line_weighings` gap as outstanding after it had been granted live, and had the Owner role wrong — see Role 1). When it matters, read the live config: `GET /roles`, `GET /permissions?limit=-1`, `GET /users`. Note `/permissions` also returns Directus's *virtual* system rows (`id: null`, `system: true`) alongside real stored ones — filter on `id != null` to count what's actually in `directus_permissions`.
+>
+> **Prod parity (2026-09-16):** `admin.kudafellas.cloud` (`horeca_orders`) was migrated from dev and now mirrors it — 6 roles, 276 stored permission rows (dev's 274 + `Warehouse/line_cuts/read` and `Production/line_cuts/read`, deliberately added since Production works from cutting instructions and dev appears to have a latent read gap there), 1 `role_permissions` row, 8 users. Both instances run Directus 10.13.0.
+
 > **`messages`, `draft_weighings`, and `purchase_orders` were deleted live 2026-09-03** (0 rows, 0 code references each; `messages`'s abandoned WhatsApp-order-automation feature, `draft_weighings` superseded by direct `line_weighings` writes, `purchase_orders`'s PO-display feature never built in this port's frontend though it exists in the prototype). Every per-role row for these three collections below is now stale — kept as historical record of the grants that existed, not current state. `connection_events` (WhatsApp connection-state log, 855 live rows, still actively written externally) was deliberately left alone and isn't in this doc at all.
 
 ## The 6 roles and what they do
 
 | Role | Pipeline responsibility | Directus role name |
 |---|---|---|
-| **Owner** | God mode — sees everything, can toggle other roles' capabilities | `Administrator` (Directus built-in) |
+| **Owner** | God mode — sees everything, can toggle other roles' capabilities | Custom role `Owner/Developer/Administrator` (`admin_access: true`) |
 | **Admin** | Sales/admin — creates orders, manages customers & products, finalises, handles returns | Custom role `Admin` |
 | **Warehouse** | Cold storage weighing, packing | Custom role `Warehouse` |
 | **Production** | Cutting instructions | Custom role `Production` |
 | **Finance** | Payment approval gate | Custom role `Finance` |
 | **Courier** | Dispatch & delivery, proof photos, GPS | Custom role `Courier` |
 
-> **Important:** The **Owner** maps to Directus's built-in **`Administrator`** role — that one already has full access to everything, you don't configure it. You only need to create + configure the **other 5 custom roles**.
+> **Important (corrected 2026-09-16):** The **Owner** is a **custom** role named **`Owner/Developer/Administrator`** with `admin_access: true` — *not* Directus's built-in `Administrator` role. This doc previously claimed the latter; that was wrong on both live instances. The distinction is load-bearing, not cosmetic — see the `normalizeRole()` warning below.
 
 ---
 
-## Role 1 — Owner (Directus `Administrator`)
+## Role 1 — Owner (custom role `Owner/Developer/Administrator`)
 
-**Nothing to do.** Directus's built-in Administrator role has full CRUD on every collection and every field. Just assign the owner user to this role.
+**No permission rows to configure.** The role carries `admin_access: true`, so Directus bypasses the permission system for it entirely — it has full CRUD on every collection and field. Just create the role and assign owner users to it.
+
+> ⚠️ **The role's NAME is load-bearing.** `normalizeRole()` (`src/lib/domain.ts`) maps a Directus role name to the app's 6-role enum by keyword, testing **`'owner'` before `'admin'`**:
+>
+> - `"Owner/Developer/Administrator"` → contains `owner` → **Owner** ✅
+> - `"Administrator"` → no `owner`, contains `admin` → **Admin** ❌
+>
+> So a user on a role merely named `Administrator` gets full access in the Directus CMS (via `admin_access`) but is treated as **Admin** by the app — losing the Owner short-circuit in `can()` and the Settings → Roles & Permissions grid, which is gated on a hardcoded `role === 'Owner'`.
+>
+> This bit us for real on 2026-09-16: a fresh Directus bootstrap creates its own role literally named `Administrator` and puts `ADMIN_EMAIL` on it, so the prod admin account silently resolved to `Admin`. Fixed by reassigning that user to `Owner/Developer/Administrator`. **After any DB reset / fresh bootstrap, re-check which role the bootstrap admin user landed on.**
 
 ---
 
@@ -240,7 +253,7 @@ for whichever role lacked the grant. Only Admin/Owner (via `manageSettings`) can
 
 ## How to set this up in Directus admin UI
 
-1. **Settings → Roles & Permissions → "Create Role"** — create 5 roles: `Admin`, `Warehouse`, `Production`, `Finance`, `Courier`. (Owner = Directus's built-in `Administrator`, already exists.)
+1. **Settings → Roles & Permissions → "Create Role"** — create 6 roles: `Owner/Developer/Administrator` (tick **Admin Access**; no permission rows needed), plus `Admin`, `Warehouse`, `Production`, `Finance`, `Courier`. Do **not** reuse the bootstrap `Administrator` role for Owner — `normalizeRole()` would read it as `Admin` (see the Role 1 warning above).
 2. For each role, click into it → you'll see a list of all collections.
 3. For each collection, click the icon in the role's row to cycle: **No access → Use icon → Custom**.
    - **No access** (slash icon) = blocked entirely.

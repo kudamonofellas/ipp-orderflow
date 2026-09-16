@@ -6289,7 +6289,9 @@ export function OrderDetail() {
                           size={24}
                           className={styles.successIcon}
                         />
-                        <div className={styles.followUpMain}>
+                        <div
+                          className={`${styles.followUpMain} ${styles.followUpMainFit}`}
+                        >
                           <span className={styles.fieldLabel}>
                             {t("Delivery documentation")}
                           </span>
@@ -7531,7 +7533,7 @@ export function OrderDetail() {
                         }}
                       >
                         <div className={styles.proofFieldMain}>
-                          <div className={styles.left}>
+                          <div className={styles.row}>
                             <Icon
                               name="check"
                               size={18}
@@ -7599,7 +7601,7 @@ export function OrderDetail() {
                             }}
                           >
                             <div className={styles.proofFieldMain}>
-                              <div className={styles.left}>
+                              <div className={styles.row}>
                                 <Icon
                                   name="check"
                                   size={18}
@@ -7671,7 +7673,7 @@ export function OrderDetail() {
                             }}
                           >
                             <div className={styles.proofFieldMain}>
-                              <div className={styles.left}>
+                              <div className={styles.row}>
                                 <Icon
                                   name="check"
                                   size={18}
@@ -8946,9 +8948,7 @@ export function OrderDetail() {
                                       onOpen={(i) =>
                                         setActiveImageModal({
                                           url: getAssetUrl(noteFileIds[i]),
-                                          title: t(
-                                            "Photo of the return note",
-                                          ),
+                                          title: t("Photo of the return note"),
                                         })
                                       }
                                       onDelete={(i) =>
