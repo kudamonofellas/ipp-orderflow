@@ -5,6 +5,11 @@
 > Token source of truth: `context/ui-context.md` + `context/ui-tokens.md`.
 > CSS implementation: `src/styles/tokens.css`.
 
+## Update — 2026-09-16 Button icons via prop; long-form Delivery Date
+
+- **Put a `Button`'s icon in its `icon` prop, never as an inline `<Icon>` child.** `OrderNew`'s Cancel button had `<Icon name="close" size={16} /> {t("Cancel")}` as children while its sibling Save button already used `icon="save"`; the inline version bypasses `Button`'s own icon sizing and gap, so the two buttons in the same action row drifted apart. Now `icon="close"` with a text-only child. Rule: an icon that belongs to a button goes through `icon` (plus `iconOnly` when there's no label).
+- **`OrderDetail` Delivery Date uses the long form** — `toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })` → "September 16, 2026", with `—` when `deliver_at` is null. Note the locale is fixed to `en-US`, so month names stay English under the Bahasa UI.
+
 ## Update — 2026-09-16 Flex sizing for a size-contained child; counting what the viewer can't see
 
 - **A `container-type: inline-size` element can never size itself from its own content — the parent row must allocate its width.** Inline-size containment means intrinsic sizing (`fit-content`, `max-content`, `flex-basis: auto` with `width: auto`) resolves as if the element were empty, so `ThumbnailGallery`'s wrapper can't grow to fit its tiles. Consequences to carry into any future query-container component: (1) it needs `width: 100%` for the cross-axis when it's a child of a **column** flex container (an `align-items: flex-start` parent would otherwise shrink-wrap it to nothing useful, leaving the container query measuring its own content instead of the available space); (2) it needs `flex: 1` in a **row** so its flex base size is `0` and it claims only leftover space — with `width: 100%` alone, that width becomes its flex base size and it out-competes its siblings; (3) it needs a `min-width` floor equal to one tile, because shrinking to `0` hides nothing (the base CSS still renders the first tile) and just spills it out of the row.

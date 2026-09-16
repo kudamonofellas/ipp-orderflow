@@ -13,17 +13,21 @@
 | WhatsApp    | Evolution API (+ Postgres + Redis) | WhatsApp integration; webhooks → n8n. Same orphan status as Automation above. Its own connection-state log, `connection_events` (855 live rows as of 2026-09-03), was deliberately left alone — still actively written, unlike `messages`. |
 | Files       | Directus Files (`directus_files`)  | Proof photos, attachments — visible across devices.                           |
 | Proxy/TLS   | Traefik + Let's Encrypt            | Reverse proxy, auto-HTTPS on `*.kudafellas.cloud`.                            |
-| Parsing Svc | Shared Parser REST API             | Node endpoint at `/order-api/parse-order`. **No longer called by the frontend** (2026-08-11 removal) — the in-app copy-paste-and-parse flow was removed; only the n8n automation path may still call it. |
-| Mobile      | Capacitor 8 (later phase)          | Android APK — NOT in Phase 1, but remains a goal.                             |
+| Hosting     | nginx 1.27-alpine (`ipp-orderflow` service) | Serves the built SPA at `https://app.kudafellas.cloud` (live since 2026-09-16). `dist/` is a read-only bind mount, config in `deploy/nginx.conf` — see Deployment below. |
+| Parsing Svc | Directus endpoint extension `order-api` | `POST /order-api/parse-order`, source in `order-api/` (committed 2026-09-16; previously existed only inside the dev extensions volume). Installed on **both** dev and prod Directus. Called by the frontend's intake flow (restored 2026-08-14) and possibly n8n. |
+| Mobile      | Capacitor 8                        | Android shell **scaffolded 2026-09-16** (`android/`, `capacitor.config.ts`, appId `cloud.kudafellas.ipporderflow`); no APK built yet. |
 | LLM gateway | Hermes (GPT-4o)                    | **On hold** per user — not wired in Phase 1.                                  |
 
 ## System Boundaries
 
 - `src/` — React frontend (the app this workspace builds). Owns UI, routing, Directus SDK calls, i18n, theme.
 - `context/` — Project documentation (overview, architecture, schema snapshots). Not shipped.
+- `order-api/` — Source of the Directus `order-api` endpoint extension. Separate npm package; `dist/` is gitignored and rebuilt with `npm run build` inside that folder (`directus-extension build`). Deployed by copying into each Directus instance's `/directus/extensions/order-api` volume path, then recreating the container.
+- `deploy/` — Production serving config for the frontend (`nginx.conf`: SPA history fallback, immutable `/assets/` caching, `no-store` on `index.html`).
+- `android/` — Capacitor-generated native Android project. Its copied web bundle (`app/src/main/assets/public`) is gitignored by Capacitor's own `.gitignore`.
 - `.agents/memories/` — Imported session notes + project context. Not shipped.
 - **Directus (prod `admin.kudafellas.cloud` / dev `dev-admin.kudafellas.cloud`)** — Owns all business collections, auth, roles, file storage, realtime subscriptions. The frontend talks to this via `@directus/sdk`.
-- **Shared Parsing Service (`dev-admin.kudafellas.cloud/order-api/parse-order`)** — A server-side REST endpoint that parses raw WhatsApp order text into a structured draft (customer match, delivery date, item lines with match status). Called by the frontend's in-app copy-paste intake flow (`IntakeModal` → `parseOrderText()` in `directus.ts`, `x-internal-token` header / `VITE_INTERNAL_TOKEN`) — removed 2026-08-11, **restored 2026-08-14** per explicit user request (see `progress-tracker.md`). May also be invoked independently by the n8n WhatsApp automation flow — not verified as part of either change since that's backend/n8n scope, not frontend.
+- **Shared Parsing Service (`{admin,dev-admin}.kudafellas.cloud/order-api/parse-order`)** — A server-side REST endpoint that parses raw WhatsApp order text into a structured draft (customer match, delivery date, item lines with match status). Called by the frontend's in-app copy-paste intake flow (`IntakeModal` → `parseOrderText()` in `directus.ts`, `x-internal-token` header / `VITE_INTERNAL_TOKEN`) — removed 2026-08-11, **restored 2026-08-14** per explicit user request (see `progress-tracker.md`). May also be invoked independently by the n8n WhatsApp automation flow — not verified as part of either change since that's backend/n8n scope, not frontend.
 - **n8n** — Owns the WhatsApp intake automation. Reads from Evolution API webhooks, calls the shared parsing service, and writes draft orders + messages into Directus. The frontend does NOT call n8n directly, and (as of 2026-08-11) no longer reads what this workflow writes either — see the Automation row in Stack above.
 - **Evolution API** — Owns the WhatsApp connection. Sends webhooks to n8n. The frontend does NOT talk to Evolution API.
 - **Postgres `horeca_orders_dev`** (dev) / **`horeca_orders`** (prod) — The business database Directus sits on top of. Not accessed directly by the frontend (always via Directus). Both live in the same `business-postgres` container. **`horeca_orders` was provisioned 2026-09-16** (previously empty) — schema, roles, permissions and users migrated from dev; see `context/schema/roles-and-permissions` for the parity record.
@@ -36,8 +40,17 @@ Vite selects the env file by mode automatically — no flags:
 |---|---|---|
 | `npm run dev` | `.env.development` | `dev-admin.kudafellas.cloud` |
 | `npm run build` | `.env.production` | `admin.kudafellas.cloud` |
+| `npm run build:dev` | `.env.development` | `dev-admin.kudafellas.cloud` |
 
-Both are gitignored; `.env.example` documents the shape. **Every `VITE_*` value is inlined into the built bundle and is publicly readable** — never put a real secret in `.env.production`. `VITE_DIRECTUS_TOKEN` is deliberately blank there (and is in fact dead config — `getTokenClient()` in `directus.ts` is exported but never called, so all requests go through the authenticated login client). `VITE_INTERNAL_TOKEN` is also blank on prod: it would be exposed in the bundle, and the prod `directus` service has no `ORDER_API_TOKEN` env var (unlike `directus-dev`), so `/order-api/parse-order` is not expected to work there yet.
+Both are gitignored; `.env.example` documents the shape. **Every `VITE_*` value is inlined into the built bundle and is publicly readable** — never put a real secret in `.env.production`. `VITE_DIRECTUS_TOKEN` is deliberately blank there (and is in fact dead config — `getTokenClient()` in `directus.ts` is exported but never called, so all requests go through the authenticated login client).
+
+`VITE_INTERNAL_TOKEN` **is set on prod (2026-09-16), knowingly exposed** — the parse endpoint has no other auth, and the planned APK would expose it regardless. Mitigation: prod uses its **own** value (`ORDER_API_TOKEN_PROD` in the server `.env`, mapped to `ORDER_API_TOKEN` on the `directus` service), so the public prod bundle grants nothing on dev. The two must stay in sync. Because the request carries a custom header, the browser preflights it — the `directus` service needs `CORS_ALLOWED_HEADERS=Content-Type,Authorization,x-internal-token`; without it the call fails as a bare "Failed to fetch" with no status code.
+
+**`build:dev` caveat:** `vite build --mode development` sets `import.meta.env.DEV = true`, which sends `parseOrderText()` (`directus.ts`) down its relative-URL branch (`/order-api/parse-order`, meant for the Vite dev proxy). Inside a Capacitor APK that resolves to `https://localhost/...` and fails. Must be fixed before an APK can parse orders.
+
+### Deployment (frontend)
+
+Server `srv1757570`, compose dir `/root/kudafellas-stack`. The `ipp-orderflow` service bind-mounts `./ipp-orderflow/dist` and `./ipp-orderflow/nginx.conf`, so **a redeploy is only `npm run build` + `scp -r dist root@srv1757570:/root/kudafellas-stack/ipp-orderflow/`** — no container restart. Saving a source file changes nothing live. Always use plain `npm run build` before syncing; `build:dev` output would ship dev config.
 
 ## Storage Model
 

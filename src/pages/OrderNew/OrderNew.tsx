@@ -604,631 +604,646 @@ export function OrderNew() {
   return (
     <div className={styles.container}>
       <div className={styles.sectionsContainer}>
-      <div
-        className={[
-          styles.layoutGrid,
-          isPanelOpen ? styles.layoutGridWithPanel : styles.layoutGridFull,
-        ].join(" ")}
-      >
-        <div className={styles.mainColumn}>
-          <header className={styles.header}>
-            <div className={styles.topActionsRow}>
-              <Button
-                type="button"
-                variant="tertiary"
-                icon="chevronLeft"
-                onClick={cancel}
-              >
-                {t("Back")}
-              </Button>
-              <div className={styles.actions}>
+        <div
+          className={[
+            styles.layoutGrid,
+            isPanelOpen ? styles.layoutGridWithPanel : styles.layoutGridFull,
+          ].join(" ")}
+        >
+          <div className={styles.mainColumn}>
+            <header className={styles.header}>
+              <div className={styles.topActionsRow}>
                 <Button
                   type="button"
-                  variant="secondary"
+                  variant="tertiary"
+                  icon="chevronLeft"
                   onClick={cancel}
-                  disabled={submitting}
                 >
-                  <Icon name="close" size={16} /> {t("Cancel")}
+                  {t("Back")}
                 </Button>
-                <Button
-                  type="submit"
-                  form="new-order-form"
-                  variant="primary"
-                  icon="save"
-                  disabled={
-                    submitting ||
-                    !allowed ||
-                    loadingOpts ||
-                    (!!dupOrder && !replaceId)
-                  }
-                >
-                  {" "}
-                  {submitting ? t("Creating…") : t("Create order")}
-                </Button>
+                <div className={styles.actions}>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    icon="close"
+                    onClick={cancel}
+                    disabled={submitting}
+                  >
+                    {t("Cancel")}
+                  </Button>
+                  <Button
+                    type="submit"
+                    form="new-order-form"
+                    variant="primary"
+                    icon="save"
+                    disabled={
+                      submitting ||
+                      !allowed ||
+                      loadingOpts ||
+                      (!!dupOrder && !replaceId)
+                    }
+                  >
+                    {" "}
+                    {submitting ? t("Creating…") : t("Create order")}
+                  </Button>
+                </div>
               </div>
-            </div>
 
-            <div className={styles.titleRow}>
-              <h3 className={styles.title}>{t("New Order")}</h3>
-            </div>
-          </header>
+              <div className={styles.titleRow}>
+                <h3 className={styles.title}>{t("New Order")}</h3>
+              </div>
+            </header>
 
-          {!allowed && (
-            <p className={styles.error} role="alert">
-              {t("Your role doesn't have permission to create orders.")}
-            </p>
-          )}
-          {loadingOpts && (
-            <p className={styles.muted}>{t("Loading customers + products…")}</p>
-          )}
-
-          <form
-            id="new-order-form"
-            className={styles.form}
-            onSubmit={handleSubmit}
-          >
-            {multiCustomer && (
+            {!allowed && (
               <p className={styles.error} role="alert">
-                {t(
-                  "This looks like more than one customer's order — please enter them as separate orders.",
-                )}
+                {t("Your role doesn't have permission to create orders.")}
+              </p>
+            )}
+            {loadingOpts && (
+              <p className={styles.muted}>
+                {t("Loading customers + products…")}
               </p>
             )}
 
-            {error && (
-              <p className={styles.error} role="alert">
-                {error}
-              </p>
-            )}
-
-            <Card className={styles.customerCard}>
-              {badNo && (
-                <p className={`${styles.hint} ${styles.banner}`}>
-                  {t("Order no. should look like")} {dcOf || "YYMMDD"}NNN (
-                  {t("9 digits")}).
+            <form
+              id="new-order-form"
+              className={styles.form}
+              onSubmit={handleSubmit}
+            >
+              {multiCustomer && (
+                <p className={styles.error} role="alert">
+                  {t(
+                    "This looks like more than one customer's order — please enter them as separate orders.",
+                  )}
                 </p>
               )}
-              {dupOrder && !replaceId && (
-                <div
-                  className={`${styles.hint} ${styles.banner} ${styles.bannerWarning}`}
-                >
-                  <Icon name="alert" size={15} />
-                  <span>
-                    {t("Order")} #{orderNoValue} {t("already exists")}
-                    {dupOrder.customer_name
-                      ? ` (${dupOrder.customer_name})`
-                      : ""}
-                    . {t("Duplicate?")}
-                  </span>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => {
-                      setOrderNoValue(expectedNo);
-                      setOrderNoTouched(true);
-                    }}
-                  >
-                    {t("Use")} #{expectedNo}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => setReplaceId(dupOrder.id)}
-                  >
-                    {t("Replace it")}
-                  </Button>
-                </div>
+
+              {error && (
+                <p className={styles.error} role="alert">
+                  {error}
+                </p>
               )}
-              {replaceId && (
-                <div
-                  className={`${styles.hint} ${styles.banner} ${styles.bannerInfo}`}
-                >
-                  <Icon name="alert" size={15} />
-                  <span>
-                    {t("Will replace the existing")} #{orderNoValue}.
-                  </span>
-                  <Button
-                    type="button"
-                    variant="tertiary"
-                    size="sm"
-                    onClick={() => setReplaceId(null)}
-                    style={{ backgroundColor: "transparent" }}
+
+              <Card className={styles.customerCard}>
+                {badNo && (
+                  <p className={`${styles.hint} ${styles.banner}`}>
+                    {t("Order no. should look like")} {dcOf || "YYMMDD"}NNN (
+                    {t("9 digits")}).
+                  </p>
+                )}
+                {dupOrder && !replaceId && (
+                  <div
+                    className={`${styles.hint} ${styles.banner} ${styles.bannerWarning}`}
                   >
-                    {t("Undo")}
-                  </Button>
-                </div>
-              )}
-              {seqGap && (
-                <div className={`${styles.hint} ${styles.banner}`}>
-                  <span>
-                    {t("The next open queue number is")} #{expectedNo} —{" "}
-                    {t("but you entered")} #{orderNoValue}.{" "}
-                    {t("Typo, or keep it?")}
-                  </span>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => {
-                      setOrderNoValue(expectedNo);
-                      setOrderNoTouched(true);
-                    }}
-                  >
-                    {t("Use")} #{expectedNo}
-                  </Button>
-                </div>
-              )}
-              {deliverPast && (
-                <div
-                  className={`${styles.hint} ${styles.banner} ${styles.bannerWarning}`}
-                >
-                  <Icon name="alert" size={15} />
-                  <span>
-                    {t("Delivery date")} {deliverDateLabel}{" "}
-                    {t("is in the past — is this a typo?")}
-                  </span>
-                </div>
-              )}
-              <div className={styles.row}>
-                <label className={styles.field}>
-                  <span className={styles.label}>{t("Order No.")}</span>
-                  <input
-                    type="text"
-                    className={styles.input}
-                    value={orderNoValue}
-                    onChange={(e) => {
-                      setOrderNoValue(e.target.value.replace(/\D/g, ""));
-                      setOrderNoTouched(true);
-                      setReplaceId(null);
-                    }}
-                    disabled={submitting || !allowed}
-                    placeholder="YYMMDDNNN"
-                  />
-                </label>
-                <label className={styles.field}>
-                  <span className={styles.label}>{t("Delivery Date")}</span>
-                  <input
-                    type="date"
-                    className={styles.input}
-                    value={deliverDate}
-                    onChange={(e) => {
-                      setdeliverDate(e.target.value);
-                      setDateGuessed(false);
-                    }}
-                    disabled={submitting || !allowed}
-                  />
-                  {dateGuessed && (
-                    <p
-                      className={styles.secondary}
-                      style={{ color: "var(--state-warning)" }}
-                    >
-                      {t("Delivery date was guessed — please check.")}
-                    </p>
-                  )}
-                </label>
-              </div>
-              <div className={styles.row}>
-                <label className={styles.field}>
-                  <span className={styles.label}>
-                    {t("Customer / Restaurant")} *
-                  </span>
-                  <input
-                    type="text"
-                    className={styles.input}
-                    list="customer-suggestions"
-                    value={customerName}
-                    onChange={(e) => handleCustomerNameChange(e.target.value)}
-                    disabled={submitting || !allowed}
-                    placeholder={t("Type or select a customer")}
-                    required
-                  />
-                  <datalist id="customer-suggestions">
-                    {customers.map((c) => (
-                      <option key={c.id} value={c.name} />
-                    ))}
-                  </datalist>
-                  {customerMatch.type === "exact" && (
-                    <div
-                      className={styles.secondary}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "var(--space-xs)",
-                        color: "var(--state-success)",
+                    <Icon name="alert" size={15} />
+                    <span>
+                      {t("Order")} #{orderNoValue} {t("already exists")}
+                      {dupOrder.customer_name
+                        ? ` (${dupOrder.customer_name})`
+                        : ""}
+                      . {t("Duplicate?")}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        setOrderNoValue(expectedNo);
+                        setOrderNoTouched(true);
                       }}
                     >
-                      <Icon name="check" /> {t("Existing customer.")}
-                    </div>
-                  )}
-                  {customerMatch.type === "new" && customerName.trim() && (
-                    <div className={styles.secondary}>
-                      {t("New customer —")} <b>{customerName.trim()}</b>{" "}
-                      {t("will be saved.")}
-                    </div>
-                  )}
-                </label>
+                      {t("Use")} #{expectedNo}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => setReplaceId(dupOrder.id)}
+                    >
+                      {t("Replace it")}
+                    </Button>
+                  </div>
+                )}
+                {replaceId && (
+                  <div
+                    className={`${styles.hint} ${styles.banner} ${styles.bannerInfo}`}
+                  >
+                    <Icon name="alert" size={15} />
+                    <span>
+                      {t("Will replace the existing")} #{orderNoValue}.
+                    </span>
+                    <Button
+                      type="button"
+                      variant="tertiary"
+                      size="sm"
+                      onClick={() => setReplaceId(null)}
+                      style={{ backgroundColor: "transparent" }}
+                    >
+                      {t("Undo")}
+                    </Button>
+                  </div>
+                )}
+                {seqGap && (
+                  <div className={`${styles.hint} ${styles.banner}`}>
+                    <span>
+                      {t("The next open queue number is")} #{expectedNo} —{" "}
+                      {t("but you entered")} #{orderNoValue}.{" "}
+                      {t("Typo, or keep it?")}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        setOrderNoValue(expectedNo);
+                        setOrderNoTouched(true);
+                      }}
+                    >
+                      {t("Use")} #{expectedNo}
+                    </Button>
+                  </div>
+                )}
+                {deliverPast && (
+                  <div
+                    className={`${styles.hint} ${styles.banner} ${styles.bannerWarning}`}
+                  >
+                    <Icon name="alert" size={15} />
+                    <span>
+                      {t("Delivery date")} {deliverDateLabel}{" "}
+                      {t("is in the past — is this a typo?")}
+                    </span>
+                  </div>
+                )}
+                <div className={styles.row}>
+                  <label className={styles.field}>
+                    <span className={styles.label}>{t("Order No.")}</span>
+                    <input
+                      type="text"
+                      className={styles.input}
+                      value={orderNoValue}
+                      onChange={(e) => {
+                        setOrderNoValue(e.target.value.replace(/\D/g, ""));
+                        setOrderNoTouched(true);
+                        setReplaceId(null);
+                      }}
+                      disabled={submitting || !allowed}
+                      placeholder="YYMMDDNNN"
+                    />
+                  </label>
+                  <label className={styles.field}>
+                    <span className={styles.label}>{t("Delivery Date")}</span>
+                    <input
+                      type="date"
+                      className={styles.input}
+                      value={deliverDate}
+                      onChange={(e) => {
+                        setdeliverDate(e.target.value);
+                        setDateGuessed(false);
+                      }}
+                      disabled={submitting || !allowed}
+                    />
+                    {dateGuessed && (
+                      <p
+                        className={styles.secondary}
+                        style={{ color: "var(--state-warning)" }}
+                      >
+                        {t("Delivery date was guessed — please check.")}
+                      </p>
+                    )}
+                  </label>
+                </div>
+                <div className={styles.row}>
+                  <label className={styles.field}>
+                    <span className={styles.label}>
+                      {t("Customer / Restaurant")} *
+                    </span>
+                    <input
+                      type="text"
+                      className={styles.input}
+                      list="customer-suggestions"
+                      value={customerName}
+                      onChange={(e) => handleCustomerNameChange(e.target.value)}
+                      disabled={submitting || !allowed}
+                      placeholder={t("Type or select a customer")}
+                      required
+                    />
+                    <datalist id="customer-suggestions">
+                      {customers.map((c) => (
+                        <option key={c.id} value={c.name} />
+                      ))}
+                    </datalist>
+                    {customerMatch.type === "exact" && (
+                      <div
+                        className={styles.secondary}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "var(--space-xs)",
+                          color: "var(--state-success)",
+                        }}
+                      >
+                        <Icon name="check" /> {t("Existing customer.")}
+                      </div>
+                    )}
+                    {customerMatch.type === "new" && customerName.trim() && (
+                      <div className={styles.secondary}>
+                        {t("New customer —")} <b>{customerName.trim()}</b>{" "}
+                        {t("will be saved.")}
+                      </div>
+                    )}
+                  </label>
+                  <label className={styles.field}>
+                    <span className={styles.label}>
+                      {t("Company")}{" "}
+                      <span className={styles.caption}>
+                        {t("(PT / CV — for the invoice)")}
+                      </span>
+                    </span>
+                    <input
+                      type="text"
+                      className={styles.input}
+                      value={company}
+                      onChange={(e) => setCompany(e.target.value)}
+                      disabled={submitting || !allowed}
+                      placeholder="e.g. PT En Prima Food & Beverages"
+                    />
+                  </label>
+                </div>
+
+                {customerMatch.type === "fuzzy" && customerMatch.customer && (
+                  <div className={styles.matchBanner} data-tone="warning">
+                    {t("Did you mean")} <b>{customerMatch.customer.name}</b>?{" "}
+                    {t("Looks like the same customer.")}
+                    <button
+                      type="button"
+                      className={styles.addLineBtn}
+                      style={{ marginLeft: 8 }}
+                      onClick={() =>
+                        acceptCustomerMatch(customerMatch.customer!)
+                      }
+                    >
+                      {t("Use")} {customerMatch.customer.name}
+                    </button>
+                  </div>
+                )}
+                {customerMatch.type === "phone" && customerMatch.customer && (
+                  <div className={styles.matchBanner} data-tone="success">
+                    {t("Matched by phone number to")}{" "}
+                    <b>{customerMatch.customer.name}</b>.
+                    <button
+                      type="button"
+                      className={styles.addLineBtn}
+                      style={{ marginLeft: 8 }}
+                      onClick={() =>
+                        acceptCustomerMatch(customerMatch.customer!)
+                      }
+                    >
+                      {t("Use")} {customerMatch.customer.name}
+                    </button>
+                  </div>
+                )}
+
+                <div className={styles.row}>
+                  <label className={styles.field}>
+                    <span className={styles.label}>
+                      {t("Customer Contact")}
+                    </span>
+                    <input
+                      type="text"
+                      className={styles.input}
+                      value={customerPhone}
+                      onChange={(e) => setCustomerPhone(e.target.value)}
+                      disabled={submitting || !allowed}
+                      placeholder={t("WhatsApp / phone")}
+                    />
+                  </label>
+                  <label className={styles.field}>
+                    <span className={styles.label}>{t("Sales Rep")}</span>
+                    <input
+                      type="text"
+                      className={styles.input}
+                      value={sales}
+                      onChange={(e) => setSales(e.target.value)}
+                      disabled={submitting || !allowed}
+                      placeholder={t("Auto-filled from your name")}
+                    />
+                  </label>
+                </div>
                 <label className={styles.field}>
                   <span className={styles.label}>
-                    {t("Company")}{" "}
-                    <span className={styles.caption}>
-                      {t("(PT / CV — for the invoice)")}
-                    </span>
+                    {t("Delivery Address")}{" "}
+                    <span className={styles.caption}>({t("Optional")})</span>
                   </span>
-                  <input
-                    type="text"
+                  <textarea
                     className={styles.input}
-                    value={company}
-                    onChange={(e) => setCompany(e.target.value)}
+                    style={{
+                      justifyContent: "flex-start",
+                      alignItems: "flex-start",
+                      minHeight: "100px",
+                    }}
+                    value={customerAddress}
+                    onChange={(e) => setCustomerAddress(e.target.value)}
                     disabled={submitting || !allowed}
-                    placeholder="e.g. PT En Prima Food & Beverages"
+                    placeholder={t("Delivery address")}
                   />
                 </label>
-              </div>
 
-              {customerMatch.type === "fuzzy" && customerMatch.customer && (
-                <div className={styles.matchBanner} data-tone="warning">
-                  {t("Did you mean")} <b>{customerMatch.customer.name}</b>?{" "}
-                  {t("Looks like the same customer.")}
-                  <button
-                    type="button"
-                    className={styles.addLineBtn}
-                    style={{ marginLeft: 8 }}
-                    onClick={() => acceptCustomerMatch(customerMatch.customer!)}
-                  >
-                    {t("Use")} {customerMatch.customer.name}
-                  </button>
-                </div>
-              )}
-              {customerMatch.type === "phone" && customerMatch.customer && (
-                <div className={styles.matchBanner} data-tone="success">
-                  {t("Matched by phone number to")}{" "}
-                  <b>{customerMatch.customer.name}</b>.
-                  <button
-                    type="button"
-                    className={styles.addLineBtn}
-                    style={{ marginLeft: 8 }}
-                    onClick={() => acceptCustomerMatch(customerMatch.customer!)}
-                  >
-                    {t("Use")} {customerMatch.customer.name}
-                  </button>
-                </div>
-              )}
-
-              <div className={styles.row}>
                 <label className={styles.field}>
-                  <span className={styles.label}>{t("Customer Contact")}</span>
-                  <input
-                    type="text"
+                  <span className={styles.label}>
+                    {t("Notes")}{" "}
+                    <span className={styles.caption}>({t("Optional")})</span>
+                  </span>
+                  <textarea
                     className={styles.input}
-                    value={customerPhone}
-                    onChange={(e) => setCustomerPhone(e.target.value)}
+                    style={{
+                      justifyContent: "flex-start",
+                      alignItems: "flex-start",
+                      minHeight: "100px",
+                    }}
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
                     disabled={submitting || !allowed}
-                    placeholder={t("WhatsApp / phone")}
+                    placeholder={t("Any note for this order...")}
                   />
                 </label>
-                <label className={styles.field}>
-                  <span className={styles.label}>{t("Sales Rep")}</span>
-                  <input
-                    type="text"
-                    className={styles.input}
-                    value={sales}
-                    onChange={(e) => setSales(e.target.value)}
-                    disabled={submitting || !allowed}
-                    placeholder={t("Auto-filled from your name")}
-                  />
-                </label>
-              </div>
-              <label className={styles.field}>
-                <span className={styles.label}>
-                  {t("Delivery Address")}{" "}
-                  <span className={styles.caption}>({t("Optional")})</span>
-                </span>
-                <textarea
-                  className={styles.input}
-                  style={{
-                    justifyContent: "flex-start",
-                    alignItems: "flex-start",
-                    minHeight: "100px",
-                  }}
-                  value={customerAddress}
-                  onChange={(e) => setCustomerAddress(e.target.value)}
-                  disabled={submitting || !allowed}
-                  placeholder={t("Delivery address")}
-                />
-              </label>
+              </Card>
 
-              <label className={styles.field}>
-                <span className={styles.label}>
-                  {t("Notes")}{" "}
-                  <span className={styles.caption}>({t("Optional")})</span>
-                </span>
-                <textarea
-                  className={styles.input}
-                  style={{
-                    justifyContent: "flex-start",
-                    alignItems: "flex-start",
-                    minHeight: "100px",
-                  }}
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  disabled={submitting || !allowed}
-                  placeholder={t("Any note for this order...")}
-                />
-              </label>
-            </Card>
+              <Card>
+                <div className={styles.heading}>
+                  {t("Items")}{" "}
+                  <span className={styles.count}>{lines.length}</span>
+                </div>
+                <div className={styles.itemsList}>
+                  {lines.map((l, i) => (
+                    <div className={styles.itemRow}>
+                      <div className={styles.twoColumnsRow}>
+                        <div className={styles.column}>
+                          <div className={styles.itemHeaderRow}>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.5"
+                              className={styles.input}
+                              style={{ maxWidth: "80px" }}
+                              value={l.qty}
+                              onChange={(e) =>
+                                updateLine(l.id, { qty: e.target.value })
+                              }
+                              placeholder={t("Qty")}
+                              disabled={submitting || !allowed}
+                            />
+                            <select
+                              className={styles.select}
+                              style={{ maxWidth: 100 }}
+                              value={l.unit}
+                              onChange={(e) =>
+                                updateLine(l.id, { unit: e.target.value })
+                              }
+                              disabled={submitting || !allowed}
+                            >
+                              {UNITS.map((u) => (
+                                <option key={u} value={u}>
+                                  {u}
+                                </option>
+                              ))}
+                            </select>
+                            <select
+                              className={styles.select}
+                              value={l.productId}
+                              onChange={(e) =>
+                                updateLine(l.id, {
+                                  productId: e.target.value,
+                                  freeText: "",
+                                  parseStatus: undefined,
+                                  learned: undefined,
+                                })
+                              }
+                              disabled={submitting || !allowed}
+                            >
+                              <option value="">
+                                {t("— Custom Product —")}
+                              </option>
+                              {products.map((p) => (
+                                <option key={p.id} value={p.id}>
+                                  {p.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          {!l.productId && (
+                            <input
+                              type="text"
+                              className={styles.editInput}
+                              placeholder={t("Item name")}
+                              value={l.freeText}
+                              onChange={(e) =>
+                                updateLine(l.id, { freeText: e.target.value })
+                              }
+                            />
+                          )}
+                          {l.parseStatus && (
+                            <span
+                              className={styles.statusChip}
+                              data-status={
+                                l.learned ? "learned" : l.parseStatus
+                              }
+                            >
+                              {l.learned ? t("learned") : t(l.parseStatus)}
+                            </span>
+                          )}
+                        </div>
+                        <Button
+                          type="button"
+                          variant="tertiary"
+                          size="md"
+                          icon="trash"
+                          iconOnly
+                          onClick={() => removeLine(l.id)}
+                          disabled={
+                            submitting || !allowed || lines.length === 1
+                          }
+                          aria-label={`Remove line ${i + 1}`}
+                          className={styles.deleteBtn}
+                        ></Button>
+                      </div>
 
-            <Card>
-              <div className={styles.heading}>
-                {t("Items")}{" "}
-                <span className={styles.count}>{lines.length}</span>
-              </div>
-              <div className={styles.itemsList}>
-                {lines.map((l, i) => (
-                  <div className={styles.itemRow}>
-                    <div className={styles.twoColumnsRow}>
-                      <div className={styles.column}>
-                        <div className={styles.itemHeaderRow}>
+                      {/* Cutting instructions */}
+                      <div
+                        style={{
+                          marginLeft: 28,
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 6,
+                        }}
+                      >
+                        {l.cuts.map((cut) => (
+                          <div key={cut.id} className={styles.cutRow}>
+                            <Icon
+                              name="knife"
+                              size={14}
+                              style={{ color: "var(--text-muted)" }}
+                            />
+                            <span
+                              style={{
+                                fontSize: "var(--text-label)",
+                                color: "var(--text-secondary)",
+                              }}
+                            >
+                              {t("cutting")}
+                            </span>
+                            <input
+                              type="text"
+                              className={styles.input}
+                              style={{ flex: 1, maxWidth: 220 }}
+                              value={cut.text}
+                              placeholder={t("e.g. yakiniku pack per 200g")}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setLines((prev) =>
+                                  prev.map((ln) =>
+                                    ln.id === l.id
+                                      ? {
+                                          ...ln,
+                                          cuts: ln.cuts.map((c) =>
+                                            c.id === cut.id
+                                              ? { ...c, text: val }
+                                              : c,
+                                          ),
+                                        }
+                                      : ln,
+                                  ),
+                                );
+                              }}
+                            />
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              icon="trash"
+                              iconOnly
+                              onClick={() =>
+                                handleDeleteCutFromLine(l.id, cut.id)
+                              }
+                            />
+                          </div>
+                        ))}
+                        <Button
+                          type="button"
+                          variant="tertiary"
+                          size="sm"
+                          icon="add"
+                          style={{ alignSelf: "flex-start" }}
+                          onClick={() => handleAddCutToLine(l.id)}
+                          disabled={submitting || !allowed}
+                        >
+                          {t("Add cutting")}
+                        </Button>
+                      </div>
+
+                      {/* Price & Qty Row */}
+                      <div className={styles.itemPriceRow}>
+                        <span>{t("Total")}</span>
+                        <div className={styles.priceCalc}>
                           <input
                             type="number"
                             min="0"
-                            step="0.5"
+                            step="any"
                             className={styles.input}
-                            style={{ maxWidth: "80px" }}
-                            value={l.qty}
-                            onChange={(e) =>
-                              updateLine(l.id, { qty: e.target.value })
-                            }
-                            placeholder={t("Qty")}
+                            style={{ width: 110, textAlign: "right" }}
+                            value={l.price}
+                            placeholder="0"
                             disabled={submitting || !allowed}
-                          />
-                          <select
-                            className={styles.select}
-                            style={{ maxWidth: 100 }}
-                            value={l.unit}
                             onChange={(e) =>
-                              updateLine(l.id, { unit: e.target.value })
+                              updateLine(l.id, { price: e.target.value })
                             }
-                            disabled={submitting || !allowed}
-                          >
-                            {UNITS.map((u) => (
-                              <option key={u} value={u}>
-                                {u}
-                              </option>
-                            ))}
-                          </select>
-                          <select
-                            className={styles.select}
-                            value={l.productId}
-                            onChange={(e) =>
-                              updateLine(l.id, {
-                                productId: e.target.value,
-                                freeText: "",
-                                parseStatus: undefined,
-                                learned: undefined,
-                              })
-                            }
-                            disabled={submitting || !allowed}
-                          >
-                            <option value="">{t("— Custom Product —")}</option>
-                            {products.map((p) => (
-                              <option key={p.id} value={p.id}>
-                                {p.name}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                        {!l.productId && (
-                          <input
-                            type="text"
-                            className={styles.editInput}
-                            placeholder={t("Item name")}
-                            value={l.freeText}
-                            onChange={(e) =>
-                              updateLine(l.id, { freeText: e.target.value })
-                            }
-                          />
-                        )}
-                        {l.parseStatus && (
-                          <span
-                            className={styles.statusChip}
-                            data-status={l.learned ? "learned" : l.parseStatus}
-                          >
-                            {l.learned ? t("learned") : t(l.parseStatus)}
-                          </span>
-                        )}
-                      </div>
-                      <Button
-                        type="button"
-                        variant="tertiary"
-                        size="md"
-                        icon="trash"
-                        iconOnly
-                        onClick={() => removeLine(l.id)}
-                        disabled={submitting || !allowed || lines.length === 1}
-                        aria-label={`Remove line ${i + 1}`}
-                        className={styles.deleteBtn}
-                      ></Button>
-                    </div>
-
-                    {/* Cutting instructions */}
-                    <div
-                      style={{
-                        marginLeft: 28,
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: 6,
-                      }}
-                    >
-                      {l.cuts.map((cut) => (
-                        <div key={cut.id} className={styles.cutRow}>
-                          <Icon
-                            name="knife"
-                            size={14}
-                            style={{ color: "var(--text-muted)" }}
                           />
                           <span
                             style={{
-                              fontSize: "var(--text-label)",
-                              color: "var(--text-secondary)",
+                              textAlign: "left",
+                              width: "32px",
+                              whiteSpace: "nowrap",
                             }}
                           >
-                            {t("cutting")}
+                            x {l.qty}
                           </span>
-                          <input
-                            type="text"
-                            className={styles.input}
-                            style={{ flex: 1, maxWidth: 220 }}
-                            value={cut.text}
-                            placeholder={t("e.g. yakiniku pack per 200g")}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setLines((prev) =>
-                                prev.map((ln) =>
-                                  ln.id === l.id
-                                    ? {
-                                        ...ln,
-                                        cuts: ln.cuts.map((c) =>
-                                          c.id === cut.id
-                                            ? { ...c, text: val }
-                                            : c,
-                                        ),
-                                      }
-                                    : ln,
-                                ),
-                              );
-                            }}
-                          />
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            icon="trash"
-                            iconOnly
-                            onClick={() =>
-                              handleDeleteCutFromLine(l.id, cut.id)
-                            }
-                          />
+                          <span className={styles.lineTotalPrice}>
+                            {currency.format(
+                              (parseFloat(l.price) || 0) *
+                                (parseFloat(l.qty) || 0),
+                            )}
+                          </span>
                         </div>
-                      ))}
-                      <Button
-                        type="button"
-                        variant="tertiary"
-                        size="sm"
-                        icon="add"
-                        style={{ alignSelf: "flex-start" }}
-                        onClick={() => handleAddCutToLine(l.id)}
-                        disabled={submitting || !allowed}
-                      >
-                        {t("Add cutting")}
-                      </Button>
-                    </div>
-
-                    {/* Price & Qty Row */}
-                    <div className={styles.itemPriceRow}>
-                      <span>{t("Total")}</span>
-                      <div className={styles.priceCalc}>
-                        <input
-                          type="number"
-                          min="0"
-                          step="any"
-                          className={styles.input}
-                          style={{ width: 110, textAlign: "right" }}
-                          value={l.price}
-                          placeholder="0"
-                          disabled={submitting || !allowed}
-                          onChange={(e) =>
-                            updateLine(l.id, { price: e.target.value })
-                          }
-                        />
-                        <span
-                          style={{
-                            textAlign: "left",
-                            width: "32px",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          x {l.qty}
-                        </span>
-                        <span className={styles.lineTotalPrice}>
-                          {currency.format(
-                            (parseFloat(l.price) || 0) *
-                              (parseFloat(l.qty) || 0),
-                          )}
-                        </span>
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-
-              <Button
-                type="button"
-                variant="secondary"
-                buttonStyle="fullWidth"
-                icon="add"
-                onClick={() => setIsAddItemModalOpen(true)}
-                style={{
-                  marginTop: "var(--space-md)",
-                  height: 44,
-                  fontWeight: 600,
-                }}
-              >
-                {t("Add Item")}
-              </Button>
-            </Card>
-          </form>
-        </div>
-
-        <aside className={styles.sidePanelColumn}>
-          <Button
-            type="button"
-            variant="secondary"
-            icon={isPanelOpen ? "chevronRight" : "chevronLeft"}
-            iconOnly
-            className={styles.panelToggleBtn}
-            isActive={isPanelOpen}
-            onClick={() => setIsPanelOpen((prev) => !prev)}
-            title={
-              isPanelOpen ? t("Collapse side panel") : t("Expand side panel")
-            }
-          />
-
-          <div
-            className={[
-              styles.sidePanelStickyContent,
-              !isPanelOpen ? styles.sidePanelStickyContentCollapsed : "",
-            ].join(" ")}
-          >
-            <Card className={styles.notesCard}>
-              <h3 className={styles.heading}>
-                {t("Original WhatsApp message")}
-              </h3>
-              {rawText && rawText.trim() ? (
-                <pre className={styles.pre}>{rawText}</pre>
-              ) : (
-                <p className={styles.muted}>
-                  {t("No pasted message — entered manually.")}
-                </p>
-              )}
-              {attachments && attachments.length > 0 && (
-                <div className={styles.attachmentsNote}>
-                  <p className={styles.muted}>
-                    {attachments.length}{" "}
-                    {t("attachment(s) will be added as PO document(s):")}
-                  </p>
-                  <ul>
-                    {attachments.map((f, i) => (
-                      <li key={i}>{f.name}</li>
-                    ))}
-                  </ul>
+                  ))}
                 </div>
-              )}
-            </Card>
+
+                <Button
+                  type="button"
+                  variant="secondary"
+                  buttonStyle="fullWidth"
+                  icon="add"
+                  onClick={() => setIsAddItemModalOpen(true)}
+                  style={{
+                    marginTop: "var(--space-md)",
+                    height: 44,
+                    fontWeight: 600,
+                  }}
+                >
+                  {t("Add Item")}
+                </Button>
+              </Card>
+            </form>
           </div>
-        </aside>
-      </div>
+
+          <aside className={styles.sidePanelColumn}>
+            <Button
+              type="button"
+              variant="secondary"
+              icon={isPanelOpen ? "chevronRight" : "chevronLeft"}
+              iconOnly
+              className={styles.panelToggleBtn}
+              isActive={isPanelOpen}
+              onClick={() => setIsPanelOpen((prev) => !prev)}
+              title={
+                isPanelOpen ? t("Collapse side panel") : t("Expand side panel")
+              }
+            />
+
+            <div
+              className={[
+                styles.sidePanelStickyContent,
+                !isPanelOpen ? styles.sidePanelStickyContentCollapsed : "",
+              ].join(" ")}
+            >
+              <Card className={styles.notesCard}>
+                <h3 className={styles.heading}>
+                  {t("Original WhatsApp message")}
+                </h3>
+                {rawText && rawText.trim() ? (
+                  <pre className={styles.pre}>{rawText}</pre>
+                ) : (
+                  <p className={styles.muted}>
+                    {t("No pasted message — entered manually.")}
+                  </p>
+                )}
+                {attachments && attachments.length > 0 && (
+                  <div className={styles.attachmentsNote}>
+                    <p className={styles.muted}>
+                      {attachments.length}{" "}
+                      {t("attachment(s) will be added as PO document(s):")}
+                    </p>
+                    <ul>
+                      {attachments.map((f, i) => (
+                        <li key={i}>{f.name}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </Card>
+            </div>
+          </aside>
+        </div>
       </div>
       <AddItemModal
         open={isAddItemModalOpen}

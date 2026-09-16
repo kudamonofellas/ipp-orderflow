@@ -5721,7 +5721,13 @@ export function OrderDetail() {
                     {t("Delivery Date")}
                   </span>
                   <span className={styles.detailValue}>
-                    {formatDate(order.deliver_at)}
+                    {order.deliver_at
+                      ? new Date(order.deliver_at).toLocaleDateString("en-US", {
+                          year: "numeric",
+                          month: "long",
+                          day: "numeric",
+                        })
+                      : "—"}
                   </span>
                 </div>
                 <div className={styles.detailItem}>

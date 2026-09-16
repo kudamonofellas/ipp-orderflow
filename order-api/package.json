@@ -1,0 +1,24 @@
+{
+  "name": "order-api",
+  "version": "1.0.0",
+  "description": "Order API endpoint for Kudafellas OrderFlow",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "directus:extension": {
+    "type": "endpoint",
+    "path": "dist/index.js",
+    "source": "src/index.js",
+    "host": "^10.0.0"
+  },
+  "scripts": {
+    "build": "directus-extension build",
+    "dev": "directus-extension build --watch"
+  },
+  "devDependencies": {
+    "@directus/extensions-sdk": "10.3.4",
+    "typescript": "5.5.4"
+  }
+}
