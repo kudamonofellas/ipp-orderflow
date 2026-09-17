@@ -1324,6 +1324,7 @@ change.
   - Installed toolchain without Android Studio: Microsoft OpenJDK 21 (winget) + Android SDK cmdline-tools, platform 36, build-tools 36.0.0, platform-tools; `JAVA_HOME`/`ANDROID_HOME` set as user env vars. First Gradle build ~8 min, later ones fast.
   - **Both recorded blockers closed.** (1) `parseOrderText()` now branches on `import.meta.hot` (only defined by the Vite dev server) instead of `import.meta.env.DEV`. (2) CORS: verified by preflight that neither Directus allows origin `https://localhost`; rather than editing server env, `capacitor.config.ts` sets `server.hostname: 'app.kudafellas.cloud'`, which prod already allows. APK targets **prod** (user's choice).
   - Manifest: added `ACCESS_COARSE/FINE_LOCATION` and `CAMERA` (optional hardware features) — the WebView can't use `navigator.geolocation` without them. Verified with `aapt dump permissions`.
+  - **Switched same day to a live-URL shell** (`server.url: 'https://app.kudafellas.cloud'`, replacing the `server.hostname` approach) so web deploys reach phones without reinstalling the APK. Consequence: phones run whatever is deployed — the 2026-09-17 web changes still await the scp deploy.
   - New `npm run build:apk` script. Output `android/app/build/outputs/apk/debug/app-debug.apk` (~4.4 MB, debug-signed). Not yet installed on a device.
 
 ## Next Up
