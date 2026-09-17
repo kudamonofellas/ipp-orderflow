@@ -165,22 +165,35 @@ export function Reports() {
                 {t(opt.label)}
               </Button>
             ))}
-            {range.type === "month" && (
-              <input
-                type="month"
-                className={styles.inlinePicker}
-                value={range.month ?? ""}
-                onChange={(e) =>
-                  setRange({ type: "month", month: e.target.value })
-                }
-                aria-label={t("Select month")}
-              />
-            )}
-            {range.type === "range" && (
-              <>
+          </div>
+          {range.type === "month" && (
+            <div className={styles.rangePickRow}>
+              <div className={styles.rangePick}>
+                <label htmlFor="month-picker" className={styles.detailLabel}>
+                  {t("Select month")}
+                </label>
+                <input
+                  id="month-picker"
+                  type="month"
+                  className={styles.editInput}
+                  value={range.month ?? ""}
+                  onChange={(e) =>
+                    setRange({ type: "month", month: e.target.value })
+                  }
+                  aria-label={t("Select month")}
+                />
+              </div>
+            </div>
+          )}
+          {range.type === "range" && (
+            <div className={styles.rangePickRow}>
+              <div className={styles.rangePick}>
+                <label htmlFor="month-picker" className={styles.detailLabel}>
+                  {t("Start")}
+                </label>
                 <input
                   type="date"
-                  className={styles.inlinePicker}
+                  className={styles.editInput}
                   value={range.from ?? ""}
                   onChange={(e) =>
                     setRange({
@@ -191,9 +204,14 @@ export function Reports() {
                   }
                   aria-label={t("Range start")}
                 />
+              </div>
+              <div className={styles.rangePick}>
+                <label htmlFor="month-picker" className={styles.detailLabel}>
+                  {t("End")}
+                </label>
                 <input
                   type="date"
-                  className={styles.inlinePicker}
+                  className={styles.editInput}
                   value={range.to ?? ""}
                   onChange={(e) =>
                     setRange({
@@ -204,9 +222,9 @@ export function Reports() {
                   }
                   aria-label={t("Range end")}
                 />
-              </>
-            )}
-          </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {loading ? (

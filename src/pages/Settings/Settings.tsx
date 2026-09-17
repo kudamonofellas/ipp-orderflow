@@ -304,8 +304,9 @@ export function Settings() {
   return (
     <div className={styles.container}>
       <div className={styles.sectionsContainer}>
-        <h1 className={styles.title}>{t("Settings")}</h1>
-
+        <div className={styles.titleSection}>
+          <h1 className={styles.title}>{t("Settings")}</h1>
+        </div>
         <section>
           <h2 className={styles.sectionHeading}>{t("Account")}</h2>
           <Card>
@@ -377,60 +378,62 @@ export function Settings() {
                               `${m.first_name ?? ""} ${m.last_name ?? ""}`.trim() ||
                             editRoleId !== (m.role?.id ?? "");
                           return (
-                        <div className={styles.teamEditRow}>
-                          <div className={styles.teamEditGrid}>
-                            <input
-                              className={styles.input}
-                              value={editName}
-                              onChange={(e) => setEditName(e.target.value)}
-                              placeholder={t("Name")}
-                            />
-                            <select
-                              className={styles.select}
-                              value={editRoleId}
-                              onChange={(e) => setEditRoleId(e.target.value)}
-                            >
-                              {roles.map((r) => (
-                                <option key={r.id} value={r.id}>
-                                  {r.name}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                          <div className={styles.actionsRow}>
-                            <div className={styles.teamEditActions}>
-                              <Button
-                                type="button"
-                                variant="primary"
-                                size="md"
-                                disabled={savingMember || !hasEditChanges}
-                                onClick={() => saveEdit(m.id)}
-                              >
-                                {t("Save")}
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="secondary"
-                                size="md"
-                                onClick={cancelEdit}
-                              >
-                                {t("Cancel")}
-                              </Button>
+                            <div className={styles.teamEditRow}>
+                              <div className={styles.teamEditGrid}>
+                                <input
+                                  className={styles.input}
+                                  value={editName}
+                                  onChange={(e) => setEditName(e.target.value)}
+                                  placeholder={t("Name")}
+                                />
+                                <select
+                                  className={styles.select}
+                                  value={editRoleId}
+                                  onChange={(e) =>
+                                    setEditRoleId(e.target.value)
+                                  }
+                                >
+                                  {roles.map((r) => (
+                                    <option key={r.id} value={r.id}>
+                                      {r.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div className={styles.actionsRow}>
+                                <div className={styles.teamEditActions}>
+                                  <Button
+                                    type="button"
+                                    variant="primary"
+                                    size="md"
+                                    disabled={savingMember || !hasEditChanges}
+                                    onClick={() => saveEdit(m.id)}
+                                  >
+                                    {t("Save")}
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="secondary"
+                                    size="md"
+                                    onClick={cancelEdit}
+                                  >
+                                    {t("Cancel")}
+                                  </Button>
+                                </div>
+                                <div style={{ flexShrink: 0 }}>
+                                  <Button
+                                    type="button"
+                                    variant="tertiary"
+                                    size="sm"
+                                    icon="trash"
+                                    title={t("Remove member")}
+                                    onClick={() => deleteMember(m)}
+                                  >
+                                    {t("Remove member")}
+                                  </Button>
+                                </div>
+                              </div>
                             </div>
-                            <div style={{ flexShrink: 0 }}>
-                              <Button
-                                type="button"
-                                variant="tertiary"
-                                size="sm"
-                                icon="trash"
-                                title={t("Remove member")}
-                                onClick={() => deleteMember(m)}
-                              >
-                                {t("Remove member")}
-                              </Button>
-                            </div>
-                          </div>
-                        </div>
                           );
                         })()}
                     </div>

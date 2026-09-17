@@ -41,10 +41,38 @@
   align-items: center;
   flex-wrap: wrap;
   gap: var(--space-sm);
+  width: 100%;
 }
 
-.inlinePicker {
-  width: auto;
+.rangePick {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.rangePickRow {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-lg);
+  width: 100%;
+}
+
+.detailLabel {
+  font: var(--text-label);
+  color: var(--text-muted);
+}
+
+.editInput {
+  background: var(--bg-surface-hover);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: 6px 10px;
+  font: var(--text-body);
+  color: var(--text-primary);
+  max-width: 160px;
+  height: 40px;
 }
 
 .muted {
@@ -519,5 +547,9 @@
 
   .fulfillmentCard {
     grid-area: fulfillment;
+  }
+
+  .rangePick {
+    width: 100%;
   }
 }
