@@ -1318,7 +1318,7 @@ change.
   - **Learned Matches**: CustomerDetail-style header (Back + search row, title + count below; mobile reorders to Back → title → full-width search). Table is `table-layout: fixed` with `<col>` widths, single-line cells truncating with the full value in `title`, horizontal scroll when narrower. **Owner-only** inline edit (token input + product select, `editInput` styling; Edit→Save, Delete→Cancel; every other row's actions disabled while one row is editing) and delete — previously gated on `manageSettings`. New `updateCorrection()` + `useCorrections().update`; edits reject a token already used by another row, since `upsertCorrection` keys on exact `token_key`.
   - **"Added by" was always empty — a real bug, on dev too.** `corrections.created_by` is a plain uuid (not a `user-created` special field) and `upsertCorrection` never sent it. It now takes `userId` (passed from `OrderNew` and `OrderEdit`), sets it on create, and backfills it on update only when empty. Existing rows stay "—".
   - **Form page headers unified** (CustomerNew, CustomerEdit, ProductEdit): back button reads just "Back", Cancel uses `icon="close"`. ProductEdit's own Delete button removed — delete lives only on ProductDetail (which keeps the "used by active orders" guard), so the edit form no longer carries a destructive action.
-  - `npx tsc -b` ✓, `npm run build` ✓. Deployed to `app.kudafellas.cloud` the same day. Not verified in a browser with login from this environment.
+  - `npx tsc -b` ✓, `npm run build` ✓. Deploy to `app.kudafellas.cloud` pending: `dist/` rebuilt, but the scp needs the server password (no SSH key on this machine). Not verified in a browser with login from this environment.
 
 ## Next Up
 
