@@ -180,7 +180,6 @@ export function Reports() {
                   onChange={(e) =>
                     setRange({ type: "month", month: e.target.value })
                   }
-                  aria-label={t("Select month")}
                 />
               </div>
             </div>
@@ -188,10 +187,11 @@ export function Reports() {
           {range.type === "range" && (
             <div className={styles.rangePickRow}>
               <div className={styles.rangePick}>
-                <label htmlFor="month-picker" className={styles.detailLabel}>
+                <label htmlFor="range-start" className={styles.detailLabel}>
                   {t("Start")}
                 </label>
                 <input
+                  id="range-start"
                   type="date"
                   className={styles.editInput}
                   value={range.from ?? ""}
@@ -202,14 +202,14 @@ export function Reports() {
                       to: range.to,
                     })
                   }
-                  aria-label={t("Range start")}
                 />
               </div>
               <div className={styles.rangePick}>
-                <label htmlFor="month-picker" className={styles.detailLabel}>
+                <label htmlFor="range-end" className={styles.detailLabel}>
                   {t("End")}
                 </label>
                 <input
+                  id="range-end"
                   type="date"
                   className={styles.editInput}
                   value={range.to ?? ""}
@@ -220,7 +220,6 @@ export function Reports() {
                       to: e.target.value,
                     })
                   }
-                  aria-label={t("Range end")}
                 />
               </div>
             </div>

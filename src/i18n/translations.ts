@@ -867,6 +867,8 @@ const ID: Record<string, string> = {
   "Select month": "Pilih bulan",
   "Range start": "Awal rentang",
   "Range end": "Akhir rentang",
+  "Start": "Mulai",
+  "End": "Selesai",
   "on time": "tepat waktu",
   "late": "terlambat",
   "avg. across": "rata-rata dari",

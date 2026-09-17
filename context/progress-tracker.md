@@ -1329,7 +1329,7 @@ change.
 
 - **Installable web app for iPhone/desktop (2026-09-17):** `.apk` can't run on iOS; iPhone users use Safari + Add to Home Screen instead. Added `public/manifest.webmanifest` (standalone display, white theme = `--bg-surface`), PNG icons generated from `favicon.svg` into `public/icons/` (192, 512, maskable 512 with safe-zone padding, 180 apple-touch), and manifest/apple meta tags in `index.html`. No `vite-plugin-pwa`/service worker: modern Chrome and iOS don't require one to install, and a caching SW would keep phones (including the live-URL APK) on old builds after a deploy. `npm run build` ✓, manifest JSON validated; not yet checked on a device — needs the web deploy first.
 
-- **Reports period pickers + Settings polish (2026-09-17):** Reports title row wrapped in `.titleSection`; month / Start–End pickers now labelled (`.rangePick` label + input, `.editInput` styling replacing `.inlinePicker`), full width on mobile. Settings: small layout/formatting tweaks. Known nits: the Start/End labels use `htmlFor="month-picker"` (should point at their own inputs), and "Start"/"End" have no Bahasa entries in `translations.ts`.
+- **Reports period pickers + Settings polish (2026-09-17):** Reports title row wrapped in `.titleSection`; month / Start–End pickers now labelled (`.rangePick` label + input, `.editInput` styling replacing `.inlinePicker`), full width on mobile. Settings: small layout/formatting tweaks. Follow-up fix: Start/End labels now target their own inputs (`range-start`/`range-end`), redundant `aria-label`s removed (they overrode the visible labels), and "Start"/"End" translated (Mulai/Selesai).
 
 ## Next Up
 
