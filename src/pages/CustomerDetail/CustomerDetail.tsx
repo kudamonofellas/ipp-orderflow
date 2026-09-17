@@ -1,11 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { Card } from "../../components/Card/Card";
 import { Button } from "../../components/Button/Button";
 import { Avatar } from "../../components/Avatar/Avatar";
-import { StatusPill } from "../../components/StatusPill/StatusPill";
+import { MobileOrderRow } from "../../components/MobileOrderRow/MobileOrderRow";
 import { useAuth } from "../../hooks/useAuth";
 import { useLanguage } from "../../hooks/useLanguage";
+import { groupLinesByOrderId, toOpenOrder } from "../../hooks/useOrders";
 import { readCustomers, readOrders, readOrderLines } from "../../lib/directus";
 import { getInitials } from "../../lib/initials";
 import type {
@@ -119,6 +120,11 @@ export function CustomerDetail() {
       cancelled = true;
     };
   }, [id]);
+
+  const historyOrders = useMemo(() => {
+    const linesByOrderId = groupLinesByOrderId(lines.filter((l) => !l.removed));
+    return orders.map((o) => toOpenOrder(o, linesByOrderId));
+  }, [orders, lines]);
 
   // Calculate order value
   const getOrderValue = (orderId: string) => {
@@ -356,52 +362,30 @@ export function CustomerDetail() {
               <Card className={styles.historyCard}>
                 <h3 className={styles.heading}>{t("Order History")}</h3>
 
-                {orders.length > 0 ? (
-                  <table className={styles.table}>
-                    <thead>
-                      <tr>
-                        <th>{t("Order ID")}</th>
-                        <th>{t("Stage")}</th>
-                        <th>{t("Order Date")}</th>
-                        <th>{t("Total Value")}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {orders.map((o) => (
-                        <tr
-                          key={o.id}
-                          className={styles.tr}
-                          onClick={() =>
-                            navigate(`/orders/${o.id}`, {
-                              state: { from: `/customers/${id}` },
-                            })
-                          }
-                        >
-                          <td>{o.no}</td>
-                          <td>
-                            <StatusPill
-                              status={o.stage}
-                              isReplacement={o.is_replacement === true}
-                              isHold={o.hold === true}
-                            />
-                          </td>
-                          <td>
-                            {o.order_date
-                              ? new Date(o.order_date).toLocaleDateString(
-                                  "en-US",
-                                  {
-                                    month: "short",
-                                    day: "numeric",
-                                    year: "numeric",
-                                  },
-                                )
-                              : "—"}
-                          </td>
-                          <td>{currency.format(getOrderValue(o.id))}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                {historyOrders.length > 0 ? (
+                  <div className={styles.mobileList}>
+                    <div className={styles.mobileHeaderRow}>
+                      <span
+                        className={styles.mobileArrowHead}
+                        aria-hidden="true"
+                      />
+                      <span className={styles.colId}>{t("Order ID")}</span>
+                      <span className={styles.colStage}>{t("Stage")}</span>
+                      <span className={styles.colDate}>{t("Order Date")}</span>
+                      <span className={styles.colDate}>
+                        {t("Delivery Date")}
+                      </span>
+                      <span className={styles.colItems}>{t("Items")}</span>
+                    </div>
+                    {historyOrders.map((order, i) => (
+                      <MobileOrderRow
+                        key={order.id}
+                        order={order}
+                        isLast={i === historyOrders.length - 1}
+                        hideCustomerColumns
+                      />
+                    ))}
+                  </div>
                 ) : (
                   <p className={styles.muted}>{t("No order history yet.")}</p>
                 )}

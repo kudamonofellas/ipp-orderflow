@@ -146,105 +146,110 @@ export function ProductDetail() {
   return (
     <div className={styles.container}>
       <div className={styles.sectionsContainer}>
-      <header className={styles.header}>
-        <div className={styles.topActionsRow}>
-          <Button
-            type="button"
-            variant="tertiary"
-            icon="chevronLeft"
-            onClick={() => navigate("/products")}
-          >
-            {t("Back")}
-          </Button>
-          {canManage && (
-            <div className={styles.actions}>
-              <Button
-                type="button"
-                variant="secondary"
-                icon="trash"
-                onClick={handleDelete}
-                disabled={deleting}
-              >
-                {deleting ? t("Deleting…") : t("Delete")}
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                icon="edit"
-                onClick={() => navigate(`/products/${id}/edit`)}
-              >
-                {t("Edit")}
-              </Button>
-            </div>
-          )}
-        </div>
-
-        <div className={styles.titleRow}>
-          <div className={styles.headingRow}>
-            <h2 className={styles.title}>{name}</h2>
-
-            {accurateName && (
-              <span>
-                <p className={styles.subtitle}>{accurateName.toUpperCase()}</p>
-              </span>
+        <header className={styles.header}>
+          <div className={styles.topActionsRow}>
+            <Button
+              type="button"
+              variant="tertiary"
+              icon="chevronLeft"
+              onClick={() => navigate("/products")}
+            >
+              {t("Back")}
+            </Button>
+            {canManage && (
+              <div className={styles.actions}>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  icon="trash"
+                  onClick={handleDelete}
+                  disabled={deleting}
+                >
+                  {deleting ? t("Deleting…") : t("Delete")}
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  icon="edit"
+                  onClick={() => navigate(`/products/${id}/edit`)}
+                >
+                  {t("Edit")}
+                </Button>
+              </div>
             )}
-            <span
-              style={{
-                display: "flex",
-                gap: "var(--space-md)",
-                paddingTop: "var(--space-md)",
-              }}
-            >
-              <span
-                className={`${styles.pill} ${oos ? styles.pillDanger : ""}`}
-              >
-                {oos ? t("Out of stock") : t("In-stock")}
-              </span>
+          </div>
 
-              {catchWeight && (
-                <span className={styles.pillNeutral}>{t("Catch-weight")}</span>
+          <div className={styles.titleRow}>
+            <div className={styles.headingRow}>
+              <h2 className={styles.title}>{name}</h2>
+
+              {accurateName && (
+                <span>
+                  <p className={styles.subtitle}>
+                    {accurateName.toUpperCase()}
+                  </p>
+                </span>
               )}
-            </span>
-          </div>
-        </div>
-      </header>
+              <span
+                style={{
+                  display: "flex",
+                  gap: "var(--space-md)",
+                  paddingTop: "var(--space-md)",
+                }}
+              >
+                <span
+                  className={`${styles.pill} ${oos ? styles.pillDanger : ""}`}
+                >
+                  {oos ? t("Out of stock") : t("In-stock")}
+                </span>
 
-      <Card>
-        <div className={styles.fields}>
-          <div className={styles.row}>
-            <div className={styles.field}>
-              <span className={styles.detailLabel}>{t("Category")}</span>
-              <span className={styles.detailValue}>{category || "—"}</span>
-            </div>
-            <div className={styles.field}>
-              <span className={styles.detailLabel}>{t("Origin")}</span>
-              <span className={styles.detailValue}>{origin || "—"}</span>
+                {catchWeight && (
+                  <span className={styles.pillNeutral}>
+                    {t("Catch-weight")}
+                  </span>
+                )}
+              </span>
             </div>
           </div>
-          <div className={styles.row}>
-            <div className={styles.field}>
-              <span className={styles.detailLabel}>{t("Grade")}</span>
-              <span className={styles.detailValue}>{grade || "—"}</span>
-            </div>
-            <div className={styles.field}>
-              <span className={styles.detailLabel}>{t("Brand")}</span>
-              <span className={styles.detailValue}>{brand || "—"}</span>
-            </div>
-          </div>
+        </header>
 
-          {usedBy > 0 && (
-            <p
-              style={{
-                margin: 0,
-                fontSize: "13px",
-                color: "var(--text-muted)",
-              }}
-            >
-              {t('Product is currently used by')} {usedBy} {t('active order(s).')}
-            </p>
-          )}
-        </div>
-      </Card>
+        <Card>
+          <div className={styles.fields}>
+            <div className={styles.row}>
+              <div className={styles.field}>
+                <span className={styles.detailLabel}>{t("Category")}</span>
+                <span className={styles.detailValue}>{category || "—"}</span>
+              </div>
+              <div className={styles.field}>
+                <span className={styles.detailLabel}>{t("Origin")}</span>
+                <span className={styles.detailValue}>{origin || "—"}</span>
+              </div>
+            </div>
+            <div className={styles.row}>
+              <div className={styles.field}>
+                <span className={styles.detailLabel}>{t("Grade")}</span>
+                <span className={styles.detailValue}>{grade || "—"}</span>
+              </div>
+              <div className={styles.field}>
+                <span className={styles.detailLabel}>{t("Brand")}</span>
+                <span className={styles.detailValue}>{brand || "—"}</span>
+              </div>
+            </div>
+
+            {usedBy > 0 && (
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: "13px",
+                  color: "var(--text-muted)",
+                }}
+              >
+                {t("Product is currently used by")} {usedBy}{" "}
+                {t("active order(s).")}
+              </p>
+            )}
+          </div>
+        </Card>
       </div>
     </div>
   );

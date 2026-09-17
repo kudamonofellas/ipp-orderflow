@@ -83,136 +83,138 @@ export function OpenOrdersPanel({
         <div className={styles.muted}>No open orders.</div>
       ) : (
         <>
-          <div
-            className={styles.desktopTableWrap}
-            style={{ overflowX: "auto" }}
-          >
-            <table className={styles.table}>
-              <thead>
-                <tr>
-                  <th className={styles.arrowHead} aria-label="Expand" />
+          <div className={styles.tableSwitch}>
+            <div
+              className={styles.desktopTableWrap}
+              style={{ overflowX: "auto" }}
+            >
+              <table className={styles.table}>
+                <thead>
+                  <tr>
+                    <th className={styles.arrowHead} aria-label="Expand" />
+                    <SortableTh
+                      label={t("Order ID")}
+                      sortKey="no"
+                      activeSort={activeSort}
+                      onSort={handleSort}
+                    />
+                    <SortableTh
+                      label={t("Stage")}
+                      sortKey="stage"
+                      activeSort={activeSort}
+                      onSort={handleSort}
+                    />
+                    <SortableTh
+                      label={t("Order Date")}
+                      sortKey="order_date"
+                      activeSort={activeSort}
+                      onSort={handleSort}
+                    />
+                    <SortableTh
+                      label={t("Delivery Date")}
+                      sortKey="delivery_date"
+                      activeSort={activeSort}
+                      onSort={handleSort}
+                    />
+                    <SortableTh
+                      label={t("Sales Rep")}
+                      sortKey="sales"
+                      activeSort={activeSort}
+                      onSort={handleSort}
+                    />
+                    <SortableTh
+                      label={t("Customer")}
+                      sortKey="customer_name"
+                      activeSort={activeSort}
+                      onSort={handleSort}
+                    />
+                    <SortableTh
+                      label={t("Items")}
+                      sortKey="items"
+                      activeSort={activeSort}
+                      onSort={handleSort}
+                    />
+                  </tr>
+                </thead>
+                {displayOrders.map((order) => (
+                  <OrderRow key={order.id} order={order} />
+                ))}
+              </table>
+            </div>
+
+            <div className={styles.mobileWrap}>
+              {/* One shared 2D scroll container for the header + every row —
+               * horizontal scroll moves them together like an ordinary table;
+               * the header additionally stays pinned to the top (`position:
+               * sticky`) through the list's own vertical scroll. */}
+              <div className={styles.mobileList}>
+                <div className={styles.mobileHeaderRow}>
+                  <span className={styles.mobileArrowHead} aria-hidden="true" />
                   <SortableTh
+                    as="div"
+                    className={styles.colId}
                     label={t("Order ID")}
                     sortKey="no"
                     activeSort={activeSort}
                     onSort={handleSort}
                   />
                   <SortableTh
+                    as="div"
+                    className={styles.colStage}
                     label={t("Stage")}
                     sortKey="stage"
                     activeSort={activeSort}
                     onSort={handleSort}
                   />
                   <SortableTh
+                    as="div"
+                    className={styles.colDate}
                     label={t("Order Date")}
                     sortKey="order_date"
                     activeSort={activeSort}
                     onSort={handleSort}
                   />
                   <SortableTh
+                    as="div"
+                    className={styles.colDate}
                     label={t("Delivery Date")}
                     sortKey="delivery_date"
                     activeSort={activeSort}
                     onSort={handleSort}
                   />
                   <SortableTh
+                    as="div"
+                    className={styles.colSales}
                     label={t("Sales Rep")}
                     sortKey="sales"
                     activeSort={activeSort}
                     onSort={handleSort}
                   />
                   <SortableTh
+                    as="div"
+                    className={styles.colCustomer}
                     label={t("Customer")}
                     sortKey="customer_name"
                     activeSort={activeSort}
                     onSort={handleSort}
                   />
                   <SortableTh
+                    as="div"
+                    className={styles.colItems}
                     label={t("Items")}
                     sortKey="items"
                     activeSort={activeSort}
                     onSort={handleSort}
                   />
-                </tr>
-              </thead>
-              {displayOrders.map((order) => (
-                <OrderRow key={order.id} order={order} />
-              ))}
-            </table>
-          </div>
-
-          <div className={styles.mobileWrap}>
-            {/* One shared 2D scroll container for the header + every row —
-             * horizontal scroll moves them together like an ordinary table;
-             * the header additionally stays pinned to the top (`position:
-             * sticky`) through the list's own vertical scroll. */}
-            <div className={styles.mobileList}>
-              <div className={styles.mobileHeaderRow}>
-                <span className={styles.mobileArrowHead} aria-hidden="true" />
-                <SortableTh
-                  as="div"
-                  className={styles.colId}
-                  label={t("Order ID")}
-                  sortKey="no"
-                  activeSort={activeSort}
-                  onSort={handleSort}
-                />
-                <SortableTh
-                  as="div"
-                  className={styles.colStage}
-                  label={t("Stage")}
-                  sortKey="stage"
-                  activeSort={activeSort}
-                  onSort={handleSort}
-                />
-                <SortableTh
-                  as="div"
-                  className={styles.colDate}
-                  label={t("Order Date")}
-                  sortKey="order_date"
-                  activeSort={activeSort}
-                  onSort={handleSort}
-                />
-                <SortableTh
-                  as="div"
-                  className={styles.colDate}
-                  label={t("Delivery Date")}
-                  sortKey="delivery_date"
-                  activeSort={activeSort}
-                  onSort={handleSort}
-                />
-                <SortableTh
-                  as="div"
-                  className={styles.colSales}
-                  label={t("Sales Rep")}
-                  sortKey="sales"
-                  activeSort={activeSort}
-                  onSort={handleSort}
-                />
-                <SortableTh
-                  as="div"
-                  className={styles.colCustomer}
-                  label={t("Customer")}
-                  sortKey="customer_name"
-                  activeSort={activeSort}
-                  onSort={handleSort}
-                />
-                <SortableTh
-                  as="div"
-                  className={styles.colItems}
-                  label={t("Items")}
-                  sortKey="items"
-                  activeSort={activeSort}
-                  onSort={handleSort}
-                />
+                </div>
+                {displayOrders.map((order, i) => (
+                  <MobileOrderRow
+                    key={order.id}
+                    order={order}
+                    isLast={i === displayOrders.length - 1}
+                  />
+                ))}
               </div>
-              {displayOrders.map((order, i) => (
-                <MobileOrderRow
-                  key={order.id}
-                  order={order}
-                  isLast={i === displayOrders.length - 1}
-                />
-              ))}
             </div>
           </div>
 

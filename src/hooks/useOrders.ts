@@ -71,7 +71,7 @@ function toOpenOrderLine(row: {
   };
 }
 
-function groupLinesByOrderId(
+export function groupLinesByOrderId(
   lines: {
     id: string;
     order_id?: string | null;
@@ -92,7 +92,7 @@ function groupLinesByOrderId(
   return map;
 }
 
-function toOpenOrder(
+export function toOpenOrder(
   row: {
     id: string;
     no?: string | null;

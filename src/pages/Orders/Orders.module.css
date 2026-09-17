@@ -353,16 +353,24 @@
     min-width: 0;
   }
 
+  .searchInput {
+    width: 100%;
+    flex: 1;
+  }
+}
+
+/* Table ↔ mobile list swap, by the container's width rather than the
+ * viewport — see the same rule in `OpenOrdersPanel.module.css`. */
+.tableSwitch {
+  container-type: inline-size;
+}
+
+@container (max-width: 959px) {
   .desktopTableWrap {
     display: none;
   }
 
   .mobileWrap {
     display: block;
-  }
-
-  .searchInput {
-    width: 100%;
-    flex: 1;
   }
 }

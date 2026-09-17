@@ -49,9 +49,12 @@ const currency = new Intl.NumberFormat("id-ID", {
 export function MobileOrderRow({
   order,
   isLast,
+  hideCustomerColumns = false,
 }: {
   order: OpenOrder;
   isLast?: boolean;
+  /** Drop the Sales Rep + Customer cells, for lists already scoped to one customer. */
+  hideCustomerColumns?: boolean;
 }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -109,6 +112,7 @@ export function MobileOrderRow({
               <Icon
                 name="circleArrowRight"
                 size={16}
+                style={{ flexShrink: 0 }}
                 className={`${styles.chevron} ${expanded ? styles.chevronOpen : ""}`}
               />
             )}
@@ -125,8 +129,12 @@ export function MobileOrderRow({
           </span>
           <span className={styles.cellDate}>{order.orderDate}</span>
           <span className={styles.cellDate}>{order.deliveryDate}</span>
-          <span className={styles.cellSales}>{order.salesRep}</span>
-          <span className={styles.cellCustomer}>{order.customerName}</span>
+          {!hideCustomerColumns && (
+            <>
+              <span className={styles.cellSales}>{order.salesRep}</span>
+              <span className={styles.cellCustomer}>{order.customerName}</span>
+            </>
+          )}
           <span className={styles.cellItems}>
             {count > 0
               ? `${count} ${count === 1 ? t("item") : t("items")}`

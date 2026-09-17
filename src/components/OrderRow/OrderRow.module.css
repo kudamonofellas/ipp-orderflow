@@ -105,11 +105,15 @@
   text-align: center;
 }
 
-/* Arrow starts pointing right (collapsed), rotates to point down (expanded). */
+/* Arrow starts pointing right (collapsed), rotates to point down (expanded).
+ * `max-width: none` overrides reset.css's `svg { max-width: 100% }`: when
+ * the table squeezes, `.arrowCell`'s content box (40px minus its side
+ * padding) collapses and the icon shrank with it, down to 0px. */
 .chevron {
   transition: transform 0.2s ease;
   color: var(--accent-primary);
   vertical-align: middle;
+  max-width: none;
 }
 
 .chevronOpen {

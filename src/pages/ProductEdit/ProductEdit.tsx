@@ -1,58 +1,54 @@
-import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { Card } from '../../components/Card/Card';
-import { Button } from '../../components/Button/Button';
-import { Checkbox } from '../../components/Checkbox/Checkbox';
-import { Toggle } from '../../components/Toggle/Toggle';
-import { useAuth } from '../../hooks/useAuth';
-import { useLanguage } from '../../hooks/useLanguage';
-import { useDialog } from '../../hooks/useDialog';
+import { useEffect, useState } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import { Card } from "../../components/Card/Card";
+import { Button } from "../../components/Button/Button";
+import { Checkbox } from "../../components/Checkbox/Checkbox";
+import { Toggle } from "../../components/Toggle/Toggle";
+import { useAuth } from "../../hooks/useAuth";
+import { useLanguage } from "../../hooks/useLanguage";
 import {
   readProducts,
   updateProduct,
-  deleteProduct,
   readOrderLines,
-} from '../../lib/directus';
-import styles from './ProductEdit.module.css';
+} from "../../lib/directus";
+import styles from "./ProductEdit.module.css";
 
 export function ProductEdit() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const auth = useAuth();
   const { t } = useLanguage();
-  const { alert, confirm } = useDialog();
 
-  const canManage = auth.can('manage_products');
+  const canManage = auth.can("manage_products");
   // Narrower than canManage — lets a Warehouse-only user reach this page to
   // flip Out of Stock without granting the rest of the form (see
   // flag_out_of_stock's doc comment in domain.ts / F-10).
-  const canToggleOOS = auth.can('flag_out_of_stock');
+  const canToggleOOS = auth.can("flag_out_of_stock");
   const canEditOtherFields = canManage;
   const canAccess = canManage || canToggleOOS;
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [deleting, setDeleting] = useState(false);
   const [usedBy, setUsedBy] = useState(0);
 
   // ── Loaded (original) values — used for change detection ──
-  const [origName, setOrigName] = useState('');
-  const [origAccurateName, setOrigAccurateName] = useState('');
-  const [origCategory, setOrigCategory] = useState('');
-  const [origOrigin, setOrigOrigin] = useState('');
-  const [origGrade, setOrigGrade] = useState('');
-  const [origBrand, setOrigBrand] = useState('');
+  const [origName, setOrigName] = useState("");
+  const [origAccurateName, setOrigAccurateName] = useState("");
+  const [origCategory, setOrigCategory] = useState("");
+  const [origOrigin, setOrigOrigin] = useState("");
+  const [origGrade, setOrigGrade] = useState("");
+  const [origBrand, setOrigBrand] = useState("");
   const [origCatchWeight, setOrigCatchWeight] = useState(false);
   const [origOos, setOrigOos] = useState(false);
 
   // ── Working copy ──
-  const [name, setName] = useState('');
-  const [accurateName, setAccurateName] = useState('');
-  const [category, setCategory] = useState('');
-  const [origin, setOrigin] = useState('');
-  const [grade, setGrade] = useState('');
-  const [brand, setBrand] = useState('');
+  const [name, setName] = useState("");
+  const [accurateName, setAccurateName] = useState("");
+  const [category, setCategory] = useState("");
+  const [origin, setOrigin] = useState("");
+  const [grade, setGrade] = useState("");
+  const [brand, setBrand] = useState("");
   const [catchWeight, setCatchWeight] = useState(false);
   const [oos, setOos] = useState(false);
 
@@ -70,7 +66,7 @@ export function ProductEdit() {
       if (cancelled) return;
 
       if (productRes.error || !productRes.data?.[0]) {
-        setError(productRes.error || 'Product not found.');
+        setError(productRes.error || "Product not found.");
         setLoading(false);
         return;
       }
@@ -79,21 +75,21 @@ export function ProductEdit() {
 
       // Populate originals
       setOrigName(p.name);
-      setOrigAccurateName(p.accurate_name ?? '');
-      setOrigCategory(p.category ?? '');
-      setOrigOrigin(p.origin ?? '');
-      setOrigGrade(p.grade ?? '');
-      setOrigBrand(p.brand ?? '');
+      setOrigAccurateName(p.accurate_name ?? "");
+      setOrigCategory(p.category ?? "");
+      setOrigOrigin(p.origin ?? "");
+      setOrigGrade(p.grade ?? "");
+      setOrigBrand(p.brand ?? "");
       setOrigCatchWeight(!!p.catch_weight);
       setOrigOos(!!p.oos);
 
       // Populate working copies
       setName(p.name);
-      setAccurateName(p.accurate_name ?? '');
-      setCategory(p.category ?? '');
-      setOrigin(p.origin ?? '');
-      setGrade(p.grade ?? '');
-      setBrand(p.brand ?? '');
+      setAccurateName(p.accurate_name ?? "");
+      setCategory(p.category ?? "");
+      setOrigin(p.origin ?? "");
+      setGrade(p.grade ?? "");
+      setBrand(p.brand ?? "");
       setCatchWeight(!!p.catch_weight);
       setOos(!!p.oos);
 
@@ -102,7 +98,7 @@ export function ProductEdit() {
         limit: 1,
         // `name` is required (non-optional) in OrderLinesCollectionSchema —
         // must be requested even though it's unused here, or zod parsing fails.
-        fields: ['id', 'name'],
+        fields: ["id", "name"],
       });
 
       if (!cancelled && linesRes.data) {
@@ -163,7 +159,10 @@ export function ProductEdit() {
     // whole write rejected, same as every other role-scoped field mismatch
     // fixed this session. Other fields are also disabled in the form for
     // this user, so their values never actually changed anyway.
-    const res = await updateProduct(id, canEditOtherFields ? fullPayload : { oos });
+    const res = await updateProduct(
+      id,
+      canEditOtherFields ? fullPayload : { oos },
+    );
 
     setSaving(false);
 
@@ -174,40 +173,11 @@ export function ProductEdit() {
     }
   };
 
-  const handleDelete = async () => {
-    if (usedBy > 0) {
-      alert(t('Product is used by active orders and cannot be deleted.'), {
-        title: t("Can't delete product"),
-      });
-      return;
-    }
-    if (
-      !(await confirm(t('Are you sure you want to delete this product?'), {
-        title: t('Delete product'),
-        danger: true,
-      }))
-    )
-      return;
-    if (!id) return;
-
-    setDeleting(true);
-    const res = await deleteProduct(id);
-    setDeleting(false);
-
-    if (res.error) {
-      alert(`Failed to delete product: ${res.error}`, {
-        title: t('Delete failed'),
-      });
-    } else {
-      navigate('/products');
-    }
-  };
-
   if (loading)
     return (
       <div className={styles.container}>
         <div className={styles.sectionsContainer}>
-          <p className={styles.muted}>{t('Loading…')}</p>
+          <p className={styles.muted}>{t("Loading…")}</p>
         </div>
       </div>
     );
@@ -216,7 +186,7 @@ export function ProductEdit() {
       <div className={styles.container}>
         <div
           className={styles.sectionsContainer}
-          style={{ color: 'var(--state-error)' }}
+          style={{ color: "var(--state-error)" }}
         >
           {t(error)}
         </div>
@@ -226,156 +196,175 @@ export function ProductEdit() {
   return (
     <div className={styles.container}>
       <div className={styles.sectionsContainer}>
-      <div className={styles.mainColumn}>
-        {/* ── Sticky Header ── */}
-        <header className={styles.header}>
-          <div className={styles.topActionsRow}>
-            <Button type="button" variant="tertiary" icon="chevronLeft" onClick={handleCancel}>
-              {t('Back to product')}
-            </Button>
-            <div className={styles.actions}>
-              {canManage && (
+        <div className={styles.mainColumn}>
+          {/* ── Sticky Header ── */}
+          <header className={styles.header}>
+            <div className={styles.topActionsRow}>
+              <Button
+                type="button"
+                variant="tertiary"
+                icon="chevronLeft"
+                onClick={handleCancel}
+              >
+                {t("Back")}
+              </Button>
+              <div className={styles.actions}>
                 <Button
                   type="button"
                   variant="secondary"
-                  icon="trash"
-                  onClick={handleDelete}
-                  disabled={saving || deleting}
+                  icon="close"
+                  onClick={handleCancel}
+                  disabled={saving}
                 >
-                  {deleting ? t('Deleting…') : t('Delete')}
+                  {t("Cancel")}
                 </Button>
+                <Button
+                  type="button"
+                  variant="primary"
+                  icon="save"
+                  disabled={!canSave}
+                  onClick={handleSave}
+                >
+                  {saving ? t("Saving…") : t("Save Changes")}
+                </Button>
+              </div>
+            </div>
+
+            <div className={styles.titleRow}>
+              <h2 className={styles.title}>{t("Edit Product")}</h2>
+            </div>
+          </header>
+
+          {error && <div className={styles.error}>{t(error)}</div>}
+
+          <Card>
+            <h3 className={styles.heading}>{t("Product Details")}</h3>
+            <div className={styles.fields}>
+              <label className={styles.field}>
+                <span className={styles.label}>{t("Display Name")} *</span>
+                <input
+                  type="text"
+                  className={styles.input}
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  required
+                  placeholder="Aus Wagyu Striploin 8-9"
+                  disabled={saving || !canEditOtherFields}
+                />
+              </label>
+              <label className={styles.field}>
+                <span className={styles.label}>{t("Accurate Name (Raw)")}</span>
+                <input
+                  type="text"
+                  className={styles.input}
+                  value={accurateName}
+                  onChange={(e) => setAccurateName(e.target.value)}
+                  placeholder="WAGYU STRIPLOIN 8-9"
+                  disabled={saving || !canEditOtherFields}
+                />
+              </label>
+              <div className={styles.row}>
+                <label className={styles.field}>
+                  <span className={styles.label}>{t("Category")}</span>
+                  <input
+                    type="text"
+                    className={styles.input}
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                    disabled={saving || !canEditOtherFields}
+                  />
+                </label>
+                <label className={styles.field}>
+                  <span className={styles.label}>{t("Origin")}</span>
+                  <input
+                    type="text"
+                    className={styles.input}
+                    value={origin}
+                    onChange={(e) => setOrigin(e.target.value)}
+                    disabled={saving || !canEditOtherFields}
+                  />
+                </label>
+              </div>
+              <div className={styles.row}>
+                <label className={styles.field}>
+                  <span className={styles.label}>{t("Grade")}</span>
+                  <input
+                    type="text"
+                    className={styles.input}
+                    value={grade}
+                    onChange={(e) => setGrade(e.target.value)}
+                    disabled={saving || !canEditOtherFields}
+                  />
+                </label>
+                <label className={styles.field}>
+                  <span className={styles.label}>{t("Brand")}</span>
+                  <input
+                    type="text"
+                    className={styles.input}
+                    value={brand}
+                    onChange={(e) => setBrand(e.target.value)}
+                    disabled={saving || !canEditOtherFields}
+                  />
+                </label>
+              </div>
+
+              <label className={styles.checkboxLabel}>
+                <Checkbox
+                  size="sm"
+                  checked={catchWeight}
+                  onChange={setCatchWeight}
+                  label={t("Catch-weight (sold by actual weight)")}
+                  disabled={saving || !canEditOtherFields}
+                />
+                <span>{t("Catch-weight (sold by actual weight)")}</span>
+              </label>
+
+              <label className={styles.checkboxLabel}>
+                <Toggle
+                  size="sm"
+                  label={t("Out of Stock")}
+                  checked={oos}
+                  onChange={setOos}
+                  disabled={saving || !(canManage || canToggleOOS)}
+                />
+                <span
+                  style={
+                    oos
+                      ? { color: "var(--state-error)", fontWeight: 600 }
+                      : undefined
+                  }
+                >
+                  {t("Out of Stock (warn when someone orders this)")}
+                </span>
+              </label>
+
+              {!canEditOtherFields && (
+                <p
+                  style={{
+                    margin: 0,
+                    fontSize: "13px",
+                    color: "var(--text-muted)",
+                  }}
+                >
+                  {t("Your role can only change Out of Stock here.")}
+                </p>
               )}
-              <Button type="button" variant="secondary" onClick={handleCancel} disabled={saving}>
-                {t('Cancel')}
-              </Button>
-              <Button
-                type="button"
-                variant="primary"
-                icon="save"
-                disabled={!canSave}
-                onClick={handleSave}
-              >
-                {saving ? t('Saving…') : t('Save Changes')}
-              </Button>
+
+              {usedBy > 0 && (
+                <p
+                  style={{
+                    margin: 0,
+                    fontSize: "13px",
+                    color: "var(--text-muted)",
+                  }}
+                >
+                  {t("Product is currently used by")} {usedBy}{" "}
+                  {t("active order(s).")}
+                </p>
+              )}
             </div>
-          </div>
-
-          <div className={styles.titleRow}>
-            <h2 className={styles.title}>{t('Edit Product')}</h2>
-          </div>
-        </header>
-
-        {error && <div className={styles.error}>{t(error)}</div>}
-
-        <Card>
-          <h3 className={styles.heading}>{t('Product Details')}</h3>
-          <div className={styles.fields}>
-            <label className={styles.field}>
-              <span className={styles.label}>{t('Display Name')} *</span>
-              <input
-                type="text"
-                className={styles.input}
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-                placeholder="Aus Wagyu Striploin 8-9"
-                disabled={saving || !canEditOtherFields}
-              />
-            </label>
-            <label className={styles.field}>
-              <span className={styles.label}>{t('Accurate Name (Raw)')}</span>
-              <input
-                type="text"
-                className={styles.input}
-                value={accurateName}
-                onChange={(e) => setAccurateName(e.target.value)}
-                placeholder="WAGYU STRIPLOIN 8-9"
-                disabled={saving || !canEditOtherFields}
-              />
-            </label>
-            <div className={styles.row}>
-              <label className={styles.field}>
-                <span className={styles.label}>{t('Category')}</span>
-                <input
-                  type="text"
-                  className={styles.input}
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  disabled={saving || !canEditOtherFields}
-                />
-              </label>
-              <label className={styles.field}>
-                <span className={styles.label}>{t('Origin')}</span>
-                <input
-                  type="text"
-                  className={styles.input}
-                  value={origin}
-                  onChange={(e) => setOrigin(e.target.value)}
-                  disabled={saving || !canEditOtherFields}
-                />
-              </label>
-            </div>
-            <div className={styles.row}>
-              <label className={styles.field}>
-                <span className={styles.label}>{t('Grade')}</span>
-                <input
-                  type="text"
-                  className={styles.input}
-                  value={grade}
-                  onChange={(e) => setGrade(e.target.value)}
-                  disabled={saving || !canEditOtherFields}
-                />
-              </label>
-              <label className={styles.field}>
-                <span className={styles.label}>{t('Brand')}</span>
-                <input
-                  type="text"
-                  className={styles.input}
-                  value={brand}
-                  onChange={(e) => setBrand(e.target.value)}
-                  disabled={saving || !canEditOtherFields}
-                />
-              </label>
-            </div>
-
-            <label className={styles.checkboxLabel}>
-              <Checkbox
-                size="sm"
-                checked={catchWeight}
-                onChange={setCatchWeight}
-                label={t('Catch-weight (sold by actual weight)')}
-                disabled={saving || !canEditOtherFields}
-              />
-              <span>{t('Catch-weight (sold by actual weight)')}</span>
-            </label>
-
-            <label className={styles.checkboxLabel}>
-              <Toggle
-                size="sm"
-                label={t('Out of Stock')}
-                checked={oos}
-                onChange={setOos}
-                disabled={saving || !(canManage || canToggleOOS)}
-              />
-              <span style={oos ? { color: 'var(--state-error)', fontWeight: 600 } : undefined}>
-                {t('Out of Stock (warn when someone orders this)')}
-              </span>
-            </label>
-
-            {!canEditOtherFields && (
-              <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-muted)' }}>
-                {t('Your role can only change Out of Stock here.')}
-              </p>
-            )}
-
-            {usedBy > 0 && (
-              <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-muted)' }}>
-                {t('Product is currently used by')} {usedBy} {t('active order(s).')}
-              </p>
-            )}
-          </div>
-        </Card>
-      </div>
+          </Card>
+        </div>
       </div>
     </div>
   );

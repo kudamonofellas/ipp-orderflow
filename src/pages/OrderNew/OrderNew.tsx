@@ -553,7 +553,7 @@ export function OrderNew() {
 
     const correctionPromises = cleanLines
       .filter((l) => l.productId && l.rawText)
-      .map((l) => upsertCorrection(l.rawText!, l.productId));
+      .map((l) => upsertCorrection(l.rawText!, l.productId, userId));
     await Promise.allSettled(correctionPromises);
 
     if (attachments && attachments.length > 0) {

@@ -529,7 +529,7 @@ export function OrderEdit() {
       if (correctionTargets.length > 0) {
         await Promise.allSettled(
           correctionTargets.map((l) =>
-            upsertCorrection(l.rawText!, l.productId!),
+            upsertCorrection(l.rawText!, l.productId!, userId),
           ),
         );
       }

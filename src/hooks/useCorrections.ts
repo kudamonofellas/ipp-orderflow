@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import {
   readCorrections,
   deleteCorrection,
+  updateCorrection,
   readProducts,
   readAllUsers,
 } from "../lib/directus";
@@ -15,6 +16,7 @@ import {
 export interface CorrectionRow {
   id: string;
   tokenKey: string;
+  productId: string;
   productName: string;
   timesUsed: number;
   createdBy: string;
@@ -27,6 +29,12 @@ interface UseCorrectionsResult {
   error: string | null;
   deletingIds: Set<string>;
   remove: (id: string) => Promise<{ error: string | null }>;
+  update: (
+    id: string,
+    tokenKey: string,
+    productId: string,
+    productName: string,
+  ) => Promise<{ error: string | null }>;
   reload: () => void;
 }
 
@@ -84,6 +92,7 @@ export function useCorrections(): UseCorrectionsResult {
       const built: CorrectionRow[] = corrections.map((c) => ({
         id: c.id,
         tokenKey: c.token_key,
+        productId: c.product_id,
         productName: nameByProductId.get(c.product_id) ?? c.product_id,
         timesUsed: c.times_used ?? 0,
         createdBy: c.created_by ? (nameByUserId.get(c.created_by) ?? c.created_by) : "—",
@@ -113,5 +122,24 @@ export function useCorrections(): UseCorrectionsResult {
     return { error: null };
   }
 
-  return { rows, loading, error, deletingIds, remove, reload };
+  async function update(
+    id: string,
+    tokenKey: string,
+    productId: string,
+    productName: string,
+  ): Promise<{ error: string | null }> {
+    const res = await updateCorrection(id, {
+      token_key: tokenKey,
+      product_id: productId,
+    });
+    if (res.error) return { error: res.error };
+    setRows((prev) =>
+      prev.map((r) =>
+        r.id === id ? { ...r, tokenKey, productId, productName } : r,
+      ),
+    );
+    return { error: null };
+  }
+
+  return { rows, loading, error, deletingIds, remove, update, reload };
 }

@@ -1784,6 +1784,28 @@ export async function deleteCorrection(
   }
 }
 
+/** Edit a learned correction's token and/or product (Learned Matches inline edit). */
+export async function updateCorrection(
+  id: string,
+  patch: { token_key: string; product_id: string },
+): Promise<DirectusResult<CorrectionsCollection>> {
+  try {
+    const raw = await getClient().request(
+      updateItem("corrections", id, patch as never),
+    );
+    const parsed = CorrectionsCollectionSchema.safeParse(raw);
+    if (!parsed.success) {
+      return {
+        data: null,
+        error: `Invalid corrections response: ${parsed.error.message}`,
+      };
+    }
+    return { data: parsed.data, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
 /** Aggregate `corrections` row count (e.g. the Settings page's "N learned matches" stat). */
 export async function aggregateCorrections(
   query: DirectusQuery,
@@ -1926,10 +1948,15 @@ export async function parseOrderText(
  *
  * Called when Admin manually assigns a product to a parser-unrecognized line
  * so that future parses benefit from the correction globally.
+ *
+ * `created_by` is a plain uuid column (not a Directus `user-created` special
+ * field), so nothing fills it server-side — the caller must pass `userId`.
+ * An existing row keeps its original creator; it's only backfilled if empty.
  */
 export async function upsertCorrection(
   tokenKey: string,
   productId: string,
+  userId: string | null,
 ): Promise<DirectusResult<CorrectionsCollection>> {
   try {
     // Check for existing correction with the same token_key
@@ -1937,9 +1964,13 @@ export async function upsertCorrection(
       readItems("corrections", {
         filter: { token_key: { _eq: tokenKey } } as never,
         limit: 1,
-        fields: ["id", "times_used"] as never,
+        fields: ["id", "times_used", "created_by"] as never,
       }),
-    )) as Array<{ id: string; times_used: number | null }>;
+    )) as Array<{
+      id: string;
+      times_used: number | null;
+      created_by: string | null;
+    }>;
 
     if (existing && existing.length > 0) {
       const row = existing[0];
@@ -1947,6 +1978,7 @@ export async function upsertCorrection(
         updateItem("corrections", row.id, {
           product_id: productId,
           times_used: (row.times_used ?? 0) + 1,
+          ...(!row.created_by && userId ? { created_by: userId } : {}),
         } as never),
       );
       const parsed = CorrectionsCollectionSchema.safeParse(raw);
@@ -1965,6 +1997,7 @@ export async function upsertCorrection(
         token_key: tokenKey,
         product_id: productId,
         times_used: 1,
+        created_by: userId,
       } as never),
     );
     const parsed = CorrectionsCollectionSchema.safeParse(raw);

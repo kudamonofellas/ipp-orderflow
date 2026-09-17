@@ -278,36 +278,6 @@
   box-shadow: var(--focus-ring);
 }
 
-.sortWrapper {
-  position: relative;
-}
-
-.sortButton {
-  width: 140px;
-  justify-content: space-between;
-}
-
-.sortDropdown {
-  position: absolute;
-  top: 100%;
-  right: 0;
-  margin-top: var(--space-sm);
-  background: var(--bg-surface);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-lg);
-  padding: var(--space-xs);
-  display: flex;
-  flex-direction: column;
-  z-index: 20;
-  width: 140px;
-}
-
-.sortItem {
-  text-align: left;
-  white-space: nowrap;
-}
-
 .volumeTable {
   display: flex;
   flex-direction: column;
@@ -317,7 +287,6 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr) minmax(0, 1.5fr);
   gap: var(--space-3xl);
-  padding-bottom: var(--space-sm);
   border-bottom: 1px solid var(--border-subtle);
 }
 
@@ -389,6 +358,7 @@
   font: var(--text-label);
   color: var(--text-muted);
   font-weight: 600;
+  padding: var(--space-sm) 0;
 }
 
 .demandHeading {

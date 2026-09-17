@@ -58,7 +58,7 @@ export function CustomerNew() {
       const parsed = parseLatLng(trimmedGeo);
       if (!parsed) {
         setError(
-          "Couldn't read that as coordinates — paste \"lat, lng\" or a Google Maps link with coordinates in it.",
+          'Couldn\'t read that as coordinates — paste "lat, lng" or a Google Maps link with coordinates in it.',
         );
         return;
       }
@@ -99,222 +99,231 @@ export function CustomerNew() {
   return (
     <div className={styles.container}>
       <div className={styles.sectionsContainer}>
-      <div className={styles.mainColumn}>
-        {/* ── Sticky Header ── */}
-        <header className={styles.header}>
-          <div className={styles.topActionsRow}>
-            <Button
-              type="button"
-              variant="tertiary"
-              icon="chevronLeft"
-              onClick={handleCancel}
-            >
-              {t("Back to customers")}
-            </Button>
-            <div className={styles.actions}>
+        <div className={styles.mainColumn}>
+          {/* ── Sticky Header ── */}
+          <header className={styles.header}>
+            <div className={styles.topActionsRow}>
               <Button
                 type="button"
-                variant="secondary"
+                variant="tertiary"
+                icon="chevronLeft"
                 onClick={handleCancel}
-                disabled={saving}
               >
-                {t("Cancel")}
+                {t("Back")}
               </Button>
-              <Button
-                type="button"
-                variant="primary"
-                icon="save"
-                disabled={!canSave}
-                onClick={handleSave}
-              >
-                {saving ? t("Creating…") : t("Create Customer")}
-              </Button>
-            </div>
-          </div>
-          <div className={styles.titleRow}>
-            <h2 className={styles.title}>{t("New Customer")}</h2>
-          </div>
-        </header>
-
-        {error && <div className={styles.error}>{t(error)}</div>}
-
-        {/* ── Identity ── */}
-        <Card>
-          <h3 className={styles.heading}>{t("Customer Details")}</h3>
-          <div className={styles.fields}>
-            <div className={styles.row}>
-              <label className={styles.field}>
-                <span className={styles.label}>{t("Restaurant / Outlet Name")} *</span>
-                <input
-                  type="text"
-                  className={styles.input}
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  required
-                  autoFocus
-                  placeholder="e.g. Toko Makmur"
-                  disabled={saving}
-                />
-              </label>
-              <label className={styles.field}>
-                <span className={styles.label}>{t("Company Name (PT / CV for Invoice)")}</span>
-                <input
-                  type="text"
-                  className={styles.input}
-                  value={companyName}
-                  onChange={(e) => setCompanyName(e.target.value)}
-                  placeholder="e.g. PT En Prima Food & Beverages"
-                  disabled={saving}
-                />
-              </label>
-            </div>
-            <div className={styles.row}>
-              <label className={styles.field}>
-                <span className={styles.label}>{t("Channel")}</span>
-                <select
-                  className={styles.select}
-                  value={channel}
-                  onChange={(e) => setChannel(e.target.value)}
+              <div className={styles.actions}>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  icon="close"
+                  onClick={handleCancel}
                   disabled={saving}
                 >
-                  <option value="horeca">{t("Horeca")}</option>
-                  <option value="b2b">{t("B2B")}</option>
-                  <option value="retail">{t("Retail")}</option>
-                  <option value="other">{t("Other")}</option>
-                </select>
-              </label>
-              <label className={styles.field}>
-                <span className={styles.label}>{t("Area")}</span>
-                <input
-                  type="text"
-                  className={styles.input}
-                  value={area}
-                  onChange={(e) => setArea(e.target.value)}
-                  placeholder="e.g. Jakarta Selatan"
-                  disabled={saving}
-                />
-              </label>
+                  {t("Cancel")}
+                </Button>
+                <Button
+                  type="button"
+                  variant="primary"
+                  icon="save"
+                  disabled={!canSave}
+                  onClick={handleSave}
+                >
+                  {saving ? t("Creating…") : t("Create Customer")}
+                </Button>
+              </div>
             </div>
-            <label className={styles.field}>
-              <span className={styles.label}>{t("Delivery Address")}</span>
-              <textarea
-                className={styles.input}
-                style={{
-                  justifyContent: "flex-start",
-                  alignItems: "flex-start",
-                  minHeight: "100px",
-                }}
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-                disabled={saving}
-                placeholder="Delivery address"
-              />
-            </label>
-            <label className={styles.field}>
-              <span className={styles.label}>{t("Delivery Location Pin")}</span>
-              <input
-                type="text"
-                className={styles.input}
-                value={addressGeoInput}
-                onChange={(e) => setAddressGeoInput(e.target.value)}
-                disabled={saving}
-                placeholder="-6.914744, 107.609810 or paste a Google Maps link"
-              />
-              <span className={styles.hint}>
-                {t(
-                  "Used to verify a courier's drop-off distance on the order page. Leave blank if unknown — it gets set automatically from the customer's first confirmed delivery.",
-                )}
-              </span>
-            </label>
-            <label className={styles.field}>
-              <span className={styles.label}>{t("Phone / Contact")}</span>
-              <input
-                type="text"
-                className={styles.input}
-                value={contact}
-                onChange={(e) => setContact(e.target.value)}
-                placeholder="e.g. +62 812..."
-                disabled={saving}
-              />
-            </label>
-          </div>
-        </Card>
+            <div className={styles.titleRow}>
+              <h2 className={styles.title}>{t("New Customer")}</h2>
+            </div>
+          </header>
 
-        {/* ── Finance ── */}
-        <Card>
-          <h3 className={styles.heading}>{t("Finance")}</h3>
-          <div className={styles.fields}>
-            <div className={styles.row}>
+          {error && <div className={styles.error}>{t(error)}</div>}
+
+          {/* ── Identity ── */}
+          <Card>
+            <h3 className={styles.heading}>{t("Customer Details")}</h3>
+            <div className={styles.fields}>
+              <div className={styles.row}>
+                <label className={styles.field}>
+                  <span className={styles.label}>
+                    {t("Restaurant / Outlet Name")} *
+                  </span>
+                  <input
+                    type="text"
+                    className={styles.input}
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    required
+                    autoFocus
+                    placeholder="e.g. Toko Makmur"
+                    disabled={saving}
+                  />
+                </label>
+                <label className={styles.field}>
+                  <span className={styles.label}>
+                    {t("Company Name (PT / CV for Invoice)")}
+                  </span>
+                  <input
+                    type="text"
+                    className={styles.input}
+                    value={companyName}
+                    onChange={(e) => setCompanyName(e.target.value)}
+                    placeholder="e.g. PT En Prima Food & Beverages"
+                    disabled={saving}
+                  />
+                </label>
+              </div>
+              <div className={styles.row}>
+                <label className={styles.field}>
+                  <span className={styles.label}>{t("Channel")}</span>
+                  <select
+                    className={styles.select}
+                    value={channel}
+                    onChange={(e) => setChannel(e.target.value)}
+                    disabled={saving}
+                  >
+                    <option value="horeca">{t("Horeca")}</option>
+                    <option value="b2b">{t("B2B")}</option>
+                    <option value="retail">{t("Retail")}</option>
+                    <option value="other">{t("Other")}</option>
+                  </select>
+                </label>
+                <label className={styles.field}>
+                  <span className={styles.label}>{t("Area")}</span>
+                  <input
+                    type="text"
+                    className={styles.input}
+                    value={area}
+                    onChange={(e) => setArea(e.target.value)}
+                    placeholder="e.g. Jakarta Selatan"
+                    disabled={saving}
+                  />
+                </label>
+              </div>
               <label className={styles.field}>
-                <span className={styles.label}>{t("Sales Rep")}</span>
+                <span className={styles.label}>{t("Delivery Address")}</span>
+                <textarea
+                  className={styles.input}
+                  style={{
+                    justifyContent: "flex-start",
+                    alignItems: "flex-start",
+                    minHeight: "100px",
+                  }}
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  disabled={saving}
+                  placeholder="Delivery address"
+                />
+              </label>
+              <label className={styles.field}>
+                <span className={styles.label}>
+                  {t("Delivery Location Pin")}
+                </span>
                 <input
                   type="text"
                   className={styles.input}
-                  value={sales}
-                  onChange={(e) => setSales(e.target.value)}
-                  placeholder="e.g. Budi"
+                  value={addressGeoInput}
+                  onChange={(e) => setAddressGeoInput(e.target.value)}
                   disabled={saving}
+                  placeholder="-6.914744, 107.609810 or paste a Google Maps link"
                 />
+                <span className={styles.hint}>
+                  {t(
+                    "Used to verify a courier's drop-off distance on the order page. Leave blank if unknown — it gets set automatically from the customer's first confirmed delivery.",
+                  )}
+                </span>
               </label>
               <label className={styles.field}>
-                <span className={styles.label}>{t("Payment Timing")}</span>
-                <select
-                  className={styles.select}
-                  value={payTiming}
-                  onChange={(e) => setPayTiming(e.target.value)}
-                  disabled={saving}
-                >
-                  <option value="upfront">{t("Upfront")}</option>
-                  <option value="cod">{t("COD")}</option>
-                  <option value="terms">{t("Terms")}</option>
-                </select>
-              </label>
-            </div>
-            <div className={styles.row}>
-              <label className={styles.field}>
-                <span className={styles.label}>{t("Payment Method")}</span>
-                <select
-                  className={styles.select}
-                  value={payMethod}
-                  onChange={(e) => setPayMethod(e.target.value)}
-                  disabled={saving}
-                >
-                  <option value="transfer">{t("Transfer")}</option>
-                  <option value="cash">{t("Cash")}</option>
-                  <option value="giro">{t("Giro")}</option>
-                </select>
-              </label>
-              <label className={styles.field}>
-                <span className={styles.label}>{t("Credit Limit (IDR)")}</span>
+                <span className={styles.label}>{t("Phone / Contact")}</span>
                 <input
                   type="text"
-                  inputMode="numeric"
                   className={styles.input}
-                  value={creditLimit}
-                  onChange={(e) =>
-                    setCreditLimit(e.target.value.replace(/[^\d]/g, ""))
-                  }
-                  placeholder="0"
+                  value={contact}
+                  onChange={(e) => setContact(e.target.value)}
+                  placeholder="e.g. +62 812..."
                   disabled={saving}
                 />
               </label>
             </div>
-            <div className={styles.row}>
-              <label className={styles.field}>
-                <span className={styles.label}>{t("Terms (days)")}</span>
-                <input
-                  type="number"
-                  className={styles.input}
-                  value={termDays}
-                  onChange={(e) => setTermDays(e.target.value)}
-                  placeholder="0"
-                  disabled={saving}
-                />
-              </label>
+          </Card>
+
+          {/* ── Finance ── */}
+          <Card>
+            <h3 className={styles.heading}>{t("Finance")}</h3>
+            <div className={styles.fields}>
+              <div className={styles.row}>
+                <label className={styles.field}>
+                  <span className={styles.label}>{t("Sales Rep")}</span>
+                  <input
+                    type="text"
+                    className={styles.input}
+                    value={sales}
+                    onChange={(e) => setSales(e.target.value)}
+                    placeholder="e.g. Budi"
+                    disabled={saving}
+                  />
+                </label>
+                <label className={styles.field}>
+                  <span className={styles.label}>{t("Payment Timing")}</span>
+                  <select
+                    className={styles.select}
+                    value={payTiming}
+                    onChange={(e) => setPayTiming(e.target.value)}
+                    disabled={saving}
+                  >
+                    <option value="upfront">{t("Upfront")}</option>
+                    <option value="cod">{t("COD")}</option>
+                    <option value="terms">{t("Terms")}</option>
+                  </select>
+                </label>
+              </div>
+              <div className={styles.row}>
+                <label className={styles.field}>
+                  <span className={styles.label}>{t("Payment Method")}</span>
+                  <select
+                    className={styles.select}
+                    value={payMethod}
+                    onChange={(e) => setPayMethod(e.target.value)}
+                    disabled={saving}
+                  >
+                    <option value="transfer">{t("Transfer")}</option>
+                    <option value="cash">{t("Cash")}</option>
+                    <option value="giro">{t("Giro")}</option>
+                  </select>
+                </label>
+                <label className={styles.field}>
+                  <span className={styles.label}>
+                    {t("Credit Limit (IDR)")}
+                  </span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    className={styles.input}
+                    value={creditLimit}
+                    onChange={(e) =>
+                      setCreditLimit(e.target.value.replace(/[^\d]/g, ""))
+                    }
+                    placeholder="0"
+                    disabled={saving}
+                  />
+                </label>
+              </div>
+              <div className={styles.row}>
+                <label className={styles.field}>
+                  <span className={styles.label}>{t("Terms (days)")}</span>
+                  <input
+                    type="number"
+                    className={styles.input}
+                    value={termDays}
+                    onChange={(e) => setTermDays(e.target.value)}
+                    placeholder="0"
+                    disabled={saving}
+                  />
+                </label>
+              </div>
             </div>
-          </div>
-        </Card>
-      </div>
+          </Card>
+        </div>
       </div>
     </div>
   );

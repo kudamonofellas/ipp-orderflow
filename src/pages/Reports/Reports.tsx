@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Card } from "../../components/Card/Card";
 import { Icon } from "../../components/Icon/Icon";
 import { Button } from "../../components/Button/Button";
+import { SortableTh } from "../../components/SortableTh/SortableTh";
 import { StatCard } from "../../components/StatCard/StatCard";
 import { useCan } from "../../hooks/useAuth";
 import { useLanguage } from "../../hooks/useLanguage";
@@ -60,10 +61,7 @@ export function Reports() {
 
   const [range, setRange] = useState<ReportRange>({ type: "30d" });
   const [customerSearch, setCustomerSearch] = useState("");
-  const [customerSort, setCustomerSort] = useState<"orders" | "weighedKg">(
-    "orders",
-  );
-  const [sortOpen, setSortOpen] = useState(false);
+  const [customerSort, setCustomerSort] = useState("-orders");
 
   const {
     loading,
@@ -109,14 +107,29 @@ export function Reports() {
     .toFixed(1)
     .split(".");
 
+  const customerSortDesc = customerSort.startsWith("-");
+  const customerSortKey = (
+    customerSortDesc ? customerSort.slice(1) : customerSort
+  ) as "customerName" | "orders" | "weighedKg";
+  // "Top 5" always ranks by a volume metric (descending); the header sort
+  // then only orders those five. Sorting by name ranks by orders.
+  const rankKey =
+    customerSortKey === "customerName" ? "orders" : customerSortKey;
   const filteredCustomers = customerVolume
     .filter((c) =>
       c.customerName
         .toLowerCase()
         .includes(customerSearch.trim().toLowerCase()),
     )
-    .sort((a, b) => b[customerSort] - a[customerSort])
-    .slice(0, 5);
+    .sort((a, b) => b[rankKey] - a[rankKey])
+    .slice(0, 5)
+    .sort((a, b) => {
+      const cmp =
+        customerSortKey === "customerName"
+          ? a.customerName.localeCompare(b.customerName)
+          : a[customerSortKey] - b[customerSortKey];
+      return customerSortDesc ? -cmp : cmp;
+    });
   const maxOrders = Math.max(1, ...filteredCustomers.map((c) => c.orders));
   const maxWeighedKg = Math.max(
     1,
@@ -386,43 +399,6 @@ export function Reports() {
                       aria-label={t("Search customer")}
                     />
                   </div>
-                  <div className={styles.sortWrapper}>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      icon="chevronDown"
-                      iconPosition="right"
-                      className={styles.sortButton}
-                      onClick={() => setSortOpen((o) => !o)}
-                      aria-expanded={sortOpen}
-                    >
-                      {customerSort === "orders"
-                        ? t("Orders")
-                        : t("Weighed kg")}
-                    </Button>
-                    {sortOpen && (
-                      <div
-                        className={styles.sortDropdown}
-                        role="dialog"
-                        aria-label={t("Sort by")}
-                      >
-                        {(["orders", "weighedKg"] as const).map((key) => (
-                          <Button
-                            key={key}
-                            type="button"
-                            variant="ghost"
-                            className={styles.sortItem}
-                            onClick={() => {
-                              setCustomerSort(key);
-                              setSortOpen(false);
-                            }}
-                          >
-                            {key === "orders" ? t("Orders") : t("Weighed kg")}
-                          </Button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
                 </div>
               </div>
 
@@ -434,9 +410,30 @@ export function Reports() {
                 <div className={styles.volumeTable}>
                   <div className={styles.volumeTableScroll}>
                     <div className={styles.volumeHeadRow}>
-                      <span className={styles.thead}>{t("Customer")}</span>
-                      <span className={styles.thead}>{t("Orders")}</span>
-                      <span className={styles.thead}>{t("Weighed kg")}</span>
+                      <SortableTh
+                        as="div"
+                        className={styles.thead}
+                        label={t("Customer")}
+                        sortKey="customerName"
+                        activeSort={customerSort}
+                        onSort={setCustomerSort}
+                      />
+                      <SortableTh
+                        as="div"
+                        className={styles.thead}
+                        label={t("Orders")}
+                        sortKey="orders"
+                        activeSort={customerSort}
+                        onSort={setCustomerSort}
+                      />
+                      <SortableTh
+                        as="div"
+                        className={styles.thead}
+                        label={t("Weighed kg")}
+                        sortKey="weighedKg"
+                        activeSort={customerSort}
+                        onSort={setCustomerSort}
+                      />
                     </div>
                     {filteredCustomers.map((c) => (
                       <div key={c.customerName} className={styles.volumeRow}>

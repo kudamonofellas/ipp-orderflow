@@ -187,6 +187,8 @@
   font: var(--text-body);
   color: var(--text-primary);
   font-weight: 500;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .muted {
@@ -237,6 +239,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-xs);
+  min-width: 0;
 }
 
 .label {
@@ -274,54 +277,77 @@
   opacity: 0.6;
 }
 
-/* Table styling for orders */
-.table {
-  width: 100%;
-  border-collapse: collapse;
+/* Order History renders `MobileOrderRow` at every width — the desktop side
+ * panel is too narrow for the `OrderRow` table. One scroll container for both
+ * axes, so the header and every row scroll horizontally together; `--col-*`
+ * widths are shared by the header and `MobileOrderRow`'s cells, which keeps
+ * the div columns aligned. On desktop it fills the fixed-height card. */
+.mobileList {
+  flex: 1;
+  min-height: 0;
+  overflow-x: auto;
+  overflow-y: auto;
+  --col-id: 100px;
+  --col-stage: 160px;
+  --col-date: 160px;
+  --col-items: 90px;
 }
 
-.table th {
+.mobileHeaderRow {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+  padding: 0 0 var(--space-sm);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  width: max-content;
+  min-width: 100%;
   font: var(--text-label);
   color: var(--text-muted);
   font-weight: 600;
-  padding: var(--space-sm) var(--space-md);
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.table td {
-  font: var(--text-body);
-  color: var(--text-primary);
-  padding: var(--space-md);
-  border-bottom: 1px solid var(--border-subtle);
-  max-width: 100px;
-  overflow: hidden;
   white-space: nowrap;
 }
 
-.table td:first-child {
-  border-top-left-radius: var(--radius-md);
-  border-bottom-left-radius: var(--radius-md);
+.mobileArrowHead {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  width: 32px;
+  flex-shrink: 0;
+  background: var(--bg-surface);
 }
 
-.table td:last-child {
-  border-top-right-radius: var(--radius-md);
-  border-bottom-right-radius: var(--radius-md);
+.colId {
+  width: var(--col-id);
+  flex-shrink: 0;
 }
 
-.tr:last-child {
-  border-bottom: none;
+.colStage {
+  width: var(--col-stage);
+  flex-shrink: 0;
 }
 
-.tr:hover {
-  background: var(--bg-surface-hover);
-  cursor: pointer;
+.colDate {
+  width: var(--col-date);
+  flex-shrink: 0;
+}
+
+.colItems {
+  width: var(--col-items);
+  flex-shrink: 0;
 }
 
 /* Responsive collapse */
 @media (max-width: 992px) {
+  /* `minmax(0, 1fr)`, not `1fr`: a bare `1fr` track can't shrink below its
+   * widest child's min-content, so one wide child (the order history list)
+   * stretches the column — and every card in it — past the screen. */
   .layoutGridWithPanel,
   .layoutGridFull {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .sidePanelColumn {
@@ -329,6 +355,7 @@
     width: 100% !important;
     height: auto;
     position: static;
+    min-width: 0;
   }
 
   .sidePanelStickyContent,
@@ -346,7 +373,18 @@
   }
 
   .row {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .historyCard {
+    height: fit-content;
+    max-height: calc(100vh - var(--space-md) * 2);
+  }
+
+  /* The card no longer has a fixed height to fill, so cap the list instead. */
+  .mobileList {
+    flex: none;
+    max-height: 640px;
   }
 }
 

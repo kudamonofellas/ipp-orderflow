@@ -69,6 +69,7 @@ export function OrderRow({ order }: { order: OpenOrder }) {
             <Icon
               name="circleArrowRight"
               size={16}
+              style={{ flexShrink: 0 }}
               className={`${styles.chevron} ${expanded ? styles.chevronOpen : ""}`}
             />
           )}

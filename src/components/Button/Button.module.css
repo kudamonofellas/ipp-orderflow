@@ -183,6 +183,12 @@
   color: var(--btn-accent);
 }
 
+/* `.iconOnly`'s accent color comes later than `.primary`'s and would win,
+ * painting the icon the same color as the primary fill (invisible). */
+.primary.iconOnly:not(:disabled) {
+  color: var(--btn-on-accent);
+}
+
 .sm.iconOnly {
   min-width: 32px;
   width: 32px;

@@ -139,7 +139,16 @@
   flex-shrink: 0;
 }
 
-@media (max-width: 768px) {
+/* Swap to the mobile list by the space the table actually gets, not the
+ * viewport: the sidebar (expanded or collapsed) changes that independently of
+ * screen width. Below ~960px the table squeezes its columns and Stage labels
+ * start wrapping (measured with the longest English label, "Replacement in
+ * Transit"; Bahasa's longest wraps from ~1040px). */
+.tableSwitch {
+  container-type: inline-size;
+}
+
+@container (max-width: 959px) {
   .desktopTableWrap {
     display: none;
   }

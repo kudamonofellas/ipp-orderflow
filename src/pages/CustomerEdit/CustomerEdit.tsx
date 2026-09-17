@@ -209,12 +209,13 @@ export function CustomerEdit() {
                 icon="chevronLeft"
                 onClick={handleCancel}
               >
-                {t("Back to customer")}
+                {t("Back")}
               </Button>
               <div className={styles.actions}>
                 <Button
                   type="button"
                   variant="secondary"
+                  icon="close"
                   onClick={handleCancel}
                   disabled={saving}
                 >

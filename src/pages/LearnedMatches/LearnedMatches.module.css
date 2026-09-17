@@ -12,11 +12,26 @@
   padding: 0 var(--space-xl) var(--space-xl);
 }
 
+/* Same structure as CustomerDetail's header: Back + controls on one row,
+ * title (+ count) on the row below. */
 .header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.topActionsRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  width: 100%;
+}
+
+.titleRow {
   display: flex;
   align-items: center;
   gap: var(--space-lg);
-  flex-wrap: wrap;
 }
 
 .title {
@@ -33,13 +48,6 @@
   border: 1px solid var(--border-default);
   border-radius: var(--radius-xl);
   padding: 2px 10px;
-}
-
-.controls {
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
-  margin-left: auto;
 }
 
 .search {
@@ -74,39 +82,129 @@
   box-shadow: var(--focus-ring);
 }
 
+/* `table-layout: fixed` sizes columns from the `<col>` widths below instead
+ * of from cell content, and a fixed table is never narrower than the sum of
+ * those widths — so once the container is narrower, the table overflows and
+ * `.tableScroll` scrolls horizontally instead of squeezing the columns. */
+.tableScroll {
+  overflow-x: auto;
+}
+
 .table {
   width: 100%;
+  table-layout: fixed;
   border-collapse: separate;
 }
 
+.colToken {
+  width: 240px;
+}
+
+.colProduct {
+  width: 260px;
+}
+
+.colAddedBy {
+  width: 96px;
+}
+
+.colDate {
+  width: 120px;
+}
+
+.colUses {
+  width: 64px;
+}
+
+.colActions {
+  width: 104px;
+}
+
+/* Sticky to the top of `.tableScroll`. Only takes effect once that box has a
+ * height cap and scrolls vertically (mobile, below); opaque so rows pass
+ * underneath. */
 .th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--bg-surface);
   padding: var(--space-sm) var(--space-md);
   text-align: left;
   font: var(--text-label);
   color: var(--text-muted);
+  border-bottom: 1px solid var(--border-subtle);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   user-select: none;
 }
 
 .tr {
-  border-bottom: 1px solid var(--border-subtle);
+  height: 64px;
   transition: background var(--duration-fast);
 }
 
-.tr:last-child {
-  border-bottom: none;
+/* With `border-collapse: separate`, borders set on a `<tr>` are never drawn —
+ * only cells render borders — so the row divider lives on its cells. */
+.tr:not(:last-child) .td {
+  border-bottom: 1px solid var(--border-subtle);
 }
 
+/* One line per row: long values truncate (full text in the cell's `title`). */
 .td {
   padding: var(--space-sm) var(--space-md);
   font: var(--text-body);
   color: var(--text-primary);
   vertical-align: middle;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .token {
   font-family: var(--font-mono, monospace);
   color: var(--text-secondary);
+}
+
+/* Matches OrderDetail's `.editInput`. */
+.editInput {
+  background: var(--bg-surface-hover);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: 6px 10px;
+  font: var(--text-body);
+  color: var(--text-primary);
+  width: 100%;
+  height: 40px;
+  box-sizing: border-box;
+}
+
+.editInput:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  background: var(--bg-surface);
+}
+
+/* Pinned to the right edge of `.tableScroll` while the table scrolls
+ * horizontally; opaque so scrolled cells pass underneath it. */
+.actionsCell {
+  position: sticky;
+  right: 0;
+  z-index: 1;
+  background: var(--bg-surface);
+}
+
+/* The header's actions cell is pinned on both axes, so it must sit above
+ * both the sticky header row and the sticky actions column. */
+.th.actionsCell {
+  z-index: 3;
+}
+
+.rowActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-xs);
 }
 
 .stateRow td {
@@ -116,23 +214,47 @@
   font: var(--text-body);
 }
 
+/* Mobile: Back, then title + count, then full-width search — same order as
+ * the Customers/Products headers. `display: contents` lifts Back and search
+ * out of `.topActionsRow` so they can be ordered around `.titleRow`. */
 @media (max-width: 768px) {
   .sectionsContainer {
     padding: 0 var(--space-md) var(--space-md);
   }
 
-  .header {
-    flex-direction: column;
-    align-items: flex-start;
+  .topActionsRow {
+    display: contents;
   }
 
-  .controls {
-    margin-left: 0;
+  .back {
+    order: 1;
+    align-self: flex-start;
+  }
+
+  .titleRow {
+    order: 2;
+  }
+
+  .search {
+    order: 3;
     width: 100%;
   }
 
   .searchInput {
     width: 100%;
     flex: 1;
+  }
+
+  .colToken {
+    width: 180px;
+  }
+
+  /* Height cap so the list scrolls inside the card (and the sticky header
+   * has something to stick against). Both axes set explicitly: setting only
+   * one makes the browser force the other to `auto` anyway. */
+  .tableScroll {
+    max-height: 640px;
+    overflow-x: auto;
+    overflow-y: auto;
   }
 }
