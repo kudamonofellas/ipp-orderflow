@@ -1889,8 +1889,12 @@ export async function parseOrderText(
 ): Promise<DirectusResult<ParsedOrderDraft>> {
   try {
     const internalToken = import.meta.env.VITE_INTERNAL_TOKEN;
-    const isDev = import.meta.env.DEV;
-    const url = isDev
+    // The relative URL only works through the Vite dev server's proxy.
+    // `import.meta.hot` is defined there and nowhere else — unlike
+    // `import.meta.env.DEV`, which is also true in `build:dev` bundles
+    // (e.g. the Android APK, where a relative URL hits https://localhost).
+    const viaDevProxy = Boolean(import.meta.hot);
+    const url = viaDevProxy
       ? "/order-api/parse-order"
       : `${import.meta.env.VITE_DIRECTUS_URL}/order-api/parse-order`;
     const res = await fetch(url, {

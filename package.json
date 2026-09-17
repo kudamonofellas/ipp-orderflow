@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "build:dev": "tsc -b && vite build --mode development",
+    "build:apk": "npm run build && cap sync android && android\\gradlew.bat -p android assembleDebug",
     "lint": "eslint .",
     "preview": "vite preview"
   },

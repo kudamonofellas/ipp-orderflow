@@ -1320,6 +1320,12 @@ change.
   - **Form page headers unified** (CustomerNew, CustomerEdit, ProductEdit): back button reads just "Back", Cancel uses `icon="close"`. ProductEdit's own Delete button removed — delete lives only on ProductDetail (which keeps the "used by active orders" guard), so the edit form no longer carries a destructive action.
   - `npx tsc -b` ✓, `npm run build` ✓. Deploy to `app.kudafellas.cloud` pending: `dist/` rebuilt, but the scp needs the server password (no SSH key on this machine). Not verified in a browser with login from this environment.
 
+- **First Android APK built (2026-09-17):**
+  - Installed toolchain without Android Studio: Microsoft OpenJDK 21 (winget) + Android SDK cmdline-tools, platform 36, build-tools 36.0.0, platform-tools; `JAVA_HOME`/`ANDROID_HOME` set as user env vars. First Gradle build ~8 min, later ones fast.
+  - **Both recorded blockers closed.** (1) `parseOrderText()` now branches on `import.meta.hot` (only defined by the Vite dev server) instead of `import.meta.env.DEV`. (2) CORS: verified by preflight that neither Directus allows origin `https://localhost`; rather than editing server env, `capacitor.config.ts` sets `server.hostname: 'app.kudafellas.cloud'`, which prod already allows. APK targets **prod** (user's choice).
+  - Manifest: added `ACCESS_COARSE/FINE_LOCATION` and `CAMERA` (optional hardware features) — the WebView can't use `navigator.geolocation` without them. Verified with `aapt dump permissions`.
+  - New `npm run build:apk` script. Output `android/app/build/outputs/apk/debug/app-debug.apk` (~4.4 MB, debug-signed). Not yet installed on a device.
+
 ## Next Up
 
 - **`corrections` permissions exist only for the Admin role** (checked on dev; prod was copied from dev). Owner gets through via `admin_access`, but for every other role `upsertCorrection` is refused — and `OrderNew`/`OrderEdit` swallow the error in `Promise.allSettled`, so their learned matches silently never save. Decide which roles should teach the parser and grant `read`/`create`/`update` on `corrections` accordingly.
@@ -1327,7 +1333,7 @@ change.
 - None of the 2026-09-08 audit's 7 gaps remain — all closed the same day (see Completed above). No new gaps queued.
 
 - **Rotate the shared temporary password on all 8 migrated prod users** (value was handed over in-session, deliberately not recorded here) — `ranto.lubis16@gmail.com` is a real Owner-role account. The only 2026-09-16 deploy blocker still open; (1), (2) and (4) were closed the same day.
-- **Android APK — two blockers before it can parse orders:** (1) `build:dev` sets `import.meta.env.DEV = true`, sending `parseOrderText()` down its relative-URL branch, which resolves to `https://localhost/...` inside the APK — branch on a dedicated flag rather than `DEV`. (2) Capacitor serves from origin `https://localhost`, which neither Directus instance lists in `CORS_ORIGIN`. Then install Android Studio and run `npx cap open android`.
+- **Android APK next steps:** test the debug APK on a real phone (login, WhatsApp parse, photo upload, GPS drop-off check). For distribution beyond sideloading: create a release keystore (keep it out of git), `assembleRelease`/`bundleRelease`, app icon + splash (still Capacitor defaults), and bump `versionCode` per release.
 - PWA installability (`vite-plugin-pwa`) is listed in `project-overview.md:94` as Phase 1 scope but **is not started** — the package isn't installed, and there's no manifest or service worker.
 - i18n coverage is now app-wide but not 100% of every string: `` `Failed to X: ${apiError}` `` runtime error messages stay English-only everywhere (deliberate scope boundary, see the 2026-08-07 i18n entry), and `order_history.what`/`STAGE_FLOW`/pipeline-stage-label free-form entries (e.g. "Stage advanced: X → Y", "Note: …") only translate when they exactly match a dict key — dynamic ones fall through to English. Acceptable for now; revisit if Bahasa-speaking users report it as confusing rather than just an English aside in a mostly-Indonesian screen.
 - Apply the `Toggle` `size` variants to any other hand-rolled toggle UI found elsewhere in the app (only `Products.tsx`/`ProductEdit.tsx`'s OOS controls were converted so far).

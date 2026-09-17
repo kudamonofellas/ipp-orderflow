@@ -15,7 +15,7 @@
 | Proxy/TLS   | Traefik + Let's Encrypt            | Reverse proxy, auto-HTTPS on `*.kudafellas.cloud`.                            |
 | Hosting     | nginx 1.27-alpine (`ipp-orderflow` service) | Serves the built SPA at `https://app.kudafellas.cloud` (live since 2026-09-16). `dist/` is a read-only bind mount, config in `deploy/nginx.conf` — see Deployment below. |
 | Parsing Svc | Directus endpoint extension `order-api` | `POST /order-api/parse-order`, source in `order-api/` (committed 2026-09-16; previously existed only inside the dev extensions volume). Installed on **both** dev and prod Directus. Called by the frontend's intake flow (restored 2026-08-14) and possibly n8n. |
-| Mobile      | Capacitor 8                        | Android shell **scaffolded 2026-09-16** (`android/`, `capacitor.config.ts`, appId `cloud.kudafellas.ipporderflow`); no APK built yet. |
+| Mobile      | Capacitor 8                        | Android shell **scaffolded 2026-09-16** (`android/`, `capacitor.config.ts`, appId `cloud.kudafellas.ipporderflow`). Debug APK builds since 2026-09-17 via `npm run build:apk` against **prod** Directus. |
 | LLM gateway | Hermes (GPT-4o)                    | **On hold** per user — not wired in Phase 1.                                  |
 
 ## System Boundaries
@@ -46,7 +46,7 @@ Both are gitignored; `.env.example` documents the shape. **Every `VITE_*` value 
 
 `VITE_INTERNAL_TOKEN` **is set on prod (2026-09-16), knowingly exposed** — the parse endpoint has no other auth, and the planned APK would expose it regardless. Mitigation: prod uses its **own** value (`ORDER_API_TOKEN_PROD` in the server `.env`, mapped to `ORDER_API_TOKEN` on the `directus` service), so the public prod bundle grants nothing on dev. The two must stay in sync. Because the request carries a custom header, the browser preflights it — the `directus` service needs `CORS_ALLOWED_HEADERS=Content-Type,Authorization,x-internal-token`; without it the call fails as a bare "Failed to fetch" with no status code.
 
-**`build:dev` caveat:** `vite build --mode development` sets `import.meta.env.DEV = true`, which sends `parseOrderText()` (`directus.ts`) down its relative-URL branch (`/order-api/parse-order`, meant for the Vite dev proxy). Inside a Capacitor APK that resolves to `https://localhost/...` and fails. Must be fixed before an APK can parse orders.
+**Android APK:** `npm run build:apk` = prod `npm run build` → `cap sync android` → `gradlew assembleDebug`; output `android/app/build/outputs/apk/debug/app-debug.apk` (debug-signed, for sideloading). Toolchain: Microsoft OpenJDK 21 + Android SDK command-line tools (platform 36, build-tools 36.0.0) in `%LOCALAPPDATA%\Android\Sdk`; `JAVA_HOME`/`ANDROID_HOME` set as user env vars — no Android Studio. `capacitor.config.ts` sets `server.hostname: 'app.kudafellas.cloud'` so the WebView origin is `https://app.kudafellas.cloud`, which prod Directus's `CORS_ORIGIN` already allows (the default `https://localhost` is rejected by both instances; dev also lacks `x-internal-token` in `CORS_ALLOWED_HEADERS`). Auth is JSON tokens in localStorage, so no cookie concerns. `parseOrderText()` uses the relative proxy URL only when `import.meta.hot` is set (Vite dev server), not on `import.meta.env.DEV`. Manifest declares location + camera permissions for geolocation and photo inputs.
 
 ### Deployment (frontend)
 
