@@ -5,6 +5,10 @@
 > Token source of truth: `context/ui-context.md` + `context/ui-tokens.md`.
 > CSS implementation: `src/styles/tokens.css`.
 
+## Update — 2026-09-18 Hiding a scrollbar needs the -webkit rule too
+
+- **`scrollbar-width: none` alone does not hide a scrollbar in Chrome/Android WebView.** `global.css` styles `::-webkit-scrollbar` globally, and once that legacy pseudo-element is styled anywhere, Chromium uses it and ignores `scrollbar-width` — so every horizontally-scrolling row must also declare `<selector>::-webkit-scrollbar { display: none }`. `PipelineRow`/`ReturnWorkflowsPanel`/`StatusPill` already did; the Dashboard quick-actions, digest and metrics rows, `Reports`' range row + volume table, and `OrderDetail`'s stepper did not, and showed a grey bar under each row (visible on the APK/phone, where these rows are the mobile layout). Rule: pair the two declarations every time.
+
 ## Update — 2026-09-17 Header sort over dropdowns; fixed-layout tables; inline row edit
 
 - **Sort a table/list from its headers (`SortableTh`), not a separate sort dropdown.** Reports' "Volume by customers" was the last dropdown-sorted list; it now uses `SortableTh as="div"` in its grid head row, same as Orders/Customers/Products. For a "Top N" list, keep the ranking metric separate from the display sort so an ascending click reorders the top N rather than showing the bottom N.

@@ -484,6 +484,12 @@
     padding-right: var(--space-md);
   }
 
+  /* Chrome ignores `scrollbar-width: none` once `::-webkit-scrollbar` is
+   * styled anywhere (global.css does) — hide it in the legacy syntax too. */
+  .rangeRow::-webkit-scrollbar {
+    display: none;
+  }
+
   .rangeRow > * {
     flex-shrink: 0;
   }
@@ -521,6 +527,12 @@
     scrollbar-width: none;
     margin-right: calc(-1 * var(--space-md));
     padding-right: var(--space-md);
+  }
+
+  /* Chrome ignores `scrollbar-width: none` once `::-webkit-scrollbar` is
+   * styled anywhere (global.css does) — hide it in the legacy syntax too. */
+  .volumeTableScroll::-webkit-scrollbar {
+    display: none;
   }
 
   .volumeBarValue {

@@ -656,6 +656,12 @@
   min-width: 0;
 }
 
+/* Chrome ignores `scrollbar-width: none` once `::-webkit-scrollbar` is
+ * styled anywhere (global.css does) — hide it in the legacy syntax too. */
+.stepperContainer::-webkit-scrollbar {
+  display: none;
+}
+
 .stepperTrack {
   display: flex;
   flex-direction: row;

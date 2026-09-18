@@ -1331,6 +1331,8 @@ change.
 
 - **Reports period pickers + Settings polish (2026-09-17):** Reports title row wrapped in `.titleSection`; month / Start–End pickers now labelled (`.rangePick` label + input, `.editInput` styling replacing `.inlinePicker`), full width on mobile. Settings: small layout/formatting tweaks. Follow-up fix: Start/End labels now target their own inputs (`range-start`/`range-end`), redundant `aria-label`s removed (they overrode the visible labels), and "Start"/"End" translated (Mulai/Selesai).
 
+- **Scrollbars visible inside Dashboard/Reports/OrderDetail scroll rows (2026-09-18):** these rows hid the bar with `scrollbar-width: none` only, which Chromium ignores because `global.css` styles `::-webkit-scrollbar` globally. Added the matching `::-webkit-scrollbar { display: none }` to `.quickActionsRow`, `.digestGrid`, `.metricsRow`, `.rangeRow`, `.volumeTableScroll` and `.stepperContainer` (the rows that already had it — pipeline, return workflows, StatusPill — were correct). Reported from the Android APK, where these are the everyday mobile layouts. `vite build` ✓; visible fix confirmed only by comparison with the already-correct rows, not yet on a device.
+
 ## Next Up
 
 - **`corrections` permissions exist only for the Admin role** (checked on dev; prod was copied from dev). Owner gets through via `admin_access`, but for every other role `upsertCorrection` is refused — and `OrderNew`/`OrderEdit` swallow the error in `Promise.allSettled`, so their learned matches silently never save. Decide which roles should teach the parser and grant `read`/`create`/`update` on `corrections` accordingly.

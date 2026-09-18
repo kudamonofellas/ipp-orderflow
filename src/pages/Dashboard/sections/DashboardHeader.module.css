@@ -109,6 +109,12 @@
     padding-right: var(--space-md);
   }
 
+  /* Chrome ignores `scrollbar-width: none` once `::-webkit-scrollbar` is
+   * styled anywhere (global.css does) — hide it in the legacy syntax too. */
+  .quickActionsRow::-webkit-scrollbar {
+    display: none;
+  }
+
   .quickActionsRow > * {
     flex: 0 0 auto;
     max-width: 160px;
