@@ -5,6 +5,7 @@ import { Checkbox } from "../../components/Checkbox/Checkbox";
 import { Icon } from "../../components/Icon/Icon";
 import { Button } from "../../components/Button/Button";
 import { Toggle } from "../../components/Toggle/Toggle";
+import { ChangePasswordModal } from "../../components/ChangePasswordModal/ChangePasswordModal";
 import { useAuth, useCurrentUserName } from "../../hooks/useAuth";
 import { useLanguage } from "../../hooks/useLanguage";
 import { useDialog } from "../../hooks/useDialog";
@@ -35,6 +36,7 @@ const NOT_AVAILABLE =
 /** Full Settings page — Account, Team, Roles & Permissions, Intake Learning, Cold Storage, Dispatch, General, and Data sections. */
 export function Settings() {
   const navigate = useNavigate();
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const auth = useAuth();
   const { role, logout, can, refreshPermissions } = auth;
   const name = useCurrentUserName();
@@ -782,19 +784,41 @@ export function Settings() {
 
             <div className={styles.divider} />
 
-            <Button
-              type="button"
-              variant="secondary"
-              buttonStyle="fullWidth"
-              size="lg"
-              icon="logout"
-              onClick={handleLogout}
-            >
-              {t("Logout")}
-            </Button>
+            <div className={styles.dataRow}>
+              <Button
+                type="button"
+                variant="secondary"
+                buttonStyle="fullWidth"
+                size="lg"
+                icon="resetPassword"
+                onClick={() => setChangePasswordOpen(true)}
+              >
+                {t("Change password")}
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                buttonStyle="fullWidth"
+                size="lg"
+                icon="logout"
+                onClick={handleLogout}
+              >
+                {t("Logout")}
+              </Button>
+            </div>
           </div>
         </section>
       </div>
+
+      <ChangePasswordModal
+        open={changePasswordOpen}
+        onClose={() => setChangePasswordOpen(false)}
+        onChanged={() =>
+          alert(t("Your password has been changed."), {
+            title: t("Password updated"),
+          })
+        }
+      />
     </div>
   );
 }

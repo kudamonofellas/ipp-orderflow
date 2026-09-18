@@ -41,6 +41,7 @@ export const ICONS = {
   close: "hugeicons:cancel-01",
   trash: "hugeicons:delete-02",
   logout: "hugeicons:logout-05",
+  resetPassword: "hugeicons:reset-password",
   check: "hugeicons:checkmark-circle-02",
   paymentSuccess: "hugeicons:payment-success-01",
   whatsapp: "hugeicons:whatsapp",

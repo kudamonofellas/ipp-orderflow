@@ -9,11 +9,10 @@
 
 import { Link } from "react-router-dom";
 import { useCallback, useMemo, useState, type ReactNode } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink } from "react-router-dom";
 import { Icon } from "../../components/Icon/Icon";
-import { Avatar } from "../../components/Avatar/Avatar";
+import { AvatarMenu } from "../../components/AvatarMenu/AvatarMenu";
 import { Button } from "../../components/Button/Button";
-import { getInitials } from "../../lib/initials";
 import { useAuth, useCan, useCurrentUserName } from "../../hooks/useAuth";
 import { useLanguage } from "../../hooks/useLanguage";
 import { useTheme } from "../../hooks/useTheme";
@@ -59,19 +58,13 @@ export function SidebarProvider({ children }: { children: ReactNode }) {
 export function Sidebar() {
   const { collapsed, toggle } = useSidebar();
   const { theme, toggle: toggleTheme } = useTheme();
-  const { user, role, logout } = useAuth();
-  const navigate = useNavigate();
+  const { user, role } = useAuth();
   const name = useCurrentUserName();
   const can = useCan();
   const { t } = useLanguage();
   const visibleNavItems = NAV_ITEMS.filter(
     (item) => !item.cap || can(item.cap),
   );
-
-  async function handleLogout() {
-    await logout();
-    navigate("/login", { replace: true });
-  }
 
   return (
     <aside
@@ -149,31 +142,16 @@ export function Sidebar() {
             <span>{theme === "dark" ? t("Light mode") : t("Dark mode")}</span>
           )}
         </Button>
-        <Button
-          variant="tertiary"
-          size="md"
-          onClick={handleLogout}
-          icon="logout"
-          style={{
-            backgroundColor: "transparent",
-            gap: "var(--space-md)",
-          }}
-          aria-label="Log out"
-          title={t("Log out")}
-        >
-          {!collapsed && <span>{t("Log out")}</span>}
-        </Button>
       </div>
 
       <div className={styles.separator} />
 
+      {/* Log out lives in the avatar menu now, alongside Change password —
+          it used to be a standalone button in `bottomControls` above. The
+          theme toggle stays up there, so this menu opts out of its own. */}
       <div className={styles.bottomSection}>
         <div className={styles.userBlock} title={name || user?.email}>
-          <Avatar
-            initials={getInitials(name) || "??"}
-            label={name || (user?.email ?? "")}
-            size="md"
-          />
+          <AvatarMenu placement="up" showThemeToggle={false} />
           {!collapsed && (
             <span className={styles.userMeta}>
               <span className={styles.userName}>{name || user?.email}</span>

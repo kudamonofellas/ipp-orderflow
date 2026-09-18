@@ -34,6 +34,7 @@ import {
   readUsers,
   createUser,
   updateUser,
+  updateMe,
   deleteUser,
   readRoles,
   updateSingleton,
@@ -277,6 +278,57 @@ export async function readMe(): Promise<DirectusResult<DirectusUser>> {
     );
     const user = raw as unknown as DirectusUser;
     return { data: user, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+/**
+ * Change the signed-in user's own password.
+ *
+ * Directus has no "verify my password" endpoint, so the current password is
+ * checked by attempting a login with it. That login is a bare `fetch`, not
+ * `authClient.login()`, deliberately: the SDK's login writes into the shared
+ * auth storage, so a *failed* verification would be fine but a successful one
+ * would churn the live session's tokens mid-flow. The bare call leaves client
+ * auth state untouched and only tells us whether the credentials are valid.
+ *
+ * After the change succeeds we DO re-login through the SDK, with the new
+ * password — Directus leaves the existing access token usable but invalidates
+ * the refresh token, so without this the session would die at the next silent
+ * refresh instead of at a predictable moment.
+ *
+ * Every business role can do this: each has `directus_users` update on
+ * `password` filtered to `$CURRENT_USER` (Owner bypasses ACL via
+ * `admin_access`) — verified live 2026-09-18, see
+ * `context/schema/roles-and-permissions`.
+ */
+export async function changePassword(
+  currentPassword: string,
+  newPassword: string,
+): Promise<DirectusResult<true>> {
+  try {
+    const me = await readMe();
+    if (me.error || !me.data) {
+      return { data: null, error: me.error ?? "Not signed in" };
+    }
+    const email = me.data.email;
+
+    const verify = await fetch(`${url}/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password: currentPassword }),
+    });
+    if (!verify.ok) {
+      return { data: null, error: "CURRENT_PASSWORD_INCORRECT" };
+    }
+
+    await authClient.request(updateMe({ password: newPassword } as never));
+
+    // Re-establish the session on the new password (see doc comment above).
+    await authClient.login({ email, password: newPassword });
+
+    return { data: true, error: null };
   } catch (err) {
     return { data: null, error: errMsg(err) };
   }

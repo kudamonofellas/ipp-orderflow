@@ -30,10 +30,33 @@
   animation: avatar-menu-enter var(--duration-normal) var(--ease-enter);
 }
 
+/* Opens upward — for the desktop Sidebar, whose avatar sits at the bottom of
+   the viewport. `position: fixed` (not absolute) is deliberate: the Sidebar
+   sets `overflow: hidden` for its collapse animation, which clips an
+   absolutely-positioned menu, and a fixed element escapes that. Its `left`
+   and `bottom` are supplied inline from the trigger's measured rect — see
+   `openMenu()` in AvatarMenu.tsx. */
+.menuUp {
+  position: fixed;
+  top: auto;
+  animation-name: avatar-menu-enter-up;
+}
+
 @keyframes avatar-menu-enter {
   from {
     opacity: 0;
     transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes avatar-menu-enter-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
   }
   to {
     opacity: 1;
