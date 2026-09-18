@@ -74,6 +74,7 @@ export function DashboardHeader({
         {quickActionCount > 0 && (
           <div
             className={styles.quickActionsRow}
+            data-count={quickActionCount}
             style={
               { "--quick-action-count": quickActionCount } as React.CSSProperties
             }

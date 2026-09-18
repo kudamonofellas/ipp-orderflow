@@ -1333,6 +1333,8 @@ change.
 
 - **Scrollbars visible inside Dashboard/Reports/OrderDetail scroll rows (2026-09-18):** these rows hid the bar with `scrollbar-width: none` only, which Chromium ignores because `global.css` styles `::-webkit-scrollbar` globally. Added the matching `::-webkit-scrollbar { display: none }` to `.quickActionsRow`, `.digestGrid`, `.metricsRow`, `.rangeRow`, `.volumeTableScroll` and `.stepperContainer` (the rows that already had it — pipeline, return workflows, StatusPill — were correct). Reported from the Android APK, where these are the everyday mobile layouts. `vite build` ✓; visible fix confirmed only by comparison with the already-correct rows, not yet on a device.
 
+- **Dashboard quick actions with 1–2 cards fill the mobile width (2026-09-18):** roles that see only one or two quick-action cards got a short card plus dead space and a pointless horizontal scroll; those counts now split the full width evenly (`data-count` on `.quickActionsRow`). 3 cards keep the existing scrolling row. Measured in headless Edge at 360/412px: 1 card 336/388px, 2 cards 162/188px each, no overflow; 3 cards still scroll.
+
 ## Next Up
 
 - **`corrections` permissions exist only for the Admin role** (checked on dev; prod was copied from dev). Owner gets through via `admin_access`, but for every other role `upsertCorrection` is refused — and `OrderNew`/`OrderEdit` swallow the error in `Promise.allSettled`, so their learned matches silently never save. Decide which roles should teach the parser and grant `read`/`create`/`update` on `corrections` accordingly.

@@ -7,6 +7,8 @@
 
 ## Update — 2026-09-18 Hiding a scrollbar needs the -webkit rule too
 
+- **A mobile scroll row with only 1–2 role-gated items becomes a full-width grid instead.** `.quickActionsRow[data-count="1"|"2"]` swaps back to `grid` with `repeat(var(--quick-action-count), minmax(0, 1fr))` and drops the full-bleed negative margin: with nothing to scroll to, a fixed-width card beside empty space reads as broken. 3 items keep the scrolling full-bleed row. The count is already computed for `--quick-action-count`; it's mirrored into `data-count` because CSS can't branch on a custom property's value. Cards that set a `min-width` for the scrolling row need `min-width: 0` in the grid case — a grid item's own min-width overflows a `minmax(0, 1fr)` track rather than shrinking.
+
 - **`scrollbar-width: none` alone does not hide a scrollbar in Chrome/Android WebView.** `global.css` styles `::-webkit-scrollbar` globally, and once that legacy pseudo-element is styled anywhere, Chromium uses it and ignores `scrollbar-width` — so every horizontally-scrolling row must also declare `<selector>::-webkit-scrollbar { display: none }`. `PipelineRow`/`ReturnWorkflowsPanel`/`StatusPill` already did; the Dashboard quick-actions, digest and metrics rows, `Reports`' range row + volume table, and `OrderDetail`'s stepper did not, and showed a grey bar under each row (visible on the APK/phone, where these rows are the mobile layout). Rule: pair the two declarations every time.
 
 ## Update — 2026-09-17 Header sort over dropdowns; fixed-layout tables; inline row edit

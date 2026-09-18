@@ -119,4 +119,26 @@
     flex: 0 0 auto;
     max-width: 160px;
   }
+
+  /* With only 1–2 cards (role-gated) there is nothing to scroll to, and a
+   * 160px card next to empty space reads as a broken row — so those split
+   * the full width evenly instead, back inside the header's own padding.
+   * 3 cards keep the scrolling row above. */
+  .quickActionsRow[data-count="1"],
+  .quickActionsRow[data-count="2"] {
+    display: grid;
+    grid-template-columns: repeat(var(--quick-action-count), minmax(0, 1fr));
+    overflow-x: visible;
+    margin-right: 0;
+    padding-right: 0;
+  }
+
+  /* `QuickActionCard` sets `min-width: 240px` for the scrolling row; two of
+   * those don't fit a phone, and a grid item's own min-width overflows the
+   * `minmax(0, 1fr)` track rather than shrinking, so clear it here. */
+  .quickActionsRow[data-count="1"] > *,
+  .quickActionsRow[data-count="2"] > * {
+    max-width: none;
+    min-width: 0;
+  }
 }
