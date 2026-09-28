@@ -32,6 +32,17 @@ export function DigestSection({
   const { t } = useLanguage();
   return (
     <div className={styles.section}>
+      {/* Mobile-only section title (hidden on desktop via CSS, same pattern
+          as DashboardHeader's avatarSlot). On a phone this section stacks,
+          so "Done today" is demoted to a subheading under a proper title
+          matching the other sections' uppercase-with-rule headings. On
+          desktop "Done today" stays the heading, as before. */}
+      <div className={styles.mobileTitleRow}>
+        <span className={styles.sectionHeading}>
+          {t("Needs attention today")}
+        </span>
+        <span className={styles.separator} />
+      </div>
       <div className={styles.sectionHeadingRow}>
         <span className={styles.sectionHeading}>{t("Done today")}</span>
         <span className={styles.separator} />

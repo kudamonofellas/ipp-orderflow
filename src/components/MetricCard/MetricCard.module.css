@@ -23,6 +23,10 @@
   color: var(--accent-primary);
 }
 
+.icon {
+  display: flex;
+}
+
 .rangeButton {
   width: 100%;
   min-width: 110px;
@@ -118,4 +122,71 @@
 .dropdownItemInput input:focus {
   outline: none;
   border-color: var(--accent-primary);
+}
+
+/* Mobile variant: count + range dropdown on the first row, icon + label on
+ * the second. The desktop markup nests the icon with the count (in
+ * `.header`) and the label on its own (in `.body`), so the wrappers are
+ * flattened with `display: contents` and their children placed directly on
+ * a card-level grid — one markup, no duplicated elements to keep in sync. */
+@media (max-width: 768px) {
+  /* Two columns, not three: an earlier `auto 1fr auto` version put the
+   * range dropdown in its own auto column, so a 360px phone needed icon
+   * (24) + two gaps + the dropdown's 110px min-width ≈ 150px inside a
+   * ~140px card, and the dropdown ran into the right padding. Here the
+   * dropdown shares the 1fr column with the label and simply fills it. */
+  .card {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      "count range"
+      "icon  label";
+    align-items: center;
+    column-gap: var(--space-sm);
+    row-gap: var(--space-sm);
+    padding: var(--space-md);
+  }
+
+  .header,
+  .iconWrap,
+  .body {
+    display: contents;
+  }
+
+  .icon {
+    grid-area: icon;
+    color: var(--accent-primary);
+  }
+
+  .count {
+    grid-area: count;
+  }
+
+  /* Flex + end-justify keeps a static range ("All time") right-aligned as on
+   * desktop; the dropdown button still fills the column (width: 100%). */
+  .rangeContainer {
+    grid-area: range;
+    min-width: 0;
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  /* Fill the column instead of forcing the desktop 110px minimum, which is
+   * wider than the column on a 360px phone. */
+  .rangeButton {
+    min-width: 0;
+  }
+
+  /* One line, never stacked. The label's slot on a 360px phone is ~108px;
+   * the widest label, "Cancelled Orders", is 124px at the desktop 16px
+   * (what wrapped), 109px at 14px (still 1px over) and 101px at 13px —
+   * hence the 13px label token, same size as the mobile digest labels.
+   * Longer translations such as "Pesanan Dibatalkan" ellipsize instead. */
+  .label {
+    grid-area: label;
+    font: var(--text-label);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 }

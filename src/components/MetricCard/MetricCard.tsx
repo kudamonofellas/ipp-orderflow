@@ -14,7 +14,9 @@ interface MetricCardProps {
   onRangeChange?: (val: DateRangeVal, label: string) => void;
 }
 
-/** Top-row metric card: icon + range dropdown, big number, label. */
+/** Top-row metric card. Desktop: icon + count | range dropdown, then the
+ *  label below. Mobile: count | range dropdown, then icon + label below —
+ *  same markup, regrouped by CSS grid (see MetricCard.module.css). */
 export function MetricCard({
   icon,
   value,
@@ -81,7 +83,11 @@ export function MetricCard({
     <article className={styles.card}>
       <div className={styles.header}>
         <span className={styles.iconWrap}>
-          <Icon name={icon} size={24} />
+          {/* Own element so the mobile layout can move it down beside the
+              label (see the ≤768px block in MetricCard.module.css). */}
+          <span className={styles.icon}>
+            <Icon name={icon} size={24} />
+          </span>
           <span className={styles.count}>{value}</span>
         </span>
         <div className={styles.rangeContainer} ref={containerRef}>

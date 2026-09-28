@@ -563,10 +563,7 @@ export function OrderEdit() {
     return (
       <div className={styles.container}>
         <div className={styles.sectionsContainer}>
-          <div
-            className={styles.muted}
-            style={{ color: "var(--state-error)" }}
-          >
+          <div className={styles.muted} style={{ color: "var(--state-error)" }}>
             {error || t("Order not found.")}
           </div>
         </div>
@@ -583,410 +580,412 @@ export function OrderEdit() {
   return (
     <div className={styles.container}>
       <div className={styles.sectionsContainer}>
-      <div className={styles.layoutGrid}>
-        <div className={styles.mainColumn}>
-          <header className={styles.header}>
-            <div className={styles.topActionsRow}>
-              <Button
-                type="button"
-                variant="tertiary"
-                icon="chevronLeft"
-                onClick={handleCancel}
-              >
-                {t("Back to order")}
-              </Button>
-              <div className={styles.actions}>
+        <div className={styles.layoutGrid}>
+          <div className={styles.mainColumn}>
+            <header className={styles.header}>
+              <div className={styles.topActionsRow}>
                 <Button
                   type="button"
-                  variant="secondary"
+                  variant="tertiary"
+                  icon="chevronLeft"
                   onClick={handleCancel}
-                  disabled={submitting}
                 >
-                  {t("Cancel")}
+                  {t("Back")}
                 </Button>
-                <Button
-                  type="button"
-                  variant="primary"
-                  disabled={
-                    !hasEditChanges || submitting || !canEdit || badQty
-                  }
-                  icon="save"
-                  onClick={handleSaveAllEdits}
-                >
-                  {submitting ? t("Saving…") : t("Save Changes")}
-                </Button>
-              </div>
-            </div>
-
-            <div className={styles.titleRow}>
-              <h2 className={styles.title}>
-                {t("Order")} {order.no}
-              </h2>
-            </div>
-            {badQty && (
-              <p style={{ fontSize: "0.8rem", color: "var(--state-warning)" }}>
-                {t("Every item needs a quantity above 0.")}
-              </p>
-            )}
-          </header>
-
-          {error && <div className={styles.error}>{error}</div>}
-
-          {/* Header fields card */}
-          <Card className={styles.customerCard}>
-            <div className={styles.row}>
-              <label className={styles.field}>
-                <span className={styles.label}>{t("Order No.")}</span>
-                <input
-                  type="text"
-                  className={styles.input}
-                  value={orderNo}
-                  onChange={(e) => setOrderNo(e.target.value)}
-                />
-                {dupOrderNo && (
-                  <span
-                    style={{
-                      fontSize: "0.75rem",
-                      color: "var(--state-warning)",
-                      marginTop: 4,
-                    }}
+                <div className={styles.actions}>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    icon="close"
+                    onClick={handleCancel}
+                    disabled={submitting}
                   >
-                    {t("Another order already uses")} #{orderNo.trim()}
-                    {dupOrderNo.customer_name
-                      ? ` (${dupOrderNo.customer_name})`
-                      : ""}
-                    .
-                  </span>
-                )}
-              </label>
-              <label className={styles.field}>
-                <span className={styles.label}>{t("Delivery Date")}</span>
-                <input
-                  type="date"
-                  className={styles.input}
-                  value={deliverDate}
-                  onChange={(e) => {
-                    setDeliverDate(e.target.value);
-                  }}
-                  disabled={submitting}
-                />
-              </label>
-            </div>
-            <div className={styles.row}>
-              <label className={styles.field}>
-                <span className={styles.label}>
-                  {t("Customer / Restaurant")}
-                </span>
-                <select
-                  className={styles.select}
-                  value={customerId ?? ""}
-                  onChange={handleCustomerSelect}
+                    {t("Cancel")}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="primary"
+                    disabled={
+                      !hasEditChanges || submitting || !canEdit || badQty
+                    }
+                    icon="save"
+                    onClick={handleSaveAllEdits}
+                  >
+                    {submitting ? t("Saving…") : t("Save Changes")}
+                  </Button>
+                </div>
+              </div>
+
+              <div className={styles.titleRow}>
+                <h2 className={styles.title}>
+                  {t("Order")} {order.no}
+                </h2>
+              </div>
+              {badQty && (
+                <p
+                  style={{ fontSize: "0.8rem", color: "var(--state-warning)" }}
                 >
-                  <option value="">{t("— Select customer —")}</option>
-                  {customers.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className={styles.field}>
-                <span className={styles.label}>
-                  {t("Company")}{" "}
-                  <span className={styles.caption}>
-                    {t("(PT / CV — for the invoice)")}
+                  {t("Every item needs a quantity above 0.")}
+                </p>
+              )}
+            </header>
+
+            {error && <div className={styles.error}>{error}</div>}
+
+            {/* Header fields card */}
+            <Card className={styles.customerCard}>
+              <div className={styles.row}>
+                <label className={styles.field}>
+                  <span className={styles.label}>{t("Order No.")}</span>
+                  <input
+                    type="text"
+                    className={styles.input}
+                    value={orderNo}
+                    onChange={(e) => setOrderNo(e.target.value)}
+                  />
+                  {dupOrderNo && (
+                    <span
+                      style={{
+                        fontSize: "0.75rem",
+                        color: "var(--state-warning)",
+                        marginTop: 4,
+                      }}
+                    >
+                      {t("Another order already uses")} #{orderNo.trim()}
+                      {dupOrderNo.customer_name
+                        ? ` (${dupOrderNo.customer_name})`
+                        : ""}
+                      .
+                    </span>
+                  )}
+                </label>
+                <label className={styles.field}>
+                  <span className={styles.label}>{t("Delivery Date")}</span>
+                  <input
+                    type="date"
+                    className={styles.input}
+                    value={deliverDate}
+                    onChange={(e) => {
+                      setDeliverDate(e.target.value);
+                    }}
+                    disabled={submitting}
+                  />
+                </label>
+              </div>
+              <div className={styles.row}>
+                <label className={styles.field}>
+                  <span className={styles.label}>
+                    {t("Customer / Restaurant")}
                   </span>
-                </span>
-                <input
-                  type="text"
+                  <select
+                    className={styles.select}
+                    value={customerId ?? ""}
+                    onChange={handleCustomerSelect}
+                  >
+                    <option value="">{t("— Select customer —")}</option>
+                    {customers.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className={styles.field}>
+                  <span className={styles.label}>
+                    {t("Company")}{" "}
+                    <span className={styles.caption}>
+                      {t("(PT / CV — for the invoice)")}
+                    </span>
+                  </span>
+                  <input
+                    type="text"
+                    className={styles.input}
+                    value={company}
+                    onChange={(e) => setCompany(e.target.value)}
+                    disabled={submitting}
+                    placeholder={t("e.g. PT En Prima Food & Beverages")}
+                  />
+                </label>
+              </div>
+              <div className={styles.row}>
+                <label className={styles.field}>
+                  <span className={styles.label}>{t("Customer Contact")}</span>
+                  <input
+                    type="text"
+                    className={styles.input}
+                    value={contact}
+                    onChange={(e) => setContact(e.target.value)}
+                  />
+                </label>
+                <label className={styles.field}>
+                  <span className={styles.label}>{t("Sales Rep")}</span>
+                  <input
+                    type="text"
+                    className={styles.input}
+                    value={sales}
+                    onChange={(e) => setSales(e.target.value)}
+                  />
+                </label>
+              </div>
+              <label className={styles.field}>
+                <span className={styles.label}>{t("Delivery Address")}</span>
+                <textarea
                   className={styles.input}
-                  value={company}
-                  onChange={(e) => setCompany(e.target.value)}
+                  style={{
+                    justifyContent: "flex-start",
+                    alignItems: "flex-start",
+                    minHeight: "100px",
+                  }}
+                  value={customerAddress}
+                  onChange={(e) => setCustomerAddress(e.target.value)}
                   disabled={submitting}
-                  placeholder={t("e.g. PT En Prima Food & Beverages")}
+                  placeholder={t("Delivery address")}
                 />
               </label>
-            </div>
-            <div className={styles.row}>
-              <label className={styles.field}>
-                <span className={styles.label}>{t("Customer Contact")}</span>
-                <input
-                  type="text"
-                  className={styles.input}
-                  value={contact}
-                  onChange={(e) => setContact(e.target.value)}
-                />
-              </label>
-              <label className={styles.field}>
-                <span className={styles.label}>{t("Sales Rep")}</span>
-                <input
-                  type="text"
-                  className={styles.input}
-                  value={sales}
-                  onChange={(e) => setSales(e.target.value)}
-                />
-              </label>
-            </div>
-            <label className={styles.field}>
-              <span className={styles.label}>{t("Delivery Address")}</span>
-              <textarea
-                className={styles.input}
-                style={{
-                  justifyContent: "flex-start",
-                  alignItems: "flex-start",
-                  minHeight: "100px",
-                }}
-                value={customerAddress}
-                onChange={(e) => setCustomerAddress(e.target.value)}
-                disabled={submitting}
-                placeholder={t("Delivery address")}
-              />
-            </label>
-          </Card>
+            </Card>
 
-          {/* Items card */}
-          <Card>
-            <div className={styles.heading}>
-              <span>{t("Items")}</span>
-              <span className={styles.count}>{editLines.length}</span>
-            </div>
+            {/* Items card */}
+            <Card>
+              <div className={styles.heading}>
+                <span>{t("Items")}</span>
+                <span className={styles.count}>{editLines.length}</span>
+              </div>
 
-            <div className={styles.itemsList}>
-              {editLines.map((line) => (
-                <div key={line.id} className={styles.itemRow}>
-                  <div className={styles.twoColumnsRow}>
-                    <div className={styles.column}>
-                      <div className={styles.itemHeaderRow}>
-                        <input
-                          type="number"
-                          min="0"
-                          step="any"
-                          className={styles.editInput}
-                          style={{ width: 80 }}
-                          value={line.qty}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setEditLines((prev) =>
-                              prev.map((l) =>
-                                l.id === line.id ? { ...l, qty: val } : l,
-                              ),
-                            );
-                          }}
-                        />
-                        <select
-                          className={styles.editSelect}
-                          style={{ maxWidth: 100 }}
-                          value={line.unit}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setEditLines((prev) =>
-                              prev.map((l) =>
-                                l.id === line.id ? { ...l, unit: val } : l,
-                              ),
-                            );
-                          }}
-                        >
-                          {UNIT_OPTIONS.map((u) => (
-                            <option key={u} value={u}>
-                              {u}
-                            </option>
-                          ))}
-                        </select>
-
-                        <select
-                          className={styles.editSelect}
-                          style={{ flex: 1 }}
-                          value={line.productId ?? "__custom__"}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            if (val === "__custom__") {
+              <div className={styles.itemsList}>
+                {editLines.map((line) => (
+                  <div key={line.id} className={styles.itemRow}>
+                    <div className={styles.twoColumnsRow}>
+                      <div className={styles.column}>
+                        <div className={styles.itemHeaderRow}>
+                          <input
+                            type="number"
+                            min="0"
+                            step="any"
+                            className={styles.editInput}
+                            style={{ width: 80 }}
+                            value={line.qty}
+                            onChange={(e) => {
+                              const val = e.target.value;
                               setEditLines((prev) =>
                                 prev.map((l) =>
-                                  l.id === line.id
-                                    ? { ...l, productId: null }
-                                    : l,
+                                  l.id === line.id ? { ...l, qty: val } : l,
                                 ),
                               );
-                            } else {
-                              const prod = products.find((p) => p.id === val);
+                            }}
+                          />
+                          <select
+                            className={styles.editSelect}
+                            style={{ maxWidth: 100 }}
+                            value={line.unit}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setEditLines((prev) =>
+                                prev.map((l) =>
+                                  l.id === line.id ? { ...l, unit: val } : l,
+                                ),
+                              );
+                            }}
+                          >
+                            {UNIT_OPTIONS.map((u) => (
+                              <option key={u} value={u}>
+                                {u}
+                              </option>
+                            ))}
+                          </select>
+
+                          <select
+                            className={styles.editSelect}
+                            style={{ flex: 1 }}
+                            value={line.productId ?? "__custom__"}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val === "__custom__") {
+                                setEditLines((prev) =>
+                                  prev.map((l) =>
+                                    l.id === line.id
+                                      ? { ...l, productId: null }
+                                      : l,
+                                  ),
+                                );
+                              } else {
+                                const prod = products.find((p) => p.id === val);
+                                setEditLines((prev) =>
+                                  prev.map((l) =>
+                                    l.id === line.id
+                                      ? {
+                                          ...l,
+                                          productId: val,
+                                          name: prod?.name ?? l.name,
+                                        }
+                                      : l,
+                                  ),
+                                );
+                              }
+                            }}
+                          >
+                            <option value="__custom__">
+                              {t("— Custom Product —")}
+                            </option>
+                            {products.map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {!line.productId && (
+                          <input
+                            type="text"
+                            className={styles.editInput}
+                            placeholder={t("Item name")}
+                            value={line.name}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setEditLines((prev) =>
+                                prev.map((l) =>
+                                  l.id === line.id ? { ...l, name: val } : l,
+                                ),
+                              );
+                            }}
+                          />
+                        )}
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        iconOnly
+                        icon="trash"
+                        className={styles.deleteBtn}
+                        onClick={() => handleDeleteLine(line.id)}
+                      />
+                    </div>
+
+                    {/* Cuts */}
+                    <div
+                      style={{
+                        marginLeft: 28,
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 6,
+                      }}
+                    >
+                      {line.cuts.map((cut) => (
+                        <div key={cut.id} className={styles.editCutRow}>
+                          <Icon
+                            name="knife"
+                            size={14}
+                            style={{ color: "var(--text-muted)" }}
+                          />
+                          <span
+                            style={{
+                              fontSize: "var(--text-label)",
+                              color: "var(--text-secondary)",
+                            }}
+                          >
+                            {t("cutting")}
+                          </span>
+                          <input
+                            type="text"
+                            className={styles.editInput}
+                            style={{ flex: 1, maxWidth: 260 }}
+                            placeholder={t("e.g. yakiniku pack per 200g")}
+                            value={cut.text}
+                            onChange={(e) => {
+                              const val = e.target.value;
                               setEditLines((prev) =>
                                 prev.map((l) =>
                                   l.id === line.id
                                     ? {
                                         ...l,
-                                        productId: val,
-                                        name: prod?.name ?? l.name,
+                                        cuts: l.cuts.map((c) =>
+                                          c.id === cut.id
+                                            ? { ...c, text: val }
+                                            : c,
+                                        ),
                                       }
                                     : l,
                                 ),
                               );
+                            }}
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            icon="trash"
+                            iconOnly
+                            onClick={() =>
+                              handleDeleteCutFromLine(line.id, cut.id)
                             }
-                          }}
-                        >
-                          <option value="__custom__">
-                            {t("— Custom Product —")}
-                          </option>
-                          {products.map((p) => (
-                            <option key={p.id} value={p.id}>
-                              {p.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+                          />
+                        </div>
+                      ))}
+                      <Button
+                        type="button"
+                        variant="tertiary"
+                        size="sm"
+                        icon="add"
+                        style={{ alignSelf: "flex-start" }}
+                        onClick={() => handleAddCutToLine(line.id)}
+                      >
+                        {t("Add cutting")}
+                      </Button>
+                    </div>
 
-                      {!line.productId && (
+                    {/* Price Row */}
+                    <div className={styles.itemTotalRow}>
+                      <span>{t("Price:")}</span>
+                      <div className={styles.priceCalc}>
                         <input
-                          type="text"
+                          type="number"
+                          min="0"
+                          step="any"
                           className={styles.editInput}
-                          placeholder={t("Item name")}
-                          value={line.name}
+                          style={{ width: 110, textAlign: "right" }}
+                          value={line.price}
+                          placeholder="0"
                           onChange={(e) => {
                             const val = e.target.value;
                             setEditLines((prev) =>
                               prev.map((l) =>
-                                l.id === line.id ? { ...l, name: val } : l,
+                                l.id === line.id ? { ...l, price: val } : l,
                               ),
                             );
                           }}
                         />
-                      )}
-                    </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      iconOnly
-                      icon="trash"
-                      className={styles.deleteBtn}
-                      onClick={() => handleDeleteLine(line.id)}
-                    />
-                  </div>
-
-                  {/* Cuts */}
-                  <div
-                    style={{
-                      marginLeft: 28,
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 6,
-                    }}
-                  >
-                    {line.cuts.map((cut) => (
-                      <div key={cut.id} className={styles.editCutRow}>
-                        <Icon
-                          name="knife"
-                          size={14}
-                          style={{ color: "var(--text-muted)" }}
-                        />
-                        <span
-                          style={{
-                            fontSize: "var(--text-label)",
-                            color: "var(--text-secondary)",
-                          }}
-                        >
-                          {t("cutting")}
+                        <span style={{ textAlign: "left", width: "32px" }}>
+                          x {line.qty}
                         </span>
-                        <input
-                          type="text"
-                          className={styles.editInput}
-                          style={{ flex: 1, maxWidth: 260 }}
-                          placeholder={t("e.g. yakiniku pack per 200g")}
-                          value={cut.text}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setEditLines((prev) =>
-                              prev.map((l) =>
-                                l.id === line.id
-                                  ? {
-                                      ...l,
-                                      cuts: l.cuts.map((c) =>
-                                        c.id === cut.id
-                                          ? { ...c, text: val }
-                                          : c,
-                                      ),
-                                    }
-                                  : l,
-                              ),
-                            );
-                          }}
-                        />
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          icon="trash"
-                          iconOnly
-                          onClick={() =>
-                            handleDeleteCutFromLine(line.id, cut.id)
-                          }
-                        />
+                        <span className={styles.lineTotalPrice}>
+                          {currency.format(
+                            (parseFloat(line.price) || 0) *
+                              (parseFloat(line.qty) || 0),
+                          )}
+                        </span>
                       </div>
-                    ))}
-                    <Button
-                      type="button"
-                      variant="tertiary"
-                      size="sm"
-                      icon="add"
-                      style={{ alignSelf: "flex-start" }}
-                      onClick={() => handleAddCutToLine(line.id)}
-                    >
-                      {t("Add cutting")}
-                    </Button>
-                  </div>
-
-                  {/* Price Row */}
-                  <div className={styles.itemTotalRow}>
-                    <span>{t("Price:")}</span>
-                    <div className={styles.priceCalc}>
-                      <input
-                        type="number"
-                        min="0"
-                        step="any"
-                        className={styles.editInput}
-                        style={{ width: 110, textAlign: "right" }}
-                        value={line.price}
-                        placeholder="0"
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setEditLines((prev) =>
-                            prev.map((l) =>
-                              l.id === line.id ? { ...l, price: val } : l,
-                            ),
-                          );
-                        }}
-                      />
-                      <span style={{ textAlign: "left", width: "32px" }}>
-                        x {line.qty}
-                      </span>
-                      <span className={styles.lineTotalPrice}>
-                        {currency.format(
-                          (parseFloat(line.price) || 0) *
-                            (parseFloat(line.qty) || 0),
-                        )}
-                      </span>
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
-            <Button
-              type="button"
-              variant="secondary"
-              buttonStyle="fullWidth"
-              size="lg"
-              icon="add"
-              onClick={() => setIsAddItemModalOpen(true)}
-              style={{
-                marginTop: "var(--space-md)",
-                height: 44,
-                fontWeight: 600,
-              }}
-            >
-              {t("Add Item")}
-            </Button>
-          </Card>
+                ))}
+              </div>
+              <Button
+                type="button"
+                variant="secondary"
+                buttonStyle="fullWidth"
+                size="lg"
+                icon="add"
+                onClick={() => setIsAddItemModalOpen(true)}
+                style={{
+                  marginTop: "var(--space-md)",
+                  height: 44,
+                  fontWeight: 600,
+                }}
+              >
+                {t("Add Item")}
+              </Button>
+            </Card>
+          </div>
         </div>
-      </div>
       </div>
 
       <AddItemModal

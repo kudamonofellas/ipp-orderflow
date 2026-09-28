@@ -266,12 +266,11 @@
   gap: var(--space-sm);
 }
 
-.itemPriceRow {
+.itemTotalRow {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-left: 28px;
-  padding-top: 6px;
+  justify-content: flex-end;
+  gap: var(--space-md);
   font-size: 0.9rem;
   color: var(--text-secondary);
 }
@@ -484,6 +483,29 @@
 @media (max-width: 768px) {
   .sectionsContainer {
     padding: 0 var(--space-md) var(--space-md);
+  }
+
+  /* The price row asked for more width (label + 110px price input + qty + a
+   * `lineTotalPrice` with min-width:160px) than a phone Card has, so the
+   * total spilled out past the Card's right edge. Same idea as
+   * OrderDetail's mobile rule (shrink the total), but flexible instead of a
+   * smaller fixed width: the total takes whatever is left after the input
+   * and qty, and ellipsizes if even that isn't enough — so it can't overflow
+   * at any phone width. */
+  .itemTotalRow {
+    gap: var(--space-sm);
+  }
+
+  .priceCalc {
+    flex: 1;
+    min-width: 0;
+    justify-content: flex-end;
+    gap: var(--space-sm);
+  }
+
+  .lineTotalPrice {
+    flex: 1;
+    min-width: 0;
   }
 }
 

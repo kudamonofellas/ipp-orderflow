@@ -25,8 +25,11 @@
 .dialog {
   background: var(--bg-surface);
   border-radius: var(--radius-xl);
-  max-width: 600px;
-  width: 100%;
+  /* Same sizing as ChannelSelectModal: a fixed width on desktop, capped to
+     leave a 1rem gutter each side on narrow screens (the overlay itself has no
+     padding, so `width: 100%` ran edge to edge on mobile). */
+  width: 600px;
+  max-width: calc(100vw - 2rem);
   box-shadow: var(--shadow-lg);
   display: flex;
   flex-direction: column;

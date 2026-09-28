@@ -11,9 +11,10 @@ interface QuickActionCardProps {
   title?: string;
 }
 
-/** Deliveries / Pick list / Cash-up card. Desktop: icon+label left, value right.
- *  Mobile (`context/designs/Mobile - Dashboard.png`): value+icon on one line,
- *  label below — same flat markup, reordered via CSS (see .module.css). */
+/** Deliveries / Pick list / Cash-up card: icon + label left, value right.
+ *  One layout at every width — on mobile the cards stack vertically (see
+ *  DashboardHeader.module.css) rather than switching to a separate compact
+ *  variant, which was removed 2026-09-28. */
 export function QuickActionCard({
   icon,
   label,

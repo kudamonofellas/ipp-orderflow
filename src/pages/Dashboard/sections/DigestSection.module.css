@@ -51,53 +51,79 @@
   }
 }
 
-@media (max-width: 640px) {
-  .digestGrid {
-    grid-template-columns: 1fr;
-  }
+/* Mobile-only section title — see DigestSection.tsx. */
+.mobileTitleRow {
+  display: none;
 }
 
-/* Mobile: "Done today" + separator stay on their own row; the delivered/
- * collected items wrap onto a second row below (as a group, so the two
- * stay side by side rather than each getting its own line) — matches
- * `context/designs/Mobile - Dashboard.png`. The tile grid also switches to
- * a horizontal scroll row instead of a vertical stack. Declared after the
- * 640px block above so it wins at phone widths (both ranges overlap there). */
+/* Mobile (2026-09-28 mock): "Needs attention today" title row, then "Done
+ * today" as a normal-case subheading with delivered/collected spread across
+ * the row below it, then a 2-up tile row over a 3-up tile row. No horizontal
+ * scrolling. */
 @media (max-width: 768px) {
   .section {
     gap: var(--space-sm);
   }
 
+  .mobileTitleRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+  }
+
   .sectionHeadingRow {
     flex-wrap: wrap;
+    gap: var(--space-xs) var(--space-md);
+  }
+
+  /* Demoted to a subheading: the title row above already carries the
+   * uppercase label + rule, so this one reads as plain bold text and drops
+   * its own rule. */
+  .sectionHeadingRow > .sectionHeading {
+    font: var(--text-body);
+    font-weight: 600;
+    color: var(--text-primary);
+    text-transform: none;
+    letter-spacing: normal;
+  }
+
+  .sectionHeadingRow > .separator {
+    display: none;
   }
 
   .doneItemsGroup {
     flex-basis: 100%;
+    justify-content: space-between;
   }
 
-  /* Bleeds past `.sectionsContainer`'s right padding (negative margin,
-   * clawed back as padding on the row itself) so the last tile can reach
-   * the true screen edge instead of stopping short — a hard-clipped or
-   * faded edge inside the page's normal inset reads as broken; a
-   * full-bleed edge reads as "there's simply more content to scroll to." */
+  /* 6 tracks so one grid can hold both rows: the first two tiles span 3
+   * (COD pending, DO/SI not back), the remaining three span 2. Position-
+   * based on purpose — Dashboard.tsx always passes exactly these five tiles
+   * in this order. */
   .digestGrid {
-    display: flex;
-    grid-template-columns: none;
-    overflow-x: auto;
-    scrollbar-width: none;
-    margin-right: calc(-1 * var(--space-md));
-    padding-right: var(--space-md);
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: var(--space-sm);
   }
 
-  /* Chrome ignores `scrollbar-width: none` once `::-webkit-scrollbar` is
-   * styled anywhere (global.css does) — hide it in the legacy syntax too. */
-  .digestGrid::-webkit-scrollbar {
-    display: none;
+  /* `> button` (not `> *`) for specificity: it has to beat DigestTile's own
+   * `.tile` padding, and the two modules' CSS order isn't guaranteed. */
+  .digestGrid > button {
+    grid-column: span 2;
+    padding: var(--space-md) var(--space-sm);
   }
 
-  .digestGrid > * {
-    flex: 0 0 auto;
-    min-width: 180px;
+  .digestGrid > button:nth-child(-n + 2) {
+    grid-column: span 3;
+  }
+
+  /* One line, never stacked: a 13px label plus the trimmed side padding
+   * above fits every tile label whole from ~375px up (measured 2026-09-28:
+   * "Returns in flight" is 90px at 13px; a 3-up tile has 85px of text
+   * width at 360px, ~95px at 390px). Below that, DigestTile's own
+   * nowrap + ellipsis truncates instead of wrapping. The button's
+   * direct-child span is DigestTile's label (the value sits inside its
+   * header div). */
+  .digestGrid > button > span {
+    font: var(--text-label);
   }
 }

@@ -10,39 +10,11 @@
   }
 }
 
-@media (max-width: 640px) {
-  .metricsRow {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* Mobile: horizontal scroll row (2 cards visible at a time, matching
- * `context/designs/Mobile - Dashboard.png`) instead of a vertical stack.
- * Declared after the 640px block above so it wins at phone widths. */
+/* Mobile: a 2-column grid, no horizontal scrolling (2026-09-28 — replaced
+ * a full-bleed scroll row). The ≤1024px rule above already gives 2 columns;
+ * only the spacing is phone-specific. */
 @media (max-width: 768px) {
-  /* Bleeds past `.sectionsContainer`'s right padding (negative margin,
-   * clawed back as padding on the row itself) so the last card can reach
-   * the true screen edge instead of stopping short — a hard-clipped or
-   * faded edge inside the page's normal inset reads as broken; a
-   * full-bleed edge reads as "there's simply more content to scroll to." */
   .metricsRow {
-    display: flex;
-    grid-template-columns: none;
-    overflow-x: auto;
-    scrollbar-width: none;
-    gap: var(--space-md);
-    margin-right: calc(-1 * var(--space-md));
-    padding-right: var(--space-md);
-  }
-
-  /* Chrome ignores `scrollbar-width: none` once `::-webkit-scrollbar` is
-   * styled anywhere (global.css does) — hide it in the legacy syntax too. */
-  .metricsRow::-webkit-scrollbar {
-    display: none;
-  }
-
-  .metricsRow > * {
-    flex: 0 0 auto;
-    width: 62%;
+    gap: var(--space-sm);
   }
 }

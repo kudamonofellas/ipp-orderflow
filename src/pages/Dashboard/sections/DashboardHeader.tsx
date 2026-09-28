@@ -26,7 +26,8 @@ interface DashboardHeaderProps {
  *  - Desktop: one row — welcome | quickActionsRow | New Order + notifications.
  *    The avatar is hidden (Sidebar already shows account info there).
  *  - Mobile: welcome (with avatar, replacing the hidden Sidebar) + top
- *    actions share a row; quickActionsRow wraps to its own row below.
+ *    actions share a row; quickActionsRow wraps to its own row below, its
+ *    cards stacked vertically.
  *
  * The quick-action cards (Deliveries / Pick list / Cash-up) used to be a
  * separate `QuickActionsRow` component — folded in directly since it had
@@ -74,7 +75,6 @@ export function DashboardHeader({
         {quickActionCount > 0 && (
           <div
             className={styles.quickActionsRow}
-            data-count={quickActionCount}
             style={
               { "--quick-action-count": quickActionCount } as React.CSSProperties
             }

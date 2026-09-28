@@ -89,56 +89,12 @@
     flex-basis: 100%;
   }
 
-  /* Horizontal scroll row instead of a vertical stack — matches
-   * `context/designs/Mobile - Dashboard.png`. Bleeds past the header's own
-   * right padding (negative margin, clawed back as padding on the row
-   * itself) so the last card can reach all the way to the true screen
-   * edge instead of stopping short — a hard-clipped or faded edge inside
-   * the page's normal inset reads as broken; a full-bleed edge reads as
-   * "there's simply more content to scroll to." */
+  /* Vertical stack, full width — the same desktop card layout, one per row.
+   * (Replaced a horizontal-scroll row of a separate compact card variant,
+   * 2026-09-28; the ≤1024px rule above already makes this one column, so
+   * only the spacing is phone-specific.) */
   .quickActionsRow {
-    display: flex;
-    grid-template-columns: none;
-    overflow-x: auto;
-    padding-bottom: var(--space-xs);
-    scrollbar-width: none;
     gap: var(--space-md);
     max-width: none;
-    margin-left: 0;
-    margin-right: calc(-1 * var(--space-md));
-    padding-right: var(--space-md);
-  }
-
-  /* Chrome ignores `scrollbar-width: none` once `::-webkit-scrollbar` is
-   * styled anywhere (global.css does) — hide it in the legacy syntax too. */
-  .quickActionsRow::-webkit-scrollbar {
-    display: none;
-  }
-
-  .quickActionsRow > * {
-    flex: 0 0 auto;
-    max-width: 160px;
-  }
-
-  /* With only 1–2 cards (role-gated) there is nothing to scroll to, and a
-   * 160px card next to empty space reads as a broken row — so those split
-   * the full width evenly instead, back inside the header's own padding.
-   * 3 cards keep the scrolling row above. */
-  .quickActionsRow[data-count="1"],
-  .quickActionsRow[data-count="2"] {
-    display: grid;
-    grid-template-columns: repeat(var(--quick-action-count), minmax(0, 1fr));
-    overflow-x: visible;
-    margin-right: 0;
-    padding-right: 0;
-  }
-
-  /* `QuickActionCard` sets `min-width: 240px` for the scrolling row; two of
-   * those don't fit a phone, and a grid item's own min-width overflows the
-   * `minmax(0, 1fr)` track rather than shrinking, so clear it here. */
-  .quickActionsRow[data-count="1"] > *,
-  .quickActionsRow[data-count="2"] > * {
-    max-width: none;
-    min-width: 0;
   }
 }
