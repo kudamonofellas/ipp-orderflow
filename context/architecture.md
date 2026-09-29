@@ -56,29 +56,29 @@ Server `srv1757570`, compose dir `/root/kudafellas-stack`. The `ipp-orderflow` s
 
 ## Storage Model
 
-- **Postgres `horeca_orders` (via Directus)**: All business data — orders, customers, products, order lines, cuts, weighings, proofs, returns, history, settings. See `context/schema/snapshot.json` for the current intake-only shape and `context/schema/target-db-schema.md` for the full target.
+- **Postgres `horeca_orders` (via Directus)**: All business data — orders, customers, products, order lines, cuts, weighings, proofs, returns, history, settings. See `context/schema/snapshot.json` for the live shape (exported from Directus; the field-level source of truth) and the column-level rationale further down this doc.
 - **Directus Files (`directus_files`)**: Proof photos, WhatsApp attachments, documents. Referenced from `attachments.document_file`, and (in the target schema) from `order_lines.weigh_photo`, `delivery_proofs.*_photo`, `line_weighings.photo_id`, `line_photos.photo_id`, etc. — all as UUID FKs → `directus_files.id`. Replaces the prototype's separate `photos` table + IndexedDB `ipp-photos` store.
 - **Directus Users (`directus_users`)**: Team members who log in. Replaces the prototype's `users` table / mock `DEMO_USERS`. Directus roles map to the six business roles.
 - **n8n Postgres**: n8n's own execution state. Not business data; not accessed by the frontend.
 
 ### Current schema (from snapshot.json — Directus 12.0.2, postgres)
 
-**Updated 2026-08-07: the intake-only "3 collections" description below is stale.** Spot-checked directly
-against the live `context/schema/snapshot.json` this session — the target schema (see the collection list
-further down) is now almost entirely live: `orders` (full pipeline fields, plus `hold` and `docs_returned`
-which aren't yet in `target-db-schema.md` — add them there), `customers` (incl. `company_name`, also
-missing from the target doc), `products`, `order_lines`, `line_cuts`, `line_weighings`, `line_photos`,
+**Updated 2026-08-07, re-verified 2026-09-29: the intake-only "3 collections" description below is stale.**
+The pipeline schema is live: `orders` (full pipeline fields, incl. `hold` and `docs_returned`), `customers`
+(incl. `company_name`), `products`, `order_lines`, `line_cuts`, `line_weighings`, `line_photos`,
 `line_return_photos`, `order_history`, `delivery_proofs`, `courier_locations`, `role_permissions`,
-`settings`, and `corrections` all exist and are read/written by `src/lib/directus.ts` today. `return_documents`
-is partially wired (return flow reads/writes it). **`draft_weighings` and `purchase_orders` were deleted
-live 2026-09-03** — both were 0 rows, 0 code references, and (checked directly) no trace in the prototype
-either; `draft_weighings` mapped to the prototype's `draftCaps` but was superseded before ever being wired
-up, since this port's weighing inputs already persist straight to `line_weighings` on blur instead of
-holding local-only draft state. Treat `target-db-schema.md` as materially accurate for
-column-level detail; re-verify against `snapshot.json` before relying on any single field, since it has
-drifted from the target doc before (see the `products.active` vs `products.oos` incident,
-`progress-tracker.md` 2026-08-05 — **resolved 2026-08-07**: `target-db-schema.md` corrected to document
-`oos` as the real column; `active` was never real in the prototype, the live DB, or `snapshot.json`).
+`settings`, `corrections` and `return_documents` all exist and are read/written by `src/lib/directus.ts`.
+**`draft_weighings` and `purchase_orders` were deleted live 2026-09-03** — both were 0 rows, 0 code
+references, and (checked directly) no trace in the prototype either; `draft_weighings` mapped to the
+prototype's `draftCaps` but was superseded before ever being wired up, since this port's weighing inputs
+persist straight to `line_weighings` on blur instead of holding local-only draft state.
+
+**`context/schema/snapshot.json` is the only field-level source of truth** — it is a machine export of the
+live schema, re-exported after every schema change, and was verified against both dev and prod on
+2026-09-29. The hand-written `target-db-schema.md` that used to sit beside it was deleted the same day: it
+had drifted to missing 3 collections and 51 live fields, and a hand-maintained mirror of a machine-readable
+export only ever drifts again (see the `products.active` vs `products.oos` incident,
+`progress-tracker.md` 2026-08-05). The per-column rationale it carried lives in this doc, below.
 
 The paragraphs immediately below (the original 3-collection description) are kept for historical context
 only — they describe the schema's state early in the project, before the pipeline collections existed.
@@ -121,9 +121,8 @@ Three collections, originally. **Relations array is empty in the snapshot** even
 ### Schema gaps vs the prototype's needs
 
 **This section is largely resolved as of 2026-08-07** — see the note above. It's kept for the
-column-level rationale (why each field exists) and to spot anything still genuinely missing. Full
-column-level detail lives in `context/schema/target-db-schema.md`; the summary here is the
-Directus-adapted version.
+column-level rationale (why each field exists) and to spot anything still genuinely missing. For the
+authoritative column list, read `context/schema/snapshot.json`; the summary here explains intent, not shape.
 
 **Conventions:** `id` = UUID PK (Directus default), timestamps are `TIMESTAMPTZ`, monetary values are `NUMERIC(15,2)` (Rp), weights are `NUMERIC(10,3)` (kg). Directus auto-manages `date_created` / `date_updated` / `user_created` / `user_updated` on every collection, so those are omitted below unless they carry business meaning.
 
@@ -154,7 +153,7 @@ Directus-adapted version.
 
 #### `orders` extensions (done — live in `snapshot.json`)
 
-The pipeline-tracking fields are live: `no` (unique human order number, e.g. `IPP-2026-0001`), `customer_id` → `customers`, `channel`, `stage` (coexists with legacy `status`; enum of the 12 pipeline states), `sales`, `deliver_at`, `delivered_at`, `cancelled` BOOL + `cancelled_from`, `cutting_started` BOOL, `taken_by`, `pickup` BOOL, `third_party` BOOL, `payment_confirmed` BOOL, `return_received` BOOL, `return_settle`, `return_doc`, `return_inbound` BOOL, `is_replacement` BOOL, `partial_return` BOOL, `returned_reason`. **Two live fields aren't in this list or in `target-db-schema.md` yet — add them there**: `hold` BOOL (used by the finance-parallel-queue filter across `useDashboardCounts.ts`/`useOrders.ts`/`useAttentionItems.ts`) and `docs_returned` BOOL (used by the "pending-docs" attention bucket and Orders' `pending-docs`/`completed` filters). The existing denormalized customer fields (`customer_name`, `customer_legal_name`, etc.) remain as snapshots kept for historical orders; new orders reference `customer_id`.
+The pipeline-tracking fields are live: `no` (unique human order number, e.g. `IPP-2026-0001`), `customer_id` → `customers`, `channel`, `stage` (coexists with legacy `status`; enum of the 12 pipeline states), `sales`, `deliver_at`, `delivered_at`, `cancelled` BOOL + `cancelled_from`, `cutting_started` BOOL, `taken_by`, `pickup` BOOL, `third_party` BOOL, `payment_confirmed` BOOL, `return_received` BOOL, `return_settle`, `return_doc`, `return_inbound` BOOL, `is_replacement` BOOL, `partial_return` BOOL, `returned_reason`. **Two live fields aren't in this list**: `hold` BOOL (used by the finance-parallel-queue filter across `useDashboardCounts.ts`/`useOrders.ts`/`useAttentionItems.ts`) and `docs_returned` BOOL (used by the "pending-docs" attention bucket and Orders' `pending-docs`/`completed` filters). The existing denormalized customer fields (`customer_name`, `customer_legal_name`, etc.) remain as snapshots kept for historical orders; new orders reference `customer_id`.
 
 #### Relations to register in Directus
 

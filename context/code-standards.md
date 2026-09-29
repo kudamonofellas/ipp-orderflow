@@ -17,7 +17,7 @@
 - Avoid `any` — use explicit interfaces or narrowly scoped types. If a type is genuinely unknown at a boundary, use `unknown` and narrow it.
 - Validate unknown external input at system boundaries (Directus API responses, n8n webhook payloads) before trusting it. Use a schema validator (zod) at the Directus SDK boundary.
 - Prefer `interface` for object shapes that may be extended, `type` for unions and intersections.
-- All Directus collection shapes get a TypeScript interface in `src/types/` mirroring the target schema in `context/schema/target-db-schema.md`.
+- All Directus collection shapes get a TypeScript interface in `src/types/` mirroring the live schema in `context/schema/snapshot.json`.
 - No `// @ts-ignore` or `// @ts-expect-error` without a comment explaining why.
 - Enable `noUncheckedIndexedAccess` if feasible — array access returns `T | undefined`.
 
@@ -93,6 +93,6 @@
 - `src/styles/` — Global CSS. Load order in `main.tsx`: `tokens.css` (design tokens / CSS custom properties) → `reset.css` (structural reset, no tokens) → `global.css` (element styles using tokens). Component-specific styles use CSS Modules.
 - `src/assets/` — Static assets (logo, fonts, images).
 - `context/` — Project documentation (overview, architecture, schema, ui-context, code-standards). Not shipped.
-- `context/schema/` — Schema snapshots (`snapshot.json` = current Directus, `target-db-schema.md` = full target).
+- `context/schema/` — `snapshot.json` (live Directus schema export, the field-level source of truth), `roles-and-permissions` (per-role grants) and `restore-defaults.sql` (defaults Directus 10.13's schema-apply can't emit).
 - `context/designs/` — UI mockups and screenshots.
 - `.agents/memories/` — Imported session notes + project context. Not shipped.

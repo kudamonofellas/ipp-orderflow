@@ -29,7 +29,7 @@ If a change cannot be verified end to end quickly, the scope is too broad — sp
 - Do not invent product behavior not defined in the context files
 - If a requirement is ambiguous, resolve it in the relevant context file before implementing
 - If a requirement is missing, add it as an open question in `progress-tracker.md` before continuing
-- Do not invent Directus collection fields — check `context/schema/target-db-schema.md` first
+- Do not invent Directus collection fields — check `context/schema/snapshot.json` (the live schema export) first
 - Do not invent pipeline states — use the enum in `architecture.md` Invariant #4
 - Do not invent roles — use the six in `architecture.md` (Owner, Admin, Warehouse, Production, Finance, Courier)
 
@@ -64,7 +64,7 @@ Do not modify the following unless explicitly instructed:
 Update the relevant context file whenever implementation changes:
 
 - System architecture or boundaries → `context/architecture.md`
-- Storage model or schema decisions → `context/architecture.md` + `context/schema/target-db-schema.md`
+- Storage model or schema decisions → `context/architecture.md` (column-level rationale) + `context/schema/snapshot.json` (the live shape)
 - Code conventions or standards → `context/code-standards.md`
 - Feature scope → `context/project-overview.md`
 - UI patterns or design tokens → `context/ui-context.md`
