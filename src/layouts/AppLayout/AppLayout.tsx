@@ -1,4 +1,5 @@
 import { Outlet } from 'react-router-dom';
+import { PullToRefresh } from '../../components/PullToRefresh/PullToRefresh';
 import { Sidebar } from '../Sidebar/Sidebar';
 import { BottomNav } from '../BottomNav/BottomNav';
 import styles from './AppLayout.module.css';
@@ -11,6 +12,7 @@ import styles from './AppLayout.module.css';
 export function AppLayout() {
   return (
     <div className={styles.shell}>
+      <PullToRefresh />
       <Sidebar />
       <main className={styles.content}>
         <Outlet />

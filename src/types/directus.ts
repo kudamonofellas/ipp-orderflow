@@ -12,6 +12,7 @@
 import type { z } from 'zod';
 import type {
   CorrectionsCollectionSchema,
+  NotificationPrefsCollectionSchema,
   CustomersCollectionSchema,
   OrderHistoryCollectionSchema,
   OrderLinesCollectionSchema,
@@ -35,6 +36,7 @@ import type {
 
 export type OrdersCollection = z.infer<typeof OrdersCollectionSchema>;
 export type CorrectionsCollection = z.infer<typeof CorrectionsCollectionSchema>;
+export type NotificationPrefsCollection = z.infer<typeof NotificationPrefsCollectionSchema>;
 export type GeoStamp = z.infer<typeof GeoStampSchema>;
 export type UndoSnapshot = z.infer<typeof UndoSnapshotSchema>;
 export type LatLng = z.infer<typeof LatLngSchema>;

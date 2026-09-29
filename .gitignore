@@ -27,3 +27,12 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Firebase / FCM. google-services.json ships inside the APK (not a secret as
+# such), but is per-project config that shouldn't be in the repo; the service
+# account key that signs FCM sends IS a secret and lives server-side only.
+android/app/google-services.json
+**/service-account*.json
+firebase-service-account*.json
+**/*firebase-adminsdk*.json
+**/*-service-account*.json

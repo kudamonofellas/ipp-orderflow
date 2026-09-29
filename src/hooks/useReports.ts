@@ -15,6 +15,7 @@
 import { useEffect, useState } from 'react';
 import { readOrders, readOrderLines, readCustomers, readOrderHistoryFeed } from '../lib/directus';
 import { PIPELINE_STAGES, type PipelineStage } from '../lib/pipeline';
+import { normalizeUnit } from '../lib/units';
 
 export type ReportRangeType = 'today' | '30d' | '90d' | 'all' | 'month' | 'range';
 
@@ -342,7 +343,7 @@ export function useReports(range: ReportRange): UseReportsResult {
         row.orders += 1;
         const orderLines = linesByOrder.get(o.id) ?? [];
         for (const l of orderLines) {
-          if ((l.unit ?? '').toLowerCase() === 'kg') row.weighedKg += toNumber(l.weight || l.qty);
+          if (normalizeUnit(l.unit) === 'kg') row.weighedKg += toNumber(l.weight || l.qty);
         }
         volumeByCustomer.set(key, row);
       }
@@ -353,7 +354,10 @@ export function useReports(range: ReportRange): UseReportsResult {
       for (const o of activeOrders) {
         const orderLines = linesByOrder.get(o.id) ?? [];
         for (const l of orderLines) {
-          const unit = (l.unit ?? 'unit').toLowerCase();
+          // Canonical unit, so 'Loaf'/'loaves' land in the same group as
+          // 'loaf'; unrecognized free text keeps its own lowercase bucket
+          // rather than vanishing from the leaderboard.
+          const unit = normalizeUnit(l.unit) ?? ((l.unit ?? '').trim().toLowerCase() || 'unit');
           const byName = demandByUnit.get(unit) ?? new Map<string, number>();
           byName.set(l.name, (byName.get(l.name) ?? 0) + toNumber(l.qty));
           demandByUnit.set(unit, byName);

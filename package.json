@@ -15,6 +15,7 @@
     "@capacitor/android": "^8.5.2",
     "@capacitor/cli": "^8.5.2",
     "@capacitor/core": "^8.5.2",
+    "@capacitor/push-notifications": "^8.1.2",
     "@directus/sdk": "^23.0.0",
     "@iconify-json/hugeicons": "^1.2.30",
     "@iconify/react": "^6.0.2",

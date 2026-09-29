@@ -18,6 +18,7 @@
 - Validate unknown external input at system boundaries (Directus API responses, n8n webhook payloads) before trusting it. Use a schema validator (zod) at the Directus SDK boundary.
 - Prefer `interface` for object shapes that may be extended, `type` for unions and intersections.
 - All Directus collection shapes get a TypeScript interface in `src/types/` mirroring the live schema in `context/schema/snapshot.json`.
+- `order_lines.unit` is free text in the DB, so it is normalized in code: the canonical list, the alias table (`Loaf`/`loaves`/`dus`/`kgs`…), `normalizeUnit()` and the `isWeighedUnit`/`isWeightUnit` predicates all live in `src/lib/units.ts`. Never key a lookup on a raw `unit` string, never re-declare the list in a page, and run every write through `normalizeUnit()`.
 - No `// @ts-ignore` or `// @ts-expect-error` without a comment explaining why.
 - Enable `noUncheckedIndexedAccess` if feasible — array access returns `T | undefined`.
 

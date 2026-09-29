@@ -28,6 +28,7 @@ import {
   type Role,
 } from '../lib/domain';
 import { AuthContext, type AuthState } from './auth-context';
+import { unregisterPush } from '../lib/push';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<DirectusUser | null>(null);
@@ -107,6 +108,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const logout = useCallback(async () => {
+    // Before `directusLogout()` — deleting this device's `push_tokens` row
+    // needs the session that still authenticates it, and leaving the row
+    // behind would keep notifying the previous user on a shared phone.
+    await unregisterPush();
     await directusLogout();
     setUser(null);
     setRole(null);

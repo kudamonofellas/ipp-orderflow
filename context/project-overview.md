@@ -9,7 +9,7 @@ IPP-OrderFlow is a B2B / Horeca order-management application for **PT Inti Panga
 1. **Replace the prototype's local-only storage with a real backend** — all orders, customers, products, returns, proof photos, and documents persist in Postgres (`horeca_orders`) via Directus, visible across devices and roles in realtime.
 2. **Give every role a focused, role-aware workspace** — each role sees the stages it is responsible for (e.g. Warehouse sees Cold Storage + Packing, Finance sees the approval gate, Courier sees dispatch + delivery proof), with a configurable capability matrix the Owner can tune.
 3. **Ship a responsive web app first, APK later** — Phase 1 is a responsive web app that works well on phone browsers (installable as a PWA). The Capacitor Android APK is a later phase but remains a goal. Live courier GPS tracking uses Directus realtime (replacing the prototype's same-browser BroadcastChannel hack).
-4. **Keep the existing infrastructure untouched** — no Firebase, no new servers; the app runs on the already-deployed `*.kudafellas.cloud` stack.
+4. **Keep the existing infrastructure untouched otherwise** — no new servers; the app runs on the already-deployed `*.kudafellas.cloud` stack. **Exception added 2026-09-29**: Firebase Cloud Messaging for Android push notifications (the Capacitor APK's native WebView has no Web Push) — see the Push Notifications entry below and `architecture.md`.
 
 ## Core User Flow
 
@@ -112,10 +112,10 @@ IPP-OrderFlow is a B2B / Horeca order-management application for **PT Inti Panga
 - EN/Bahasa i18n, light/dark theme
 - Live courier GPS tracking via Directus realtime
 - Proof photos in Directus Files
+- Push notifications on the Android APK (FCM), with a per-user All/Important/Off preference and overdue-order reminders — 2026-09-29
 
 ### Out of Scope
 
-- Firebase (entirely dropped — replaced by Directus + Postgres)
 - Cloud Functions
 - The automated Evolution API → n8n → Directus draft-order pipeline and its Dashboard triage panel — removed from the frontend on 2026-08-11 and, per explicit user request, kept removed on the 2026-08-14 restore of the rest of intake (see Order Creation above and `progress-tracker.md`). The backend n8n workflow itself is untouched and orphaned (see `architecture.md`).
 - Prototype's `live.js` BroadcastChannel same-browser tracking (replaced by Directus realtime)

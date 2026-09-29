@@ -1,0 +1,49 @@
+/* Sits under the sticky page headers but above content; purely decorative,
+ * so it never takes pointer events away from what's behind it. */
+.indicator {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 800;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+  transition: transform var(--duration-fast) var(--ease-default);
+}
+
+.icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-full);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  box-shadow: var(--shadow-md);
+  color: var(--text-muted);
+}
+
+/* Past the threshold: releasing now will refresh. */
+.ready {
+  color: var(--accent-primary);
+  border-color: var(--accent-primary);
+}
+
+.spinning {
+  color: var(--accent-primary);
+  animation: ptr-spin 0.9s linear infinite;
+}
+
+@keyframes ptr-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinning {
+    animation: none;
+  }
+}

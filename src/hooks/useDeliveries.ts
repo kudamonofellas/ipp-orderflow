@@ -25,6 +25,7 @@
  */
 
 import { useEffect, useState } from 'react';
+import { useRefreshSignal } from './useRefresh';
 import {
   readOrders,
   readCustomers,
@@ -100,6 +101,10 @@ export function useDeliveries(courierId: string | null): UseDeliveriesResult {
   const [nonce, setNonce] = useState(0);
 
   const refetch = () => setNonce((n) => n + 1);
+
+  // Refetch when the app comes back to the foreground, on the background
+  // poll, and on pull-to-refresh (see hooks/RefreshProvider.tsx).
+  const refreshSignal = useRefreshSignal();
 
   useEffect(() => {
     let cancelled = false;
@@ -255,7 +260,7 @@ export function useDeliveries(courierId: string | null): UseDeliveriesResult {
     return () => {
       cancelled = true;
     };
-  }, [courierId, nonce]);
+  }, [courierId, nonce, refreshSignal]);
 
   async function markDelivered(orderId: string, userId: string | null) {
     const res = await updateOrder(orderId, {

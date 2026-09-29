@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useRefreshSignal } from "./useRefresh";
 import { aggregateOrders } from "../lib/directus";
 import type {
   DashboardMetric,
@@ -200,6 +201,10 @@ export function useDashboardCounts(
   const [nonce, setNonce] = useState(0);
 
   const refetch = useCallback(() => setNonce((n) => n + 1), []);
+
+  // Refetch when the app comes back to the foreground, on the background
+  // poll, and on pull-to-refresh (see hooks/RefreshProvider.tsx).
+  const refreshSignal = useRefreshSignal();
 
   useEffect(() => {
     let cancelled = false;
@@ -443,7 +448,7 @@ export function useDashboardCounts(
     return () => {
       cancelled = true;
     };
-  }, [nonce, totalRange, deliveredRange, cancelledRange]);
+  }, [nonce, totalRange, deliveredRange, cancelledRange, refreshSignal]);
 
   return { metrics, stageCounts, loading, error, refetch };
 }

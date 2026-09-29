@@ -92,6 +92,7 @@ import type {
   DeliveryProofsCollection,
   SettingsCollection,
   CourierLocationsCollection,
+  NotificationPrefsCollection,
 } from "../types/directus";
 import { buildOrderNo, parseOrderNo } from "./orderNo";
 
@@ -2152,6 +2153,125 @@ export async function createProduct(
 export async function deleteProduct(id: string): Promise<DirectusResult<void>> {
   try {
     await getClient().request(deleteItem("products", id));
+    return { data: undefined, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+/* ===== Push notification device tokens (`push_tokens`) ================ */
+
+/**
+ * Register this device's FCM token against the signed-in user.
+ *
+ * `token` is unique in the collection, so a device that re-registers (or is
+ * handed to a different user) updates the existing row rather than creating
+ * a duplicate. Per-role ACLs restrict every action to `user = $CURRENT_USER`,
+ * so the read below only ever returns this user's own row — a token still
+ * held by a *previous* user is invisible here and its create/update is
+ * refused; `deletePushToken` on logout is what prevents that state.
+ */
+export async function upsertPushToken(
+  userId: string,
+  token: string,
+  platform = "android",
+): Promise<DirectusResult<void>> {
+  try {
+    const existing = (await getClient().request(
+      readItems("push_tokens", {
+        filter: { token: { _eq: token } } as never,
+        fields: ["id"] as never,
+        limit: 1,
+      }),
+    )) as Array<{ id: string }>;
+
+    if (existing && existing.length > 0) {
+      await getClient().request(
+        updateItem("push_tokens", existing[0].id, {
+          user: userId,
+          platform,
+        } as never),
+      );
+      return { data: undefined, error: null };
+    }
+
+    await getClient().request(
+      createItem("push_tokens", { user: userId, token, platform } as never),
+    );
+    return { data: undefined, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+/** Drop this device's token row — called on logout so a shared phone stops
+ *  notifying the previous user. */
+export async function deletePushToken(
+  token: string,
+): Promise<DirectusResult<void>> {
+  try {
+    const existing = (await getClient().request(
+      readItems("push_tokens", {
+        filter: { token: { _eq: token } } as never,
+        fields: ["id"] as never,
+        limit: 1,
+      }),
+    )) as Array<{ id: string }>;
+    if (existing && existing.length > 0) {
+      await getClient().request(deleteItem("push_tokens", existing[0].id));
+    }
+    return { data: undefined, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+/* ===== Notification preference (`notification_prefs`) ================= */
+
+/**
+ * Read the signed-in user's push notification preference. `null` data with
+ * no error means no row exists yet — callers should treat that as `"all"`,
+ * matching the server's own default in the `push-notify` extension.
+ */
+export async function readMyNotificationPref(): Promise<
+  DirectusResult<NotificationPrefsCollection | null>
+> {
+  try {
+    const rows = (await getClient().request(
+      readItems("notification_prefs", {
+        fields: ["id", "user", "mode", "date_updated"] as never,
+        limit: 1,
+      }),
+    )) as NotificationPrefsCollection[];
+    return { data: rows?.[0] ?? null, error: null };
+  } catch (err) {
+    return { data: null, error: errMsg(err) };
+  }
+}
+
+/** Create or update the signed-in user's push notification preference. */
+export async function saveMyNotificationPref(
+  userId: string,
+  mode: NotificationPrefsCollection["mode"],
+): Promise<DirectusResult<void>> {
+  try {
+    const existing = (await getClient().request(
+      readItems("notification_prefs", {
+        fields: ["id"] as never,
+        limit: 1,
+      }),
+    )) as Array<{ id: string }>;
+
+    if (existing && existing.length > 0) {
+      await getClient().request(
+        updateItem("notification_prefs", existing[0].id, { mode } as never),
+      );
+      return { data: undefined, error: null };
+    }
+
+    await getClient().request(
+      createItem("notification_prefs", { user: userId, mode } as never),
+    );
     return { data: undefined, error: null };
   } catch (err) {
     return { data: null, error: errMsg(err) };

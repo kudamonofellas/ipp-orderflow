@@ -14,6 +14,7 @@ import { readOrderHistoryFeed, readOrders } from '../lib/directus';
 import { useCan } from './useAuth';
 import { redactHistoryPrices } from '../lib/redactHistory';
 import type { NotificationEntry, NotificationGroup } from '../types/dashboard';
+import { useRefreshSignal } from './useRefresh';
 
 /** Rows fetched per batch — both the initial load and every `loadMore()`. */
 const PAGE_SIZE = 20;
@@ -79,6 +80,10 @@ export function useNotifications(): UseNotificationsResult {
   // duplicate every entry. Each call captures the epoch at start and only
   // applies its results if the epoch is still current when it resumes.
   const epochRef = useRef(0);
+
+  // Refetch when the app comes back to the foreground, on the background
+  // poll, and on pull-to-refresh (see hooks/RefreshProvider.tsx).
+  const refreshSignal = useRefreshSignal();
 
   const fetchBatch = useCallback(async () => {
     const myEpoch = epochRef.current;
@@ -167,9 +172,22 @@ export function useNotifications(): UseNotificationsResult {
     });
   }, [fetchBatch, loading, loadingMore, hasMore]);
 
+
+  // `refreshSignal` restarts the list from the first page: the bell reads
+  // newest-first and pages downward, so re-running the initial fetch is what
+  // brings in anything that happened since — `byDayRef` is reset by the epoch
+  // bump, so pages already loaded are not duplicated.
   useEffect(() => {
     epochRef.current += 1;
     const myEpoch = epochRef.current;
+    // Start the list over: the accumulators persist across batches, so a
+    // refresh that didn't reset them would re-append page 1 on top of the
+    // copy already there and show every entry twice.
+    byDayRef.current = new Map();
+    labelByOrderIdRef.current = new Map();
+    offsetRef.current = 0;
+    // `hasMore` is not reset here — `fetchBatch` sets it from the page it
+    // fetches, and a synchronous setState in an effect cascades renders.
     fetchBatch().finally(() => {
       if (epochRef.current === myEpoch) setLoading(false);
     });
@@ -177,7 +195,7 @@ export function useNotifications(): UseNotificationsResult {
       epochRef.current += 1;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [refreshSignal]);
 
   return { groups, loading, loadingMore, hasMore, loadMore, error };
 }

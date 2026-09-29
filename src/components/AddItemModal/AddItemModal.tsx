@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Button } from "../Button/Button";
 import { useLanguage } from "../../hooks/useLanguage";
 import { normalizeItemToken } from "../../lib/itemToken";
+import { normalizeUnit } from "../../lib/units";
 import type {
   ProductsCollection,
   CorrectionsCollection,
@@ -41,7 +42,7 @@ function defaultResult(
   unitOptions: string[],
 ): AddItemResult {
   const firstUnit =
-    unitOptions.find((u) => u.toLowerCase() === "pcs") ??
+    unitOptions.find((u) => normalizeUnit(u) === "pcs") ??
     unitOptions[0] ??
     "pcs";
   const firstProduct = products[0];
@@ -100,7 +101,7 @@ export function AddItemModal({
     const match = trimmed.match(/^(\d+(?:\.\d+)?)\s*([a-zA-Z]+)?\s*(.*)$/);
     let qty = "1";
     let unit =
-      unitOptions.find((u) => u.toLowerCase() === "pcs") ??
+      unitOptions.find((u) => normalizeUnit(u) === "pcs") ??
       unitOptions[0] ??
       "pcs";
     let searchName = trimmed;
@@ -110,27 +111,9 @@ export function AddItemModal({
       const unitCandidate = (match[2] || "").toLowerCase();
       const rest = (match[3] || "").trim();
 
-      const unitMap: Record<string, string> = {
-        kg: "kg",
-        kilo: "kg",
-        kilos: "kg",
-        gram: "gram",
-        g: "gram",
-        gr: "gram",
-        loaf: "Loaf",
-        loaves: "Loaf",
-        box: "Box",
-        boxes: "Box",
-        pack: "Pack",
-        packs: "Pack",
-        pcs: "pcs",
-        pc: "pcs",
-        ekor: "ekor",
-      };
-      const mapped = unitMap[unitCandidate];
+      const mapped = normalizeUnit(unitCandidate);
       const resolved =
-        mapped &&
-        unitOptions.find((u) => u.toLowerCase() === mapped.toLowerCase());
+        mapped && unitOptions.find((u) => normalizeUnit(u) === mapped);
       if (resolved) {
         unit = resolved;
         searchName = rest || searchName;

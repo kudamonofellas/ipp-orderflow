@@ -12,6 +12,7 @@
 
 import { useEffect, useState } from 'react';
 import { readOrders, readOrderLines, readLineCuts, readProducts } from '../lib/directus';
+import { useRefreshSignal } from './useRefresh';
 
 export interface PickListOrderRow {
   orderId: string;
@@ -60,6 +61,10 @@ export function usePickList(day: string): UsePickListResult {
   const [rows, setRows] = useState<PickListRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Refetch when the app comes back to the foreground, on the background
+  // poll, and on pull-to-refresh (see hooks/RefreshProvider.tsx).
+  const refreshSignal = useRefreshSignal();
 
   useEffect(() => {
     let cancelled = false;
@@ -194,7 +199,7 @@ export function usePickList(day: string): UsePickListResult {
     return () => {
       cancelled = true;
     };
-  }, [day]);
+  }, [day, refreshSignal]);
 
   const distinctCategories = new Set(rows.map((r) => r.category).filter((c): c is string => !!c));
   const groups: PickListGroup[] =

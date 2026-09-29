@@ -27,6 +27,7 @@
 import { useEffect, useState } from 'react';
 import { readOrders, readCustomers, readOrderLines, readAllUsers, readDeliveryProofs, updateOrder, appendOrderHistory } from '../lib/directus';
 import { useCurrentUserId } from './useAuth';
+import { useRefreshSignal } from './useRefresh';
 
 export interface CashUpOrderRow {
   orderId: string;
@@ -79,6 +80,10 @@ export function useCashUp(): UseCashUpResult {
   const [nonce, setNonce] = useState(0);
 
   const refetch = () => setNonce((n) => n + 1);
+
+  // Refetch when the app comes back to the foreground, on the background
+  // poll, and on pull-to-refresh (see hooks/RefreshProvider.tsx).
+  const refreshSignal = useRefreshSignal();
 
   useEffect(() => {
     let cancelled = false;
@@ -209,7 +214,7 @@ export function useCashUp(): UseCashUpResult {
     return () => {
       cancelled = true;
     };
-  }, [nonce]);
+  }, [nonce, refreshSignal]);
 
   async function confirm(orderId: string): Promise<{ error: string | null }> {
     setConfirmingIds((prev) => new Set(prev).add(orderId));

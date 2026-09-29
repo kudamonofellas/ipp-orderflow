@@ -14,6 +14,7 @@ import { aggregateOrders, readOrderLines, readOrders } from "../lib/directus";
 import { financeParallelQueueFilter, openOrdersFilter } from "../lib/pipeline";
 import type { OpenOrder, OpenOrderLine } from "../types/dashboard";
 import { useCan } from "./useAuth";
+import { useRefreshSignal } from "./useRefresh";
 
 /** Max orders per page in the Orders list. */
 export const ORDERS_PAGE_SIZE = 20;
@@ -151,6 +152,10 @@ export function useOrders(
   const seePrices = can("seePrices");
 
   const refetch = useCallback(() => setNonce((n) => n + 1), []);
+
+  // Refetch when the app comes back to the foreground, on the background
+  // poll, and on pull-to-refresh (see hooks/RefreshProvider.tsx).
+  const refreshSignal = useRefreshSignal();
 
   useEffect(() => {
     let cancelled = false;
@@ -353,7 +358,7 @@ export function useOrders(
     return () => {
       cancelled = true;
     };
-  }, [page, nonce, stageFilter, search, sort, seeCustomerContact, seePrices]);
+  }, [page, nonce, stageFilter, search, sort, seeCustomerContact, seePrices, refreshSignal]);
 
   return {
     orders,

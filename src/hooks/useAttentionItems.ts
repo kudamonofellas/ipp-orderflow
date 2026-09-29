@@ -15,6 +15,7 @@ import { useCan } from './useAuth';
 import type { Capability } from '../lib/domain';
 import { financeParallelQueueFilter, openOrdersFilter } from '../lib/pipeline';
 import type { AttentionItem } from '../types/dashboard';
+import { useRefreshSignal } from './useRefresh';
 
 function extractCount(val: unknown): number {
   if (typeof val === 'number') return Number.isNaN(val) ? 0 : val;
@@ -118,6 +119,10 @@ export function useAttentionItems(): UseAttentionItemsResult {
   const [error, setError] = useState<string | null>(null);
   const can = useCan();
 
+  // Refetch when the app comes back to the foreground, on the background
+  // poll, and on pull-to-refresh (see hooks/RefreshProvider.tsx).
+  const refreshSignal = useRefreshSignal();
+
   useEffect(() => {
     let cancelled = false;
 
@@ -165,7 +170,7 @@ export function useAttentionItems(): UseAttentionItemsResult {
     return () => {
       cancelled = true;
     };
-  }, [can]);
+  }, [can, refreshSignal]);
 
   return { items, loading, error };
 }

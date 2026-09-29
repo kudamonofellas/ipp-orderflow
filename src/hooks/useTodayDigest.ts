@@ -10,6 +10,7 @@
 import { useEffect, useState } from 'react';
 import { aggregateOrders, readOrderHistoryFeed, readOrderLines } from '../lib/directus';
 import { returnsInFlightFilter } from '../lib/pipeline';
+import { useRefreshSignal } from './useRefresh';
 
 export interface TodayDigest {
   newOrdersToday: number;
@@ -57,6 +58,10 @@ export function useTodayDigest(enabled: boolean): TodayDigest {
   const [digest, setDigest] = useState(EMPTY);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Refetch when the app comes back to the foreground, on the background
+  // poll, and on pull-to-refresh (see hooks/RefreshProvider.tsx).
+  const refreshSignal = useRefreshSignal();
 
   useEffect(() => {
     if (!enabled) return;
@@ -199,7 +204,7 @@ export function useTodayDigest(enabled: boolean): TodayDigest {
     return () => {
       cancelled = true;
     };
-  }, [enabled]);
+  }, [enabled, refreshSignal]);
 
   // `loading` state only ever gets driven by the fetch effect above, which
   // never runs when disabled — AND with `enabled` here instead of setting it

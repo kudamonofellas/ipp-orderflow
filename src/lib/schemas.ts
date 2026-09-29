@@ -372,6 +372,17 @@ export const CourierLocationsCollectionArraySchema = z.array(
 );
 
 /** Directus `corrections` collection row (learned product-match corrections). */
+/** Directus `notification_prefs` collection row — per-user push preference. */
+export const NotificationPrefsCollectionSchema = z.object({
+  id: z.string(),
+  user: z.string(),
+  mode: z.enum(["all", "important", "off"]),
+  date_updated: z.string().nullable().optional(),
+});
+export type NotificationPrefMode = z.infer<
+  typeof NotificationPrefsCollectionSchema
+>["mode"];
+
 export const CorrectionsCollectionSchema = z.object({
   id: z.string(),
   token_key: z.string(),

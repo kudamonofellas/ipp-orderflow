@@ -36,9 +36,8 @@ import type {
   CorrectionsCollection,
   LineCutsCollection,
 } from "../../types/directus";
+import { UNITS, normalizeUnit } from "../../lib/units";
 import styles from "./OrderEdit.module.css";
-
-const UNIT_OPTIONS = ["Loaf", "Box", "Pack", "kg", "gram", "pcs", "ekor"];
 
 const currency = new Intl.NumberFormat("id-ID", {
   style: "currency",
@@ -203,7 +202,7 @@ export function OrderEdit() {
           productId: l.product_id ?? null,
           name: l.name,
           qty: String(parseFloat(String(l.qty ?? 1)) || 1),
-          unit: l.unit ?? "Loaf",
+          unit: normalizeUnit(l.unit) ?? "loaf",
           price: String(parseFloat(String(l.price ?? 0)) || 0),
           cuts: (groupedCuts[l.id] ?? []).map((c) => ({
             id: c.id,
@@ -466,7 +465,7 @@ export function OrderEdit() {
             product_id: el.productId,
             name: el.name,
             qty: parseFloat(el.qty) || 1,
-            unit: el.unit,
+            unit: normalizeUnit(el.unit) ?? el.unit,
             status: "manual",
             sort_order: i,
           });
@@ -477,7 +476,7 @@ export function OrderEdit() {
           const updateRes = await updateOrderLine(el.id, {
             name: el.name,
             qty: parseFloat(el.qty) || 1,
-            unit: el.unit,
+            unit: normalizeUnit(el.unit) ?? el.unit,
             price: parseFloat(el.price) || 0,
             product_id: el.productId,
             sort_order: i,
@@ -786,7 +785,7 @@ export function OrderEdit() {
                               );
                             }}
                           >
-                            {UNIT_OPTIONS.map((u) => (
+                            {UNITS.map((u) => (
                               <option key={u} value={u}>
                                 {u}
                               </option>
@@ -991,7 +990,7 @@ export function OrderEdit() {
       <AddItemModal
         open={isAddItemModalOpen}
         products={products}
-        unitOptions={UNIT_OPTIONS}
+        unitOptions={[...UNITS]}
         corrections={corrections}
         onClose={() => setIsAddItemModalOpen(false)}
         onConfirm={handleConfirmAddItem}

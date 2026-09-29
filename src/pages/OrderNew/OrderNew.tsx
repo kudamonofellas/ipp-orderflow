@@ -40,6 +40,7 @@ import type {
   ProductsCollection,
 } from "../../types/directus";
 import { dateCode, buildOrderNo, parseOrderNo } from "../../lib/orderNo";
+import { UNITS, normalizeUnit } from "../../lib/units";
 import styles from "./OrderNew.module.css";
 
 interface NewOrderLocationState {
@@ -70,8 +71,6 @@ interface LineDraft {
   learned?: boolean;
   rawText?: string;
 }
-
-const UNITS = ["kg", "gram", "pack", "pcs", "box", "ekor", "loaf"] as const;
 
 let lineSeq = 0;
 function newLineId() {
@@ -213,7 +212,7 @@ export function OrderNew() {
                   : "",
               freeText: pl.productId ? "" : pl.name,
               qty: String(pl.qty ?? 1),
-              unit: pl.unit || "kg",
+              unit: normalizeUnit(pl.unit) ?? "kg",
               price: pl.price ? String(pl.price) : "",
               cuts: [],
               parseStatus: pl.status,
@@ -506,7 +505,7 @@ export function OrderNew() {
       product_id: l.productId || null,
       name: l.name,
       qty: l.qtyNum,
-      unit: l.unit,
+      unit: normalizeUnit(l.unit) ?? l.unit,
       status: l.productId ? "recognized" : "manual",
       sort_order: i,
     }));

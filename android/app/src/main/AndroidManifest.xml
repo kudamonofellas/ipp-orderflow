@@ -43,6 +43,8 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <!-- <input type="file" accept="image/*"> camera option (delivery/handover photos) -->
     <uses-permission android:name="android.permission.CAMERA" />
+    <!-- FCM push (Android 13+ asks at runtime; @capacitor/push-notifications) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.location.gps" android:required="false" />
 </manifest>

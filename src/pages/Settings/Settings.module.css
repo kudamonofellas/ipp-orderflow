@@ -136,11 +136,28 @@
   color: var(--text-secondary);
 }
 
-/* ===== General / Language ===== */
+/* ===== General / Language / Notifications ===== */
 .langButtons {
   display: flex;
   gap: var(--space-sm);
   flex-shrink: 0;
+}
+
+/* A second labeled row stacked under the first inside the same Card — Card
+ * itself has no child gap (just padding), so the divider supplies the
+ * spacing too. Mirrors .toleranceBlock's own border-top + padding-top. */
+.dividedRow {
+  margin-top: var(--space-lg);
+  padding-top: var(--space-lg);
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* Opt-in modifier (not a change to `.row`, which other sections' single-
+ * button-group rows use as-is): a 3-button group ("All" / "Important only"
+ * / "Off") doesn't fit beside the label text on a phone the way the
+ * 2-button language switch does. */
+.rowWrap {
+  flex-wrap: wrap;
 }
 
 /* ===== Data ===== */
@@ -461,6 +478,15 @@
 
   .toggleRow {
     flex-wrap: wrap;
+  }
+
+  .rowWrap {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .rowWrap .langButtons {
+    flex-shrink: 1;
   }
 
   /* Pin the row labels (and the section-group rows' own label cell) to the

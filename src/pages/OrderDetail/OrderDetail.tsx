@@ -86,34 +86,9 @@ import { formatClock, formatTakenAt, formatDateShort } from "../../lib/format";
 import { ReturnLineBox } from "../../components/ReturnLineBox/ReturnLineBox";
 import { dateCode } from "../../lib/orderNo";
 import { ImageDetailsModal } from "../../components/ImageDetailsModal/ImageDetailsModal";
+import { isWeighedUnit, isWeightUnit } from "../../lib/units";
 import styles from "./OrderDetail.module.css";
 
-/**
- * Loaf/kg/gram lines need a scale weight at Cold Storage. Case-insensitive
- * on purpose: `OrderNew.tsx`'s unit dropdown writes lowercase ("loaf"),
- * `OrderEdit.tsx`'s writes capitalized ("Loaf") — a line created via New
- * Order and never touched in Edit would otherwise silently skip weighing
- * forever (a real bug: it flipped into "needs weighing" only once someone
- * happened to re-save its unit through Edit's differently-cased dropdown,
- * which read as the requirement changing on its own).
- */
-function isWeighedUnit(unit: string | null | undefined): boolean {
-  const u = (unit ?? "").toLowerCase();
-  return u === "loaf" || u === "kg" || u === "gram";
-}
-
-/**
- * Narrower than `isWeighedUnit` — kg/gram only, no Loaf. Matches the
- * prototype's own split (`Dev-domain.js:32,35`: `isWeightUnit` vs
- * `isWeighed = isWeightUnit || loaf`): the over/under-order tolerance hint
- * only ever applied to true weight units there, since a Loaf's "ordered
- * qty" is a piece count, not a weight — comparing a kg total against a
- * loaf count as if they were the same measure never made sense.
- */
-function isWeightOnlyUnit(unit: string | null | undefined): boolean {
-  const u = (unit ?? "").toLowerCase();
-  return u === "kg" || u === "gram";
-}
 
 /** How many of a counted line are still owed after partial delivery — 0 for
  *  a weight-only (kg/gram) line (held back via `short` instead) or a
@@ -126,7 +101,7 @@ function lineLeft(line: {
   unit?: string | null;
   removed?: boolean | null;
 }): number {
-  if (line.removed || isWeightOnlyUnit(line.unit)) return 0;
+  if (line.removed || isWeightUnit(line.unit)) return 0;
   const left =
     (Number(line.qty) || 0) -
     (Number(line.delivered) || 0) -
@@ -1238,7 +1213,7 @@ export function OrderDetail() {
       0,
     );
     if (total > 0) return false;
-    if (isWeightOnlyUnit(l.unit) && l.short) return false;
+    if (isWeightUnit(l.unit) && l.short) return false;
     return true;
   });
   // `isOrderLocked` is used here in place of the prototype's narrower
@@ -1365,7 +1340,7 @@ export function OrderDetail() {
   // this is the same shape of "resolve an exceptional order state" decision.
   const owedLines = lines.filter(
     (l) =>
-      lineLeft(l) > 0 || (isWeightOnlyUnit(l.unit) && !!l.short && !l.removed),
+      lineLeft(l) > 0 || (isWeightUnit(l.unit) && !!l.short && !l.removed),
   );
   const canDecideOutstanding = auth.can("decideReturns");
   // "You sent part of this order today" only holds while it's still the
@@ -1424,7 +1399,7 @@ export function OrderDetail() {
    *  from needing a recorded weight (`coldWeighingReady` below) and from
    *  the cold-storage photo requirement (`handleAdvance`). */
   function isLineHeld(l: OrderLinesCollection): boolean {
-    if (isWeightOnlyUnit(l.unit)) return !!l.short;
+    if (isWeightUnit(l.unit)) return !!l.short;
     const qtyNum =
       typeof l.qty === "string" ? parseFloat(l.qty) || 0 : (l.qty ?? 0);
     const sendingQty = l.id ? (sendingQtyMap[l.id] ?? qtyNum) : qtyNum;
@@ -2977,7 +2952,7 @@ export function OrderDetail() {
       const owes = lines.some(
         (l) =>
           !l.removed &&
-          (lineLeft(l) > 0 || (isWeightOnlyUnit(l.unit) && !!l.short)),
+          (lineLeft(l) > 0 || (isWeightUnit(l.unit) && !!l.short)),
       );
       const nextStage = owes
         ? "outstanding"
@@ -3612,7 +3587,7 @@ export function OrderDetail() {
     // `short` flag instead, never via delivered/sent.
     const deliveredLineUpdates: { id: string; delivered: number }[] = [];
     const updatedLines = lines.map((l) => {
-      if (isWeightOnlyUnit(l.unit)) return l;
+      if (isWeightUnit(l.unit)) return l;
       const qtyNum =
         typeof l.qty === "string" ? parseFloat(l.qty) || 0 : (l.qty ?? 0);
       const sentQty =
@@ -3625,7 +3600,7 @@ export function OrderDetail() {
     const owesItems = updatedLines.some(
       (l) =>
         lineLeft(l) > 0 ||
-        (isWeightOnlyUnit(l.unit) && !!l.short && !l.removed),
+        (isWeightUnit(l.unit) && !!l.short && !l.removed),
     );
 
     // Goods changed hands regardless of cash — the branch below only
@@ -4003,7 +3978,7 @@ export function OrderDetail() {
       await updateDeliveryProof(activeProof.id, { archived: true });
     }
     const nextLines = lines.map((l) => {
-      if (isWeightOnlyUnit(l.unit)) return l.short ? { ...l, short: false } : l;
+      if (isWeightUnit(l.unit)) return l.short ? { ...l, short: false } : l;
       const left = lineLeft(l);
       return left > 0 ? { ...l, sent: left } : l;
     });
@@ -4013,7 +3988,7 @@ export function OrderDetail() {
         : [
             updateOrderLine(
               l.id,
-              isWeightOnlyUnit(l.unit) ? { short: false } : { sent: l.sent },
+              isWeightUnit(l.unit) ? { short: false } : { sent: l.sent },
             ),
           ],
     );
@@ -4125,7 +4100,7 @@ export function OrderDetail() {
       // (nothing was weighed off it yet); a counted line carries only
       // what's left — ported from the prototype's own qty math
       // (Dev-OrderDetail.jsx:258).
-      const qty = isWeightOnlyUnit(l.unit) ? Number(l.qty) || 0 : lineLeft(l);
+      const qty = isWeightUnit(l.unit) ? Number(l.qty) || 0 : lineLeft(l);
       return {
         order_id: newOrderId,
         product_id: l.product_id ?? null,
@@ -4426,7 +4401,7 @@ export function OrderDetail() {
     lines
       .filter((l) => !l.removed)
       .forEach((l) => {
-        const isWeight = isWeightOnlyUnit(l.unit);
+        const isWeight = isWeightUnit(l.unit);
         // Same source as the refuse form's own per-line max — see the
         // comment there for why `sendingQtyMap` and not `l.sent`/`lineLeft`.
         const qtyNum =
@@ -4502,7 +4477,7 @@ export function OrderDetail() {
         [];
       for (const l of activeLines) {
         const refVal = parseFloat(refuseQtyMap[l.id] ?? "0") || 0;
-        const isWeight = isWeightOnlyUnit(l.unit);
+        const isWeight = isWeightUnit(l.unit);
         if (refVal > 0) {
           const lineReason = (refuseReasonsMap[l.id] || "").trim() || null;
           if (isWeight) {
@@ -4594,7 +4569,7 @@ export function OrderDetail() {
       // Partial return check (did customer keep any items?)
       const anyAccepted = activeLines.some((l) => {
         const refVal = parseFloat(refuseQtyMap[l.id] ?? "0") || 0;
-        const isWeight = isWeightOnlyUnit(l.unit);
+        const isWeight = isWeightUnit(l.unit);
         const qtyNum =
           typeof l.qty === "string" ? parseFloat(l.qty) || 0 : (l.qty ?? 0);
         const maxVal = isWeight
@@ -4769,12 +4744,12 @@ export function OrderDetail() {
         : Number(line.returned);
     // Loaf-type lines carry the actual scale kg too — gated by
     // ReturnLineBox's own `weighReady` (can't confirm until this is filled).
-    const isLoafLike = isWeighedUnit(line.unit) && !isWeightOnlyUnit(line.unit);
+    const isCountedCatchWeight = isWeighedUnit(line.unit) && !isWeightUnit(line.unit);
     const res = await updateOrderLine(lineId, {
       returned: verified,
       return_verified: true,
       return_verified_at: new Date().toISOString(),
-      ...(isLoafLike
+      ...(isCountedCatchWeight
         ? { returned_weight: parseFloat(verifyWeightMap[lineId] ?? "") || 0 }
         : {}),
     });
@@ -4961,13 +4936,13 @@ export function OrderDetail() {
       verifiedRaw != null
         ? parseFloat(verifiedRaw) || 0
         : Number(line.inbound_return);
-    const isLoafLike = isWeighedUnit(line.unit) && !isWeightOnlyUnit(line.unit);
+    const isCountedCatchWeight = isWeighedUnit(line.unit) && !isWeightUnit(line.unit);
     const res = await updateOrderLine(lineId, {
       returned: verified,
       inbound_return: null,
       return_verified: true,
       return_verified_at: new Date().toISOString(),
-      ...(isLoafLike
+      ...(isCountedCatchWeight
         ? { returned_weight: parseFloat(verifyWeightMap[lineId] ?? "") || 0 }
         : {}),
     });
@@ -5800,12 +5775,12 @@ export function OrderDetail() {
                   const tolBelowPct = opsSettings?.tol_below_pct ?? 10;
                   const tolAbovePct = opsSettings?.tol_above_pct ?? 10;
                   const belowWeighHint =
-                    isWeightOnlyUnit(line.unit) &&
+                    isWeightUnit(line.unit) &&
                     totalMeasuredWeight > 0 &&
                     qty > 0 &&
                     totalMeasuredWeight < qty * (1 - tolBelowPct / 100);
                   const aboveWeighHint =
-                    isWeightOnlyUnit(line.unit) &&
+                    isWeightUnit(line.unit) &&
                     totalMeasuredWeight > 0 &&
                     qty > 0 &&
                     totalMeasuredWeight > qty * (1 + tolAbovePct / 100);
@@ -5832,7 +5807,7 @@ export function OrderDetail() {
                     totalMeasuredWeight > 0;
                   const showLineDetail =
                     showsWeightTotal ||
-                    (isWeightOnlyUnit(line.unit) && !!line.short) ||
+                    (isWeightUnit(line.unit) && !!line.short) ||
                     (canSeePrices && hasPrice);
                   // "N of M delivered · X left" / "N/M delivered" pill — every
                   // stage on and after `delivered` (delivered, outstanding,
@@ -5864,7 +5839,7 @@ export function OrderDetail() {
                     !isReturned &&
                     !isCancelled &&
                     !isAwaiting &&
-                    !isWeightOnlyUnit(line.unit) &&
+                    !isWeightUnit(line.unit) &&
                     qty >= 1;
 
                   return (
@@ -5911,7 +5886,7 @@ export function OrderDetail() {
                           extension for "X to follow" visibility) — reverted
                           to the prototype's own scope per direct request. */}
                         {stage === "cold" &&
-                          !isWeightOnlyUnit(line.unit) &&
+                          !isWeightUnit(line.unit) &&
                           qty >= 1 && (
                             <div className={styles.inputBadge}>
                               {t("sending")}
@@ -6033,7 +6008,7 @@ export function OrderDetail() {
                           {/* Ported from the prototype's `shortFlag` toggle
                             (Dev-OrderDetail.jsx:1419-1422) — kg/gram only,
                             never Loaf (matches `held()`'s own scope). */}
-                          {isWeightOnlyUnit(line.unit) && (
+                          {isWeightUnit(line.unit) && (
                             <Button
                               type="button"
                               variant="ghost"
@@ -6183,7 +6158,7 @@ export function OrderDetail() {
                           {/* Persistent, every role/stage — matches the
                             prototype's own always-shown `l.short` chip
                             (Dev-OrderDetail.jsx:1435), not just at Cold Storage. */}
-                          {isWeightOnlyUnit(line.unit) && line.short && (
+                          {isWeightUnit(line.unit) && line.short && (
                             <span className={styles.toFollowHint}>
                               {t("Short — ran out of stock")}
                             </span>
@@ -6594,7 +6569,7 @@ export function OrderDetail() {
                                 <p className={styles.fieldLabel}>{l.name}</p>
                                 <span className={styles.owedPill}>
                                   <Icon name="packageProcess" size={20} />
-                                  {isWeightOnlyUnit(l.unit) ? (
+                                  {isWeightUnit(l.unit) ? (
                                     <span>{t("Short — ran out of stock")}</span>
                                   ) : (
                                     <>
@@ -6682,7 +6657,7 @@ export function OrderDetail() {
                             <p className={styles.fieldLabel}>{l.name}</p>
                             <span className={styles.owedPill}>
                               <Icon name="box" size={16} />
-                              {isWeightOnlyUnit(l.unit) ? (
+                              {isWeightUnit(l.unit) ? (
                                 <span>{t("Short — ran out of stock")}</span>
                               ) : (
                                 <>
@@ -6763,7 +6738,7 @@ export function OrderDetail() {
                           <p className={styles.fieldLabel}>{l.name}</p>
                           <span className={styles.owedPill}>
                             <Icon name="packageProcess" size={16} />
-                            {isWeightOnlyUnit(l.unit) ? (
+                            {isWeightUnit(l.unit) ? (
                               <span>{t("Short — ran out of stock")}</span>
                             ) : (
                               <>
@@ -7847,7 +7822,7 @@ export function OrderDetail() {
                                 {lines
                                   .filter((l) => !l.removed)
                                   .map((l) => {
-                                    const weight = isWeightOnlyUnit(l.unit);
+                                    const weight = isWeightUnit(l.unit);
                                     const refVal =
                                       parseFloat(refuseQtyMap[l.id] ?? "0") ||
                                       0;
@@ -8070,7 +8045,7 @@ export function OrderDetail() {
                               lines
                                 .filter((l) => !l.removed)
                                 .some((l) => {
-                                  const isWeight = isWeightOnlyUnit(l.unit);
+                                  const isWeight = isWeightUnit(l.unit);
                                   const qtyNum =
                                     typeof l.qty === "string"
                                       ? parseFloat(l.qty) || 0
@@ -8130,7 +8105,7 @@ export function OrderDetail() {
                                       lines
                                         .filter((l) => !l.removed)
                                         .some((l) => {
-                                          const isWeight = isWeightOnlyUnit(
+                                          const isWeight = isWeightUnit(
                                             l.unit,
                                           );
                                           const qtyNum =

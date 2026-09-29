@@ -16,6 +16,7 @@ import { aggregateOrders, readOrderLines, readOrders } from "../lib/directus";
 import { openOrdersFilter } from "../lib/pipeline";
 import type { OpenOrder, OpenOrderLine } from "../types/dashboard";
 import { useCan } from "./useAuth";
+import { useRefreshSignal } from "./useRefresh";
 
 /** Max orders per page in the Open Orders panel. */
 export const OPEN_ORDERS_PAGE_SIZE = 20;
@@ -148,6 +149,10 @@ export function useOpenOrders(sort: string = "-no"): UseOpenOrdersResult {
 
   const refetch = useCallback(() => setNonce((n) => n + 1), []);
 
+  // Refetch when the app comes back to the foreground, on the background
+  // poll, and on pull-to-refresh (see hooks/RefreshProvider.tsx).
+  const refreshSignal = useRefreshSignal();
+
   useEffect(() => {
     let cancelled = false;
 
@@ -249,7 +254,7 @@ export function useOpenOrders(sort: string = "-no"): UseOpenOrdersResult {
     return () => {
       cancelled = true;
     };
-  }, [page, nonce, sort, seeCustomerContact, seePrices]);
+  }, [page, nonce, sort, seeCustomerContact, seePrices, refreshSignal]);
 
   return {
     orders,

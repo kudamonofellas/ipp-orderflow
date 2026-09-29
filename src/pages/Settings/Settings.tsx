@@ -1,4 +1,4 @@
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card } from "../../components/Card/Card";
 import { Checkbox } from "../../components/Checkbox/Checkbox";
@@ -18,8 +18,12 @@ import {
   deleteTeamMember,
   setRolePermission,
   deleteRolePermissionRows,
+  readMyNotificationPref,
+  saveMyNotificationPref,
   type TeamMember,
 } from "../../lib/directus";
+import type { NotificationPrefMode } from "../../lib/schemas";
+import { isPushSupported } from "../../lib/push";
 import {
   ALLOW,
   PERMISSION_GRID,
@@ -69,12 +73,49 @@ export function Settings() {
   const [newMemberRoleId, setNewMemberRoleId] = useState("");
   const [addingMember, setAddingMember] = useState(false);
 
+  const [notifMode, setNotifMode] = useState<NotificationPrefMode>("all");
+  const [notifSaving, setNotifSaving] = useState(false);
+
+  useEffect(() => {
+    // Push only exists in the Android APK (Capacitor's WebView) — skip the
+    // fetch on the web/PWA build, where the row below never renders either.
+    if (!isPushSupported()) return;
+    let cancelled = false;
+    void readMyNotificationPref().then((res) => {
+      if (!cancelled && res.data) setNotifMode(res.data.mode);
+      // No row (res.data === null) or a read error: stay on the "all"
+      // default rather than show a blank/error state for a minor setting.
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   function handleLangChange(next: "en" | "id") {
     update({ lang: next });
     // Live-update this session's language immediately — update() only
     // persists to Directus, it doesn't touch the render-time t() the rest
     // of the app reads from.
     setLang(next);
+  }
+
+  async function handleNotifModeChange(next: NotificationPrefMode) {
+    if (next === notifMode || notifSaving) return;
+    const prev = notifMode;
+    setNotifMode(next); // optimistic — matches handleLangChange's feel
+    setNotifSaving(true);
+    const userId = auth.user?.id;
+    if (!userId) {
+      setNotifMode(prev);
+      setNotifSaving(false);
+      return;
+    }
+    const res = await saveMyNotificationPref(userId, next);
+    setNotifSaving(false);
+    if (res.error) {
+      setNotifMode(prev);
+      alert(res.error, { title: t("Couldn't save notification setting") });
+    }
   }
 
   /**
@@ -724,6 +765,55 @@ export function Settings() {
                     </Button>
                   </div>
                 </div>
+
+                {isPushSupported() && (
+                  <div
+                    className={`${styles.row} ${styles.dividedRow} ${styles.rowWrap}`}
+                  >
+                    <Icon name="bell" size={20} className={styles.rowIcon} />
+                    <div className={styles.rowInfo}>
+                      <span className={styles.rowTitle}>
+                        {t("Notifications")}
+                      </span>
+                      <span className={styles.rowNote}>
+                        {t(
+                          "Important always includes overdue reminders (docs, COD).",
+                        )}
+                      </span>
+                    </div>
+                    <div className={styles.langButtons}>
+                      <Button
+                        type="button"
+                        variant={notifMode === "all" ? "primary" : "secondary"}
+                        size="md"
+                        disabled={notifSaving}
+                        onClick={() => handleNotifModeChange("all")}
+                      >
+                        {t("All")}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant={
+                          notifMode === "important" ? "primary" : "secondary"
+                        }
+                        size="md"
+                        disabled={notifSaving}
+                        onClick={() => handleNotifModeChange("important")}
+                      >
+                        {t("Important only")}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant={notifMode === "off" ? "primary" : "secondary"}
+                        size="md"
+                        disabled={notifSaving}
+                        onClick={() => handleNotifModeChange("off")}
+                      >
+                        {t("Off")}
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </Card>
             </section>
           </>

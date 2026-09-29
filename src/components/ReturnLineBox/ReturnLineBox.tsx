@@ -5,28 +5,9 @@ import { CameraButton } from "../CameraButton/CameraButton";
 import { ThumbnailGallery } from "../ThumbnailGallery/ThumbnailGallery";
 import type { OrderLinesCollection } from "../../types/directus";
 import { formatClock } from "../../lib/format";
+import { isWeighedUnit, isWeightUnit } from "../../lib/units";
 import styles from "./ReturnLineBox.module.css";
 
-/** kg/gram only — matches `OrderDetail.tsx`'s own `isWeightOnlyUnit` (no
- *  shared home for either yet, so duplicated here per this component's own
- *  established convention of keeping small leaf-level utilities local
- *  rather than reaching back into the page's module). `order_lines.delivered`
- *  is never written for these units (`handleConfirmDelivery` skips them
- *  entirely — they're held back via the `short` flag instead), so `keptQty`
- *  below can't use `delivered` as its basis for them the way it does for
- *  counted lines. */
-function isWeightUnit(unit: string | null | undefined): boolean {
-  const u = (unit ?? "").toLowerCase();
-  return u === "kg" || u === "gram";
-}
-
-/** kg/gram OR loaf — matches the prototype's `isWeighed` (`Dev-domain.js:35`:
- *  `isWeightUnit(u) || /^loa(f|ves)$/i.test(u)`). A loaf is counted but
- *  invoiced by catch-weight, so it needs a scale reading same as a pure
- *  weight-unit line does — `isWeightUnit` alone would miss it. */
-function isWeighedUnit(unit: string | null | undefined): boolean {
-  return isWeightUnit(unit) || /^loa(f|ves)$/i.test((unit ?? "").trim());
-}
 
 export interface ReturnLineBoxImageEntry {
   url: string;
@@ -117,7 +98,9 @@ export function ReturnLineBox({
   // this box's own per-line Confirm button. A loaf is COUNTED by the courier
   // but INVOICED by weight — the warehouse must enter the actual scale kg
   // before confirming, it doesn't just re-count.
-  const loafLike = isWeighedUnit(line.unit) && !isWeightUnit(line.unit);
+  // Counted container, invoiced by catch-weight: loaf and dus.
+  const countedCatchWeight =
+    isWeighedUnit(line.unit) && !isWeightUnit(line.unit);
   // The line's total weighed kg ceiling — Cold Storage's catch-weight, or
   // the ordered kg for a pure weight-unit line.
   const lineWeight =
@@ -138,8 +121,8 @@ export function ReturnLineBox({
   // SOFT flag only: individual loaves vary, so weighing in above the
   // returned count's *average* share isn't wrong — just worth a second look.
   const overSoft =
-    loafLike && propWeight > 0 && vWt > propWeight + 1e-9 && !overHard;
-  const weighReady = !overHard && (loafLike ? vWt > 0 : true);
+    countedCatchWeight && propWeight > 0 && vWt > propWeight + 1e-9 && !overHard;
+  const weighReady = !overHard && (countedCatchWeight ? vWt > 0 : true);
 
   return (
     <div className={styles.returnLineBox}>
@@ -208,7 +191,7 @@ export function ReturnLineBox({
         <Icon name="packageReturned" size={20} />
         <span className={styles.detailValue}>
           {returnedQty} {line.unit}
-          {loafLike && Number(line.returned_weight) > 0
+          {countedCatchWeight && Number(line.returned_weight) > 0
             ? ` · ${Number(line.returned_weight).toFixed(2)} kg`
             : ""}
         </span>
@@ -268,7 +251,7 @@ export function ReturnLineBox({
           </div>
 
           <div className={styles.cardActions}>
-            {loafLike && (
+            {countedCatchWeight && (
               <div className={styles.followUpRow}>
                 <span className="tiny muted" style={{ flexGrow: 1 }}>
                   {t("Actual returned weight")}
